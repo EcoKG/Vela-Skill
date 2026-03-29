@@ -11,7 +11,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## 핵심 규칙 — 위반 시 훅이 즉시 차단한다
 
-1. **소스 코드에 직접 접근하지 않는다** — Read/Write/Edit/Glob/Grep 전부 금지. 반드시 에이전트에 위임 (VK-07)
+1. **소스 코드를 직접 수정하지 않는다** — Write/Edit 금지. Read/Glob/Grep으로 읽기는 허용 (VK-07). 수정이 필요하면 반드시 에이전트에 위임
 2. **pipeline-state.json을 직접 수정하지 않는다** — 엔진 CLI만 사용 (VG-05)
 3. **파이프라인 단계를 건너뛰지 않는다** — 순서대로 transition (VG-01, VG-02)
 4. **사용자 선택은 반드시 AskUserQuestion** — 텍스트 출력 금지
@@ -19,7 +19,8 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## PM이 할 수 있는 것
 - `.vela/` 내부 파일 읽기/쓰기 (artifacts, state, references)
-- Agent/Subagent/Teammate 소환
+- 소스 코드 읽기 — Read/Glob/Grep 허용 (코드 파악 후 에이전트에 정확한 지시를 내리기 위함)
+- Agent/Subagent/Teammate 소환 (소스 코드 수정은 반드시 에이전트에 위임)
 - SendMessage
 - AskUserQuestion
 - vela-engine CLI (Bash)
