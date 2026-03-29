@@ -44,8 +44,8 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## 단계별 에이전트 소환
 
-- **Research**: Researcher teammate 3명 (model: "opus", team_name 포함) — 경쟁가설 디버깅
-- **Plan**: Planner subagent (model: "opus") — 독립 설계
+- **Research**: Researcher subagent 1명 (model: "sonnet") — 프로젝트 분석
+- **Plan**: Planner subagent (model: "sonnet") — 독립 설계
 - **Execute 단일**: Executor subagent (model: "sonnet") — 독립 구현
 - **Execute CrossLayer**: Teammate 3~5명 (model: "sonnet", team_name + worktree) — 소통 필요
 - **모든 단계**: Reviewer subagent (model: "sonnet") → PM이 review 읽고 approve/reject 판단

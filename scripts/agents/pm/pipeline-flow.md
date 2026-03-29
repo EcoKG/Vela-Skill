@@ -5,16 +5,16 @@
 ```
 1. TeamCreate: team_name "vela-pipeline"
 
-[Research] — Teammate (Opus)
-2. Researcher teammate 3명 소환 (model: "opus", team_name):
-   - "security-researcher" / "architecture-researcher" / "quality-researcher"
-   - 소통: ① 가설 공유 ② 반박 증거 교차 검증 ③ 가설 제거
-3. PM이 3개 리포트를 종합하여 research.md 작성
+[Research] — Subagent (Sonnet)
+2. Researcher subagent 1명 소환 (model: "sonnet"):
+   - 프로젝트 분석 수행
+   - 요구사항 파악 → 코드베이스 탐색 → 의존성/제약 분석 → 결론
+3. PM이 리포트를 검토하여 research.md 작성
 4. Reviewer subagent (model: "sonnet") → review-research.md
 5. PM이 review 읽고 approve/reject 판단
 
-[Plan] — Subagent (Opus)
-6. Planner subagent (model: "opus") → plan.md
+[Plan] — Subagent (Sonnet)
+6. Planner subagent (model: "sonnet") → plan.md
 7. Reviewer subagent (model: "sonnet") → review-plan.md
 8. PM approve/reject
 

@@ -90,7 +90,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
 5. **파이프라인 진행**
    `.vela/agents/vela.md`의 지시사항에 따라 파이프라인 단계를 순서대로 진행한다.
-   - standard: Research=Teammate(Opus) + Plan=Subagent(Opus) + Execute=Subagent/Teammate(Sonnet) + Reviewer(Subagent)
+   - standard: Research=Subagent(Sonnet) + Plan=Subagent(Sonnet) + Execute=Subagent/Teammate(Sonnet) + Reviewer(Subagent)
    - quick: Subagent 기반 + Reviewer(Subagent)
    - trivial: PM 직접 수행
 
@@ -181,7 +181,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 | 단계 | 모드 | 팀 | 설명 |
 |------|------|-----|------|
 | init | read | — | 초기화, git 상태 스냅샷, dirty tree 체크 |
-| research | read | Researcher(Teammate) → Reviewer(Subagent) → PM | 경쟁가설 디버깅, 프로젝트 분석 |
+| research | read | Researcher(Subagent) → Reviewer(Subagent) → PM | 프로젝트 분석 |
 | plan | write | Planner(Subagent) → Reviewer(Subagent) → PM | 구현 계획 작성 |
 | plan-check | read | — | 계획 검증 (plan-check.md 생성) |
 | checkpoint | read | — | 사용자 승인 대기 |
@@ -293,8 +293,8 @@ Agent 도구:
 ```
 
 에이전트 지시사항 (`.vela/agents/`):
-- `researcher.md` (Opus, Teammate) — 경쟁가설 디버깅, research.md 작성
-- `planner.md` (Opus, Subagent) — 아키텍처 설계, plan.md 작성
+- `researcher.md` (Sonnet, Subagent) — 프로젝트 분석, research.md 작성
+- `planner.md` (Sonnet, Subagent) — 아키텍처 설계, plan.md 작성
 - `executor.md` (Sonnet, Subagent/Teammate) — TDD 기반 코드 구현
 - `reviewer.md` (Sonnet, Subagent) — 독립 품질 점검, review-{step}.md 작성
 - `leader.md` — PM 승인 판단 가이드 (별도 에이전트 아님)
@@ -397,7 +397,7 @@ node .vela/cli/vela-engine.js commit --message "custom message"
 |----------|------|------|
 | 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
 | 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
-| 설계/디버깅/분석 | **Opus** | Researcher, Planner |
+| 설계/디버깅/분석 | **Sonnet** (에스컬레이션 시 Opus) | Researcher, Planner |
 
 ## Teammate vs Subagent 구분
 
@@ -406,12 +406,12 @@ node .vela/cli/vela-engine.js commit --message "custom message"
 
 | 조건 | 방식 | model 파라미터 |
 |------|------|---------------|
-| 경쟁가설 디버깅 (리서치) | **Teammate** | `"opus"` |
+| 프로젝트 분석 (리서치) | **Subagent** | `"sonnet"` |
 | 다중 파일/CrossLayer 동시 수정 | **Teammate** | `"sonnet"` |
 | 독립 리뷰/점검 | **Subagent** | `"sonnet"` |
 | 단일 모듈 수정 | **Subagent** | `"sonnet"` |
 | 파일 탐색 | **Subagent** | `"haiku"` |
-| 설계/디버깅 분석 | **Subagent** | `"opus"` |
+| 설계/디버깅 분석 | **Subagent** | `"sonnet"` |
 
 ## 팀 구성 규칙
 
@@ -449,11 +449,11 @@ Teammate "conflict-manager" (Sonnet) — 인터페이스 감시 + 병합
 
 각 팀원은 `isolation: "worktree"`로 격리 실행. 팀원 간 SendMessage로 인터페이스 조율.
 
-### 리서치 — 경쟁가설 디버깅
+### 리서치 — 프로젝트 분석
 
-Research 단계에서 경쟁가설 디버깅 적용:
-가설 생성(3~5개) → 증거 수집 → 가설 제거 → 생존 가설 검증 → 결론.
-디테일하되 과하지 않게: 반박 증거 발견 시 신속히 탈락.
+Research 단계에서 Subagent(Sonnet)가 단독으로 프로젝트 분석을 수행한다:
+요구사항 파악 → 코드베이스 탐색 → 의존성/제약 분석 → 결론.
+에스컬레이션 조건 충족 시 Opus로 자동 전환 (model-strategy.md 참조).
 
 ### 승인/거부 — 파일 기반
 

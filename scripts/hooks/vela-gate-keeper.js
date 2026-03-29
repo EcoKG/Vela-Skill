@@ -162,7 +162,7 @@ async function main() {
             `  이 작업은 반드시 Subagent 또는 Teammate에 위임해야 합니다.\n` +
             `  Recovery: Agent 도구로 적절한 에이전트를 소환하세요.\n` +
             `  - 파일 탐색 → Subagent (model: "haiku")\n` +
-            `  - 코드 분석 → Subagent (model: "opus")\n` +
+            `  - 코드 분석 → Subagent (model: "sonnet")\n` +
             `  - 코드 구현 → Subagent (model: "sonnet")`
           );
           process.exit(2);
@@ -183,7 +183,7 @@ async function main() {
               `  이 작업은 반드시 Subagent 또는 Teammate에 위임해야 합니다.\n` +
               `  Recovery: Agent 도구로 에이전트를 소환하세요.\n` +
               `  - 파일 읽기/탐색 → Subagent (model: "haiku")\n` +
-              `  - 코드 분석 → Subagent (model: "opus")\n` +
+              `  - 코드 분석 → Subagent (model: "sonnet")\n` +
               `  - 코드 구현 → Subagent (model: "sonnet")\n` +
               `  - 다중 파일 수정 → Teammate (model: "sonnet", isolation: "worktree")`
             );
