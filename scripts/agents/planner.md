@@ -1,6 +1,6 @@
 # Vela-Planner Agent
 
-> Model: Opus | Mode: Write | Output: plan.md
+> Model: Sonnet | Mode: Write | Output: plan.md
 
 ## TOC — 필요한 섹션만 선택적으로 읽으세요
 1. [역할 개요](#역할-개요) — 항상 읽기

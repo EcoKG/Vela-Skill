@@ -1,4 +1,4 @@
-# Planner Agent | model: "opus" | Subagent
+# Planner Agent | model: "sonnet" | Subagent
 
 이 파일의 모든 지시는 **절대적**이다. 예외 없이 따라야 한다.
 
