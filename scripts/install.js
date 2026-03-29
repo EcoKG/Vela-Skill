@@ -148,6 +148,24 @@ const VELA_HOOKS = [
     hookId: 'vela-permission',
     script: 'vela-permission.js',
     description: '⛵ Checking crew clearance...'
+  },
+  {
+    matcher: 'PostToolUseFailure',
+    hookId: 'vela-failure',
+    script: 'vela-failure.js',
+    description: '🔭 Recording tool failure...'
+  },
+  {
+    matcher: 'StopFailure',
+    hookId: 'vela-stop-failure',
+    script: 'vela-stop-failure.js',
+    description: '🛟 Preserving voyage state...'
+  },
+  {
+    matcher: 'TeammateIdle',
+    hookId: 'vela-teammate-idle',
+    script: 'vela-teammate-idle.js',
+    description: '⛵ Checking idle crew...'
   }
 ];
 
@@ -554,6 +572,9 @@ function upgrade() {
     { src: 'scripts/hooks/vela-task-completed.js', dst: 'hooks/vela-task-completed.js' },
     { src: 'scripts/hooks/vela-subagent-stop.js', dst: 'hooks/vela-subagent-stop.js' },
     { src: 'scripts/hooks/vela-permission.js', dst: 'hooks/vela-permission.js' },
+    { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
+    { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
+    { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
     { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
     { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
     { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
@@ -690,6 +711,9 @@ function validate() {
     { src: 'scripts/hooks/vela-task-completed.js', dst: 'hooks/vela-task-completed.js' },
     { src: 'scripts/hooks/vela-subagent-stop.js', dst: 'hooks/vela-subagent-stop.js' },
     { src: 'scripts/hooks/vela-permission.js', dst: 'hooks/vela-permission.js' },
+    { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
+    { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
+    { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
     { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
     { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
     { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
