@@ -80,6 +80,18 @@ async function main() {
     }
   }
 
+  // ─── Persona Injection (always, regardless of pipeline) ───
+  const personaPath = path.join(velaDir, 'persona.md');
+  if (fs.existsSync(personaPath)) {
+    const personaContent = fs.readFileSync(personaPath, 'utf-8').trim();
+    if (personaContent) {
+      output.push('');
+      output.push('📝 Persona ──────────────────────────');
+      output.push(personaContent);
+      output.push('──────────────────────────────────────');
+    }
+  }
+
   // ─── Pipeline State Injection ───
   const state = findActivePipeline(velaDir);
 

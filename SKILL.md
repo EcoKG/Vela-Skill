@@ -500,6 +500,23 @@ Research 단계에서 Subagent(Sonnet)가 단독으로 프로젝트 분석을 �
 
 ---
 
+## 커스텀 어조 — persona.md
+
+`.vela/persona.md` 파일에 어조 규칙을 작성하면 Orchestrator가 모든 세션에 자동 주입한다.
+
+- 파이프라인 활성 여부와 무관하게 항상 주입된다
+- 파일이 없거나 비어있으면 아무것도 출력하지 않는다
+- Session Health Check 직후, Pipeline State Injection 직전에 출력된다
+
+예시 (`.vela/persona.md`):
+```markdown
+- 한국어로 답변하라
+- 간결하고 명확하게 말하라
+- 코드 주석은 영어로 작성하라
+```
+
+---
+
 ## 상세 레퍼런스
 
 Gate Keeper/Guard 규칙, CLI 명령어, TreeNode 캐시 상세는 `references/` 디렉토리를 참조한다:
