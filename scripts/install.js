@@ -166,6 +166,23 @@ const VELA_HOOKS = [
     hookId: 'vela-teammate-idle',
     script: 'vela-teammate-idle.js',
     description: '⛵ Checking idle crew...'
+  },
+  {
+    matcher: 'PostToolUse',
+    hookId: 'vela-review-prompt',
+    hookType: 'prompt',
+    toolMatcher: 'Edit|Write',
+    prompt: 'Review this code change for bugs, security issues, and style problems. Context: $ARGUMENTS. Respond with JSON: {"ok": true} if acceptable, or {"ok": false, "reason": "description of issues found"} if there are problems. Focus on: 1) Logic errors 2) Security vulnerabilities 3) Missing error handling 4) Breaking changes.',
+    description: '🔍 Reviewing code change...'
+  },
+  {
+    matcher: 'PostToolUse',
+    hookId: 'vela-test-async',
+    hookType: 'command',
+    toolMatcher: 'Edit|Write',
+    script: 'vela-test-async.js',
+    async: true,
+    description: '🧪 Running related tests...'
   }
 ];
 
@@ -202,12 +219,14 @@ function install() {
   const errors = [];
 
   for (const hook of VELA_HOOKS) {
-    const scriptPath = path.join(VELA_HOOKS_DIR, hook.script);
+    const scriptPath = path.join(VELA_HOOKS_DIR, hook.script || '');
 
-    // Verify script exists
-    if (!fs.existsSync(scriptPath)) {
-      errors.push(`Script not found: ${scriptPath}`);
-      continue;
+    // Verify script exists (skip for prompt-type hooks which have no script)
+    if (hook.hookType !== 'prompt') {
+      if (!fs.existsSync(scriptPath)) {
+        errors.push(`Script not found: ${scriptPath}`);
+        continue;
+      }
     }
 
     // Initialize event array if needed
@@ -221,21 +240,54 @@ function install() {
       if (entry.command && !entry.hooks && entry.command.includes(hook.hookId)) return false;
       // Remove new nested format
       if (entry.hooks && Array.isArray(entry.hooks)) {
-        return !entry.hooks.some(h => h.command && h.command.includes(hook.hookId));
+        return !entry.hooks.some(h =>
+          (h.command && h.command.includes(hook.hookId)) ||
+          (h.prompt && h.type === 'prompt' && entry._velaId === hook.hookId)
+        );
       }
       return true;
     });
 
-    // Add the hook in correct Claude Code format:
-    // { matcher: "ToolName", hooks: [{ type: "command", command: "..." }] }
-    settings.hooks[hook.matcher].push({
-      matcher: hook.toolMatcher || '',
-      hooks: [{
+    // Build hookEntry based on hookType
+    let hookEntry;
+    if (hook.hookType === 'prompt') {
+      hookEntry = {
+        type: 'prompt',
+        prompt: hook.prompt,
+        timeout: 30,
+        statusMessage: hook.description
+      };
+    } else {
+      hookEntry = {
         type: 'command',
         command: `node "${scriptPath}"`,
         statusMessage: hook.description
-      }]
-    });
+      };
+    }
+
+    // Add async flag if present
+    if (hook.async) {
+      hookEntry.async = true;
+    }
+
+    // Add model field if present
+    if (hook.model) {
+      hookEntry.model = hook.model;
+    }
+
+    // Add the hook in correct Claude Code format:
+    // { matcher: "ToolName", hooks: [{ type: "command"|"prompt", ... }] }
+    const settingsEntry = {
+      matcher: hook.toolMatcher || '',
+      hooks: [hookEntry]
+    };
+
+    // Tag with vela ID for prompt hooks (no command string to match on)
+    if (hook.hookType === 'prompt') {
+      settingsEntry._velaId = hook.hookId;
+    }
+
+    settings.hooks[hook.matcher].push(settingsEntry);
 
     installed.push(hook.hookId);
   }
@@ -413,18 +465,33 @@ function verify() {
   const results = [];
 
   for (const hook of VELA_HOOKS) {
-    const scriptPath = path.join(VELA_HOOKS_DIR, hook.script);
-    const scriptExists = fs.existsSync(scriptPath);
+    const scriptPath = path.join(VELA_HOOKS_DIR, hook.script || '');
+
+    // For prompt hooks, no script file to check
+    const scriptExists = hook.hookType === 'prompt' ? true : fs.existsSync(scriptPath);
 
     const matcherHooks = settings.hooks?.[hook.matcher] || [];
-    const registered = matcherHooks.some(entry =>
-      entry.hooks && Array.isArray(entry.hooks) &&
-      entry.hooks.some(h => h.command && h.command.includes(hook.hookId))
-    );
+    let registered;
+
+    if (hook.hookType === 'prompt') {
+      // Prompt hooks: check for type:'prompt' entry with matching _velaId or prompt content
+      registered = matcherHooks.some(entry =>
+        entry.hooks && Array.isArray(entry.hooks) &&
+        entry.hooks.some(h => h.type === 'prompt' && h.prompt) &&
+        (entry._velaId === hook.hookId || (entry.hooks.some(h => h.prompt === hook.prompt)))
+      );
+    } else {
+      // Command hooks: check for command string containing hookId
+      registered = matcherHooks.some(entry =>
+        entry.hooks && Array.isArray(entry.hooks) &&
+        entry.hooks.some(h => h.command && h.command.includes(hook.hookId))
+      );
+    }
 
     results.push({
       id: hook.hookId,
       matcher: hook.matcher,
+      hookType: hook.hookType || 'command',
       script_exists: scriptExists,
       registered: registered,
       status: scriptExists && registered ? 'OK' : 'MISSING'
@@ -575,6 +642,7 @@ function upgrade() {
     { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
     { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
     { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
+    { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
     { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
     { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
     { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
@@ -714,6 +782,7 @@ function validate() {
     { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
     { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
     { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
+    { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
     { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
     { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
     { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
