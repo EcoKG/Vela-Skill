@@ -141,6 +141,9 @@ function cmdInit() {
     ensureGitignore();
   }
 
+  // Auto mode flag
+  const autoMode = hasFlag('--auto');
+
   // Create pipeline state
   const state = {
     version: '1.1',
@@ -154,6 +157,7 @@ function cmdInit() {
     steps: steps.map(s => s.id),
     completed_steps: [],
     revisions: {},
+    ...(autoMode ? { auto: true, auto_reject_count: 0 } : {}),
     git: gitState.is_repo ? {
       is_repo: true,
       base_branch: gitState.current_branch,
@@ -350,18 +354,40 @@ function cmdRecord() {
     state.revisions[state.current_step] = 0;
   }
   state.revisions[state.current_step]++;
+
+  // Auto mode: reject counter and reset logic
+  const verdictLower = verdict.toLowerCase();
+  if (state.auto === true) {
+    if (verdictLower === 'reject') {
+      state.auto_reject_count = (state.auto_reject_count || 0) + 1;
+      if (state.auto_reject_count >= 2) {
+        state.auto = false;
+      }
+    } else if (verdictLower === 'pass' || verdictLower === 'approve') {
+      state.auto_reject_count = 0;
+    }
+  }
+
   state.updated_at = new Date().toISOString();
 
   writeJSON(state._path, cleanState(state));
 
-  output({
+  const result = {
     ok: true,
     command: 'record',
     step: state.current_step,
-    verdict: verdict.toLowerCase(),
+    verdict: verdictLower,
     revision: state.revisions[state.current_step],
     summary: summary
-  });
+  };
+
+  // Warn when auto mode is disabled due to consecutive rejects
+  if (state.auto === false && verdictLower === 'reject' && (state.auto_reject_count || 0) >= 2) {
+    result.auto_disabled = true;
+    result.auto_warning = '⚠️ Auto mode disabled: 2 consecutive rejects reached.';
+  }
+
+  output(result);
 }
 
 // cmdTeamDispatch and cmdTeamRecord REMOVED — replaced by Agent Teams.
@@ -784,6 +810,12 @@ function checkExitGate(stepDef, state) {
         // We check revisions instead of completed_steps because transition()
         // adds to completed_steps AFTER the exit gate check.
         if (state.current_step === 'checkpoint' && (!state.revisions.checkpoint || state.revisions.checkpoint < 1)) {
+          // Auto mode: if plan-check.md exists, auto-pass the checkpoint
+          if (state.auto === true && state.current_step === 'checkpoint' &&
+              artifactDir && fs.existsSync(path.join(artifactDir, 'plan-check.md'))) {
+            // plan-check gate passed — auto-approve checkpoint
+            break;
+          }
           missing.push(gate);
         }
         break;
