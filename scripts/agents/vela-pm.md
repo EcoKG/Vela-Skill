@@ -29,7 +29,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 |----------|------|
 | 파일 탐색/검색 | **Haiku** (`claude-haiku-4-5`) |
 | 코드 구현/리뷰 | **Sonnet** (`claude-sonnet-4-6`) |
-| 설계/디버깅/분석 | **Opus** (`claude-opus-4-6`) |
+| 설계/디버깅/분석 | **Sonnet** (`claude-sonnet-4-6`, 에스컬레이션 시 Opus) |
 
 ## Teammate vs Subagent
 

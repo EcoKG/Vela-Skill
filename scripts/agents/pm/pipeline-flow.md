@@ -32,7 +32,7 @@
 ```
 
 ## Quick Pipeline (medium)
-Plan: Planner subagent (Opus) + Reviewer subagent (Sonnet)
+Plan: Planner subagent (Sonnet) + Reviewer subagent (Sonnet)
 Execute: Executor subagent (Sonnet) + Reviewer subagent (Sonnet)
 팀 소환 없음.
 
@@ -48,3 +48,4 @@ execute → verify 자동 반복 (최대 10회).
 
 ## UI 템플릿
 모든 AskUserQuestion은 `.vela/references/interactive-ui.md`에서 읽어라.
+.

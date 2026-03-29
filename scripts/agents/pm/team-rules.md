@@ -7,13 +7,14 @@
 
 | 조건 | 방식 | model |
 |------|------|-------|
-| 경쟁가설 디버깅 (리서치) | **Teammate** | `"opus"` |
+| 경쟁가설 디버깅 (리서치) | **Subagent** | `"sonnet"` |
 | 다중 파일/모듈 동시 수정 | **Teammate** | `"sonnet"` |
 | CrossLayer 개발 | **Teammate** | `"sonnet"` |
 | 독립 리뷰/점검 | **Subagent** | `"sonnet"` |
 | 단일 파일/모듈 수정 | **Subagent** | `"sonnet"` |
 | 파일 탐색/검색 | **Subagent** | `"haiku"` |
-| 설계/디버깅 분석 | **Subagent** | `"opus"` |
+| 설계/디버깅 분석 | **Subagent** | `"sonnet"` |
+| 에스컬레이션 재시도 | **Subagent** | `"opus"` |
 
 ## 팀 규모 — 반드시 준수
 - 팀 크기: **3~5명** (개발 팀원 + Conflict Manager 1명)
