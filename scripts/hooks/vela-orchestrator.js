@@ -155,6 +155,21 @@ async function main() {
       }
     }
 
+    // ─── Escalation Flag Injection (one-shot) ───
+    try {
+      const escalationPath = path.join(velaDir, 'state', 'escalation.json');
+      if (fs.existsSync(escalationPath)) {
+        const raw = fs.readFileSync(escalationPath, 'utf-8');
+        const esc = JSON.parse(raw);
+        output.push(`│`);
+        output.push(`│ ⚠ ESCALATION: Reviewer 점수 ${esc.score}/${esc.threshold} (기준 미달). 다음 에이전트 소환 시 model: "opus" 사용. 기존 산출물을 컨텍스트로 전달.`);
+        // One-shot: delete after injection to prevent duplicate prompts
+        fs.unlinkSync(escalationPath);
+      }
+    } catch (e) {
+      // Graceful skip on read/parse/delete failure
+    }
+
     // ─── Auto Mode Directive Injection ───
     if (state.auto === true) {
       const isCheckpoint = state.current_step === 'checkpoint';
