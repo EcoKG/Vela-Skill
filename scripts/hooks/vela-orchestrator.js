@@ -143,6 +143,20 @@ async function main() {
       }
     }
 
+    // ─── Auto Mode Directive Injection ───
+    if (state.auto === true) {
+      const isCheckpoint = state.current_step === 'checkpoint';
+      output.push(`│`);
+      if (isCheckpoint) {
+        output.push(`│ ⚡ AUTO: plan-check 통과 확인 → record pass → transition 호출.`);
+      } else {
+        output.push(`│ ⚡ AUTO: 현재 단계를 완료한 뒤 즉시 transition을 호출하라.`);
+      }
+    } else if (state.auto === false && (state.auto_reject_count || 0) >= 2) {
+      output.push(`│`);
+      output.push(`│ ⚠ AUTO SUSPENDED: reject 반복으로 자동 진행이 중단되었다. 사용자에게 알려라.`);
+    }
+
     output.push(`└──────────────────────────────────────`);
   } else {
     // No active pipeline — Explore mode

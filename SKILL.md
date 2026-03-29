@@ -12,6 +12,7 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 `$ARGUMENTS`를 확인한다:
 - `$ARGUMENTS`가 `init` → `/vela:init` 절차 실행
 - `$ARGUMENTS`가 `start` 또는 `start <작업설명>` → `/vela:start` 절차 실행
+- `$ARGUMENTS`가 `auto` 또는 `auto <작업설명>` → `/vela:auto` 절차 실행
 - `$ARGUMENTS`가 `status` → 현재 파이프라인 상태를 보여준다:
   ```bash
   node .vela/cli/vela-engine.js state
@@ -93,6 +94,32 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - standard: Research=Subagent(Sonnet) + Plan=Subagent(Sonnet) + Execute=Subagent/Teammate(Sonnet) + Reviewer(Subagent)
    - quick: Subagent 기반 + Reviewer(Subagent)
    - trivial: PM 직접 수행
+
+---
+
+## /vela:auto — 자동 진행 파이프라인
+
+`/vela auto` (또는 `/vela:auto`)는 `/vela:start`와 동일하되, 각 단계 완료 후 PM이 자동으로 transition을 호출하여 파이프라인을 끝까지 진행한다.
+
+### 절차
+
+1~3단계는 `/vela:start`와 동일.
+
+4. **파이프라인 시작 (auto 플래그 추가)**
+   ```bash
+   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large|ralph|hotfix> --type <code|code-bug|code-refactor|docs> --auto
+   ```
+
+5. **자동 진행**
+   Orchestrator가 매 프롬프트에 `⚡ AUTO` directive를 주입한다.
+   - 일반 단계: 현재 단계를 완료한 뒤 즉시 transition 호출
+   - checkpoint 단계: plan-check 통과 확인 → record pass → transition 호출
+
+### Auto 모드 중단 조건
+
+- `record reject`가 **2회 연속** 발생하면 auto 모드가 자동 비활성화된다.
+- Orchestrator가 `⚠ AUTO SUSPENDED` directive를 주입하여 PM에게 알린다.
+- 이후 사용자가 수동으로 개입하여 문제를 해결해야 한다.
 
 ---
 
@@ -197,6 +224,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
 ```bash
 node .vela/cli/vela-engine.js init "작업 설명"     # 파이프라인 시작 (git 상태 체크)
+node .vela/cli/vela-engine.js init "작업" --auto   # auto 모드로 시작 (전 단계 자동 진행)
 node .vela/cli/vela-engine.js state                 # 현재 상태
 node .vela/cli/vela-engine.js transition            # 다음 단계로 전이
 node .vela/cli/vela-engine.js dispatch --role ROLE  # 에이전트 스펙 조회
@@ -206,6 +234,14 @@ node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commi
 node .vela/cli/vela-engine.js sub-transition         # execute sub-phase 전진
 node .vela/cli/vela-engine.js cancel                # 파이프라인 취소 (복구 안내 포함)
 ```
+
+**옵션:**
+| 옵션 | 설명 |
+|------|------|
+| `--scale <size>` | 파이프라인 규모 (small/medium/large/ralph/hotfix) |
+| `--type <type>` | 작업 유형 (code/code-bug/code-refactor/docs) |
+| `--auto` | auto 모드 — 각 단계 완료 후 자동 transition. reject 2회 연속 시 중단. |
+| `--force` | dirty tree 체크 스킵 |
 
 ---
 
