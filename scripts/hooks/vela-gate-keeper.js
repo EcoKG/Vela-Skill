@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { findActivePipeline, getCurrentMode, readConfig } = require('./shared/pipeline');
 const {
+  CODE_EXTENSIONS,
   WRITE_TOOLS,
   READ_TOOLS,
   SENSITIVE_FILES,
@@ -151,39 +152,26 @@ async function main() {
       else if (/^(CLAUDE\.md|package\.json|tsconfig\.json|\.gitignore|README\.md)$/i.test(path.basename(targetFile))) {
         // pass through
       }
-      // Glob/Grep: pattern만 있고 path가 없는 경우 — 소스 탐색으로 간주
+      // Glob/Grep: Read 계열 도구는 PM의 소스 코드 속독(速讀)을 허용한다.
+      // Glob/Grep 자체는 Read 계열이므로 항상 통과.
       else if ((tool_name === 'Glob' || tool_name === 'Grep') && !targetFile.includes('.vela/')) {
-        // SubagentStart 훅이 delegation.json을 생성한 경우 허용
-        const delegationPath = path.join(velaDir, 'state', 'delegation.json');
-        if (!fs.existsSync(delegationPath)) {
-          process.stderr.write(
-            `⛵ [Vela] ✦ BLOCKED [VK-07]: PM은 소스 코드를 직접 탐색할 수 없습니다.\n` +
-            `  Tool: ${tool_name}\n` +
-            `  이 작업은 반드시 Subagent 또는 Teammate에 위임해야 합니다.\n` +
-            `  Recovery: Agent 도구로 적절한 에이전트를 소환하세요.\n` +
-            `  - 파일 탐색 → Subagent (model: "haiku")\n` +
-            `  - 코드 분석 → Subagent (model: "sonnet")\n` +
-            `  - 코드 구현 → Subagent (model: "sonnet")`
-          );
-          process.exit(2);
-        }
+        // pass through — Glob/Grep은 읽기 전용, 위임 불필요
       }
       // Read/Write/Edit: 소스 코드 파일
+      // Read는 PM 속독 허용, Write/Edit만 delegation.json 필요
       else if (targetFile && !targetFile.includes('.vela/')) {
         const ext = path.extname(targetFile).toLowerCase();
         const isSourceCode = CODE_EXTENSIONS.has(ext);
         const inSkipPath = SKIP_PATHS.some(sp => targetFile.includes(sp));
 
-        if (isSourceCode && !inSkipPath) {
+        if (isSourceCode && !inSkipPath && WRITE_TOOLS.has(tool_name)) {
           const delegationPath = path.join(velaDir, 'state', 'delegation.json');
           if (!fs.existsSync(delegationPath)) {
             process.stderr.write(
-              `⛵ [Vela] ✦ BLOCKED [VK-07]: PM은 소스 코드에 직접 접근할 수 없습니다.\n` +
+              `⛵ [Vela] ✦ BLOCKED [VK-07]: PM은 소스 코드를 직접 수정할 수 없습니다.\n` +
               `  Tool: ${tool_name} | File: ${targetFile}\n` +
               `  이 작업은 반드시 Subagent 또는 Teammate에 위임해야 합니다.\n` +
               `  Recovery: Agent 도구로 에이전트를 소환하세요.\n` +
-              `  - 파일 읽기/탐색 → Subagent (model: "haiku")\n` +
-              `  - 코드 분석 → Subagent (model: "sonnet")\n` +
               `  - 코드 구현 → Subagent (model: "sonnet")\n` +
               `  - 다중 파일 수정 → Teammate (model: "sonnet", isolation: "worktree")`
             );
