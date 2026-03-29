@@ -1,0 +1,97 @@
+{
+  "skill_name": "vela",
+  "evals": [
+    {
+      "id": 0,
+      "name": "vela-init",
+      "prompt": "/vela:vela-init 을 실행해서 현재 프로젝트에 Vela 환경을 구축해줘. 언어는 Node.js로 해줘.",
+      "expected_output": ".vela/ 디렉토리에 hooks, cli, cache, templates가 생성되고 hooks가 settings.json에 등록됨",
+      "files": [],
+      "assertions": [
+        {
+          "name": "vela-dir-created",
+          "description": ".vela/ 디렉토리가 프로젝트 루트에 생성되었는가",
+          "type": "file_exists",
+          "check": ".vela/config.json"
+        },
+        {
+          "name": "hooks-deployed",
+          "description": "4개 훅 파일이 .vela/hooks/에 배포되었는가",
+          "type": "file_exists",
+          "check": ".vela/hooks/vela-gate-keeper.js"
+        },
+        {
+          "name": "cli-deployed",
+          "description": "CLI 도구가 .vela/cli/에 배포되었는가",
+          "type": "file_exists",
+          "check": ".vela/cli/vela-engine.js"
+        },
+        {
+          "name": "pipeline-deployed",
+          "description": "pipeline.json이 templates에 배포되었는가",
+          "type": "file_exists",
+          "check": ".vela/templates/pipeline.json"
+        },
+        {
+          "name": "user-informed",
+          "description": "사용자에게 설치 결과를 보고했는가",
+          "type": "output_contains",
+          "check": "설치|완료|구축|install"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "gate-guard-block",
+      "prompt": "이 프로젝트의 README.md 파일에 '# My Project' 라는 제목을 추가해줘.",
+      "expected_output": "파이프라인 없이 파일 수정 시도 시 Gate Guard가 차단하거나, Claude가 먼저 파이프라인을 시작해야 함을 인지",
+      "files": [],
+      "assertions": [
+        {
+          "name": "pipeline-awareness",
+          "description": "파이프라인 시작 없이 직접 수정하지 않았는가",
+          "type": "behavior_check",
+          "check": "파이프라인을 먼저 시작하거나 Gate Guard에 의해 차단됨"
+        },
+        {
+          "name": "engine-init-called",
+          "description": "vela-engine init을 호출했거나 파이프라인 필요성을 언급했는가",
+          "type": "output_contains",
+          "check": "vela-engine|pipeline|파이프라인"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "full-pipeline",
+      "prompt": "src/utils/helper.js 파일의 formatDate 함수를 리팩토링해줘. ISO 8601 형식을 지원하도록 수정해야 해.",
+      "expected_output": "전체 파이프라인 흐름을 따름: init → research → plan → execute(팀 메커니즘) → verify → finalize",
+      "files": [
+        {
+          "path": "src/utils/helper.js",
+          "content": "function formatDate(date) {\n  const d = new Date(date);\n  return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;\n}\n\nmodule.exports = { formatDate };"
+        }
+      ],
+      "assertions": [
+        {
+          "name": "pipeline-followed",
+          "description": "파이프라인 단계를 순서대로 따랐는가 (init → research/plan → execute → verify)",
+          "type": "behavior_check",
+          "check": "engine init, transition, team-dispatch 등 엔진 명령어 사용"
+        },
+        {
+          "name": "team-mechanism-used",
+          "description": "Execute 단계에서 Executor + Reviewer + PM 승인 메커니즘을 사용했는가",
+          "type": "output_contains",
+          "check": "team-dispatch|executor|reviewer|approval"
+        },
+        {
+          "name": "code-modified-correctly",
+          "description": "formatDate가 ISO 8601을 지원하도록 수정되었는가",
+          "type": "behavior_check",
+          "check": "toISOString 또는 ISO 형식 패딩 적용"
+        }
+      ]
+    }
+  ]
+}

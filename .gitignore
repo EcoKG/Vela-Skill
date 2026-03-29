@@ -1,0 +1,7 @@
+node_modules/
+*.vela-tmp
+.vela/cache/vela-cache.db
+.vela/state/
+.vela/artifacts/
+.vela/tracker-signals.json
+.vela/write-log.jsonl
