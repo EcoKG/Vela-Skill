@@ -70,6 +70,9 @@ async function main() {
   const config = readConfig(cwd);
   if (!config) process.exit(0);
 
+  // Cache pipeline state — filesystem I/O, but state won't change within a single hook invocation
+  const pipelineState = findActivePipeline(velaDir);
+
   const output = [];
 
   // ─── Context Pressure Tracking ───
@@ -122,15 +125,14 @@ async function main() {
   }
 
   // ─── Read Counter (for read-throttle warning in gate-guard) ───
-  const pipelineForCounter = findActivePipeline(velaDir);
-  if (pipelineForCounter && (tool_name === 'Read' || tool_name === 'Glob' || tool_name === 'Grep')) {
+  if (pipelineState && (tool_name === 'Read' || tool_name === 'Glob' || tool_name === 'Grep')) {
     const counterPath = path.join(velaDir, 'state', 'reads-since-transition.json');
-    let counter = { step: pipelineForCounter.current_step, count: 0 };
+    let counter = { step: pipelineState.current_step, count: 0 };
     try {
       if (fs.existsSync(counterPath)) {
         counter = JSON.parse(fs.readFileSync(counterPath, 'utf-8'));
-        if (counter.step !== pipelineForCounter.current_step) {
-          counter = { step: pipelineForCounter.current_step, count: 0 };
+        if (counter.step !== pipelineState.current_step) {
+          counter = { step: pipelineState.current_step, count: 0 };
         }
       }
     } catch (e) {}
@@ -158,31 +160,30 @@ async function main() {
       pattern: tool_input.pattern || '',
       path: tool_input.path || cwd,
       timestamp: Date.now()
-    });
+    }, pipelineState);
   }
 
   // ─── Agent Dispatch Detection ───
-  const state = findActivePipeline(velaDir);
-  if (state && tool_name === 'Agent') {
+  if (pipelineState && tool_name === 'Agent') {
     appendTraceEntry(velaDir, {
       action: 'agent_dispatch',
       description: tool_input.description || '',
-      step: state.current_step,
+      step: pipelineState.current_step,
       team_name: tool_input.team_name || null,
       model: tool_input.model || null,
       timestamp: Date.now()
-    });
+    }, pipelineState);
   }
 
   // ─── Teammate Communication Tracking ───
-  if (state && tool_name === 'SendMessage') {
+  if (pipelineState && tool_name === 'SendMessage') {
     const commPath = path.join(velaDir, 'state', 'teammate-comms.json');
     let comms = [];
     try {
       if (fs.existsSync(commPath)) comms = JSON.parse(fs.readFileSync(commPath, 'utf-8'));
     } catch (e) {}
     comms.push({
-      step: state.current_step,
+      step: pipelineState.current_step,
       to: tool_input.to || '',
       timestamp: Date.now()
     });
@@ -194,13 +195,13 @@ async function main() {
   }
 
   // ─── Trace Logging ───
-  if (state) {
+  if (pipelineState) {
     appendTraceEntry(velaDir, {
       action: 'tool_use',
       tool: tool_name,
-      step: state.current_step,
+      step: pipelineState.current_step,
       timestamp: Date.now()
-    });
+    }, pipelineState);
   }
 
   if (output.length > 0) {
@@ -251,8 +252,7 @@ function appendTreeNodeEntry(velaDir, filePath, sessionId) {
   } catch (e) {}
 }
 
-function appendTraceEntry(velaDir, entry) {
-  const state = findActivePipeline(velaDir);
+function appendTraceEntry(velaDir, entry, state) {
   if (!state || !state._artifactDir) return;
 
   const tracePath = path.join(state._artifactDir, 'trace.jsonl');

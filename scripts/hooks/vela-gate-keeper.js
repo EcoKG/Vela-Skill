@@ -56,6 +56,9 @@ async function main() {
 
   const currentMode = getCurrentMode(cwd);
 
+  // Cache pipeline state — won't change within a single hook invocation
+  const pipelineState = findActivePipeline(velaDir);
+
   // ─── GATE 1: Bash Blocking ───
   // Vela uses its own CLI. Bash is blocked unless it's a Vela CLI command,
   // a safe read-only command, or a git/gh command during an active pipeline.
@@ -79,7 +82,7 @@ async function main() {
     // Gate Guard (VG-07, VG-08) handles step-based restrictions
     // Permission Deny rules handle dangerous commands (--force, --hard, --no-verify)
     if (/^\s*(git|gh)\s/.test(cmd)) {
-      const velaState = findActivePipeline(velaDir);
+      const velaState = pipelineState;
       if (velaState) {
         process.exit(0);
       }
@@ -140,7 +143,7 @@ async function main() {
   // 예외: trivial 파이프라인 (PM 직접 수행), .vela/ 내부 파일, 설정 파일
   const ALL_CODE_TOOLS = new Set([...WRITE_TOOLS, 'Read', 'Glob', 'Grep']);
   if (ALL_CODE_TOOLS.has(tool_name)) {
-    const state = findActivePipeline(velaDir);
+    const state = pipelineState;
     if (state && state.pipeline_type !== 'trivial') {
       const targetFile = tool_input.file_path || tool_input.path || tool_input.pattern || '';
 
