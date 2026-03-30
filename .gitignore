@@ -32,3 +32,8 @@ vendor/
 coverage/
 .cache/
 tmp/
+
+# Vela Engine (auto-managed)
+.vela/
+.claude/
+CLAUDE.md
