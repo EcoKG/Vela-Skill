@@ -19,7 +19,7 @@ echo ""
 rm -rf "$TMP" 2>/dev/null
 
 # ─── Clone ───
-git clone --depth 1 "$REPO" "$TMP" 2>/dev/null || {
+git clone --depth 1 -b main "$REPO" "$TMP" 2>/dev/null || {
   echo "❌ git clone failed. Check network and try again."
   exit 1
 }
