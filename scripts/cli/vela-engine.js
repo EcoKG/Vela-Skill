@@ -105,16 +105,7 @@ function cmdInit() {
 
   const pipelineType = scaleToPipeline(scale);
 
-  // Create artifact directory: {date}_{id}_{slug}
-  const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
-  const uid = Math.random().toString(36).substring(2, 6);
-  const slug = slugify(request);
-  const artifactDir = path.join(ARTIFACTS_DIR, `${dateStr}_${uid}_${slug}`);
-
-  fs.mkdirSync(artifactDir, { recursive: true });
-
-  // Load pipeline definition
+  // Load pipeline definition (before creating any directories)
   const pipelineDef = loadPipelineDefinition();
   if (!pipelineDef) {
     return output({ ok: false, error: 'Pipeline definition not found. Run vela-init first.' });
@@ -138,6 +129,15 @@ function cmdInit() {
 
   // Ensure Vela files are hidden from git
   ensureGitignore();
+
+  // Create artifact directory AFTER validation passes: {date}_{id}_{slug}
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const uid = Math.random().toString(36).substring(2, 6);
+  const slug = slugify(request);
+  const artifactDir = path.join(ARTIFACTS_DIR, `${dateStr}_${uid}_${slug}`);
+
+  fs.mkdirSync(artifactDir, { recursive: true });
 
   // Auto mode flag
   const autoMode = hasFlag('--auto');
@@ -1084,6 +1084,25 @@ function ensureGitignore() {
     'CLAUDE.md'
   ];
 
+  // Step 1: Remove already-tracked Vela files BEFORE updating .gitignore
+  // (if .gitignore lists them first, git silently drops the staged deletions)
+  try {
+    const tracked = execSync('git ls-files .vela/ .claude/ CLAUDE.md', {
+      cwd: CWD, stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000
+    }).toString().trim();
+    if (tracked) {
+      execSync('git rm -r --cached --ignore-unmatch .vela/ .claude/ CLAUDE.md', {
+        cwd: CWD, stdio: 'pipe', timeout: 10000
+      });
+      execSync('git commit -m "chore: untrack Vela files from git" --no-verify', {
+        cwd: CWD, stdio: 'pipe', timeout: 10000
+      });
+    }
+  } catch (e) {
+    // Not a git repo, git not available, or nothing to commit — skip
+  }
+
+  // Step 2: Update .gitignore (after deletions are committed)
   let content = '';
   if (fs.existsSync(gitignorePath)) {
     content = fs.readFileSync(gitignorePath, 'utf-8');
@@ -1094,11 +1113,9 @@ function ensureGitignore() {
   );
 
   if (missingEntries.length > 0) {
-    const block = '\n' + velaEntries.join('\n') + '\n';
     if (!content.includes('# Vela Engine')) {
-      fs.appendFileSync(gitignorePath, block);
+      fs.appendFileSync(gitignorePath, '\n' + velaEntries.join('\n') + '\n');
     } else {
-      // Header exists but entries missing — append only missing
       fs.appendFileSync(gitignorePath, missingEntries.join('\n') + '\n');
     }
   }

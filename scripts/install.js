@@ -937,8 +937,29 @@ function validate() {
   }
 
   // 7. .gitignore — ensure all Vela files are hidden from git
+  const { execSync } = require('child_process');
   const gitignorePath = path.join(PROJECT_ROOT, '.gitignore');
   const velaGitEntries = ['.vela/', '.claude/', 'CLAUDE.md'];
+
+  // Step 1: Remove already-tracked Vela files BEFORE updating .gitignore
+  try {
+    const tracked = execSync('git ls-files .vela/ .claude/ CLAUDE.md', {
+      cwd: PROJECT_ROOT, stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000
+    }).toString().trim();
+    if (tracked) {
+      execSync('git rm -r --cached --ignore-unmatch .vela/ .claude/ CLAUDE.md', {
+        cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 10000
+      });
+      execSync('git commit -m "chore: untrack Vela files from git" --no-verify', {
+        cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 10000
+      });
+      results.fixed.push('Removed Vela files from git tracking (files kept on disk)');
+    }
+  } catch (e) {
+    // Not a git repo or git not available
+  }
+
+  // Step 2: Update .gitignore (after deletions are committed)
   let gitignoreContent = '';
   if (fs.existsSync(gitignorePath)) {
     gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
@@ -953,7 +974,6 @@ function validate() {
   }
 
   // 8. System dependencies — install if missing
-  const { execSync } = require('child_process');
 
   // jq (required for statusline.sh)
   try {
