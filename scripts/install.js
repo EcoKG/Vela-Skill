@@ -711,6 +711,7 @@ function upgrade() {
     { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
     { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
     { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
+    { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
   ];
 
   // Do NOT overwrite config.json (user may have customized it)
@@ -861,7 +862,8 @@ function validate() {
     { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
     { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
     { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
-    { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' }
+    { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
+    { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' }
   ];
 
   for (const f of requiredFiles) {

@@ -30,7 +30,12 @@ function getFlag(name) {
 function printUsage() {
   console.error(`Usage:
   node vela-analyze.js deps                          — Run dependency analysis (JSON stdout)
-  node vela-analyze.js report --input <file> [--output <file>]  — Generate PDF report`);
+  node vela-analyze.js report --input <file> [--output <file>]  — Generate PDF report
+  node vela-analyze.js run --perspectives <list> [--model haiku|sonnet]  — Run SDK code analysis
+
+  run options:
+    --perspectives  Comma-separated list of: security,bugs,performance,code-quality,architecture (required)
+    --model         Analysis model: haiku (default) or sonnet`);
 }
 
 // ─── PDF Generation ───
@@ -227,6 +232,47 @@ async function main() {
         console.error(`Error: PDF generation failed: ${result.error}`);
         process.exit(1);
       }
+      break;
+    }
+
+    case 'run': {
+      const VALID_PERSPECTIVES = ['security', 'bugs', 'performance', 'code-quality', 'architecture'];
+      const MODEL_MAP = {
+        haiku: 'claude-haiku-4-5-20250929',
+        sonnet: 'claude-sonnet-4-5-20250929',
+      };
+
+      const perspectivesRaw = getFlag('--perspectives');
+      if (!perspectivesRaw) {
+        console.error('Error: --perspectives <list> is required for the run subcommand.');
+        console.error(`  Valid perspectives: ${VALID_PERSPECTIVES.join(', ')}`);
+        printUsage();
+        process.exit(1);
+      }
+
+      const requested = perspectivesRaw.split(',').map(s => s.trim()).filter(Boolean);
+      const invalid = requested.filter(p => !VALID_PERSPECTIVES.includes(p));
+      if (invalid.length > 0) {
+        console.error(`Error: Unknown perspective(s): ${invalid.join(', ')}`);
+        console.error(`  Valid perspectives: ${VALID_PERSPECTIVES.join(', ')}`);
+        process.exit(1);
+      }
+
+      const modelName = getFlag('--model') || 'haiku';
+      if (!MODEL_MAP[modelName]) {
+        console.error(`Error: Unknown model "${modelName}". Valid values: ${Object.keys(MODEL_MAP).join(', ')}`);
+        process.exit(1);
+      }
+
+      const { sdkAnalyze } = require(path.join(__dirname, '..', 'hooks', 'shared', 'sdk-analyzer.js'));
+      const result = await sdkAnalyze({
+        perspectives: requested,
+        cwd: process.cwd(),
+        model: MODEL_MAP[modelName],
+      });
+
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(result.ok ? 0 : 1);
       break;
     }
 
