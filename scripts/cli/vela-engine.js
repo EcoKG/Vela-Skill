@@ -1001,10 +1001,23 @@ function cleanupCancelledArtifacts(hoursOld) {
 
   function tryCleanDir(dirPath) {
     const statePath = path.join(dirPath, 'pipeline-state.json');
-    if (!fs.existsSync(statePath)) return;
+
+    // Remove empty artifact directories (no pipeline-state.json = never used)
+    if (!fs.existsSync(statePath)) {
+      try {
+        const files = fs.readdirSync(dirPath);
+        if (files.length === 0) {
+          fs.rmdirSync(dirPath);
+          cleaned++;
+        }
+      } catch (e) {}
+      return;
+    }
+
     try {
       const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-      if (state.status !== 'cancelled') return;
+      // Clean cancelled and completed pipelines older than cutoff
+      if (state.status !== 'cancelled' && state.status !== 'completed') return;
       const mtime = fs.statSync(statePath).mtimeMs;
       if (mtime > cutoff) return;
       fs.rmSync(dirPath, { recursive: true, force: true });
