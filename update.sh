@@ -96,9 +96,15 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     # Statusline
     cp "$TMP/scripts/statusline.sh" .vela/ 2>/dev/null
 
-    # Agents
+    # Agents (top-level + subdirectories)
     mkdir -p .vela/agents
     cp "$TMP/scripts/agents/"*.md .vela/agents/ 2>/dev/null
+    for sub in pm researcher planner executor reviewer conflict-manager; do
+      if [ -d "$TMP/scripts/agents/$sub" ]; then
+        mkdir -p ".vela/agents/$sub"
+        cp "$TMP/scripts/agents/$sub/"*.md ".vela/agents/$sub/" 2>/dev/null
+      fi
+    done
 
     # Guidelines
     mkdir -p .vela/guidelines
@@ -120,6 +126,13 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     # Re-run install to update settings.local.json with new hooks
     if [ -f ".vela/install.js" ]; then
       node .vela/install.js 2>/dev/null | tail -1
+    fi
+
+    # Optional: Update Claude Agent SDK
+    if command -v npm &>/dev/null; then
+      if (cd "$SKILL_DIR" && npm install @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null); then
+        echo "  ✅ Claude Agent SDK updated"
+      fi
     fi
 
     echo "  ✦ Local project updated"

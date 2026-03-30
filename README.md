@@ -12,7 +12,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 
 ### 2. 🌟 이중 방어 (Defense in Depth)
 - **Gate Keeper** + **Gate Guard** — 훅 레벨 이중 차단
-- **Reviewer** (독립 subagent) — 편향 없는 독립 평가
+- **Reviewer** (SDK 3단계: Haiku→Sonnet→Opus) — 비용 효율적 독립 평가
 - **Permission deny** + **Hook exit(2)** — 시스템 + 코드 레벨
 - **GUARD 0**: 파이프라인 중 TaskCreate 차단
 - **pipeline-state.json 보호**: 직접 수정 불가
@@ -21,7 +21,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 산출물(research.md, plan.md, review-*.md, approval-*.json), git 커밋에 파이프라인 참조, TreeNode 캐시.
 
 ### 4. ✦ 구조로 강제 (Enforce by Structure)
-지시는 무시된다. 산출물이 없으면 전이 차단. approval 없으면 다음 단계 불가. `--scale` 미지정 시 init 거부.
+지시는 무시된다. 산출물이 없으면 전이 차단. approval 없으면 다음 단계 불가. `--scale` 미지정 시 init 거부. PM은 코드를 직접 작성할 수 없다 — 모든 코드 실행은 SDK Executor를 통해서만 가능하다.
 
 ---
 
@@ -32,6 +32,8 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 ```bash
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
 ```
+
+설치 시 Claude Agent SDK도 선택적으로 설치된다 (실패해도 기존 방식으로 정상 동작).
 
 ### 2. 프로젝트에서 사용
 
@@ -86,6 +88,13 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │  init → research → plan → plan-check → checkpoint        │
 │       → branch → execute → verify → commit → finalize    │
 │                                                           │
+│  🔌 SDK ENGINE ──────────────────────────────────        │
+│  review:     Haiku→Sonnet→Opus 3단계 리뷰                 │
+│  plan-check: Haiku 구조 검증                               │
+│  research:   Haiku × 3 병렬 분석 (아키텍처/보안/품질)      │
+│  execute:    Sonnet 코드 구현 (TDD)                        │
+│  ↳ SDK 미설치 → 기존 Subagent/Teammate 방식 자동 폴백     │
+│                                                           │
 │  🌟 TEAM ────────────────────────────────────────        │
 │  Subagent: 독립 작업 (Haiku/Sonnet/Opus)                   │
 │  Teammate: 소통 필요 (Research 경쟁가설/CrossLayer)           │
@@ -129,11 +138,6 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
   2차) 선택 항목의 세부 정보 수집
   3차) PM이 수집 정보를 조립하여 명확한 프롬프트 작성
   4차) 조립된 프롬프트를 사용자에게 보여주고 확인
-       ⛵ 최적화된 프롬프트:
-       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-       UserService의 이메일 검증 로직에서
-       중복 체크 누락 버그 수정. ...
-       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   5차) 승인 → 조립된 프롬프트로 파이프라인 시작
 ```
 
@@ -206,6 +210,60 @@ tool 이벤트 hook에 `if` 필드로 실행 대상을 제한하여 불필요한
 
 ---
 
+## SDK 엔진 — Agent SDK 통합
+
+Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계획 검증, 실행을 엔진 CLI에서 직접 수행한다. PM이 Subagent를 소환하는 간접 제어에서, 엔진이 SDK로 에이전트를 직접 spawn하는 직접 제어로 전환한다.
+
+### SDK 모드 vs 비-SDK 모드
+
+| 항목 | SDK 모드 | 비-SDK 모드 |
+|------|----------|------------|
+| 리뷰 | Haiku→Sonnet→Opus 3단계 (비용 ~80%↓) | PM → Reviewer Subagent |
+| 리서치 | Haiku × 3 병렬 (비용 ~70%↓) | PM → Researcher Subagent |
+| plan-check | Haiku 자동 검증 | PM 직접 검증 |
+| 실행 | SDK Executor (Sonnet) | PM → Executor Subagent |
+| PM 코드 작성 | 구조적으로 차단 | 프롬프트 규칙으로 차단 |
+| 인증 | Claude Code 세션 인증 상속 | 동일 |
+
+SDK 미설치 시 자동 폴백 — 기존 Subagent/Teammate 방식으로 동작한다.
+
+### SDK 커맨드
+
+```bash
+node .vela/cli/vela-engine.js review      # Haiku→Sonnet→Opus 3단계 리뷰
+node .vela/cli/vela-engine.js plan-check   # Haiku plan.md 구조 검증
+node .vela/cli/vela-engine.js research     # 3-관점 병렬 리서치 (Haiku × 3)
+node .vela/cli/vela-engine.js execute      # Sonnet TDD 코드 구현
+```
+
+### SDK 모듈 구조
+
+```
+scripts/hooks/shared/
+├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit 재시도, hook 격리)
+├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
+├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
+└── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
+```
+
+각 모듈은 동일한 CJS 패턴을 따른다:
+- `settingSources: []` — SDK 에이전트에 Vela 훅이 로드되지 않음 (hook 격리)
+- `permissionMode: 'bypassPermissions'` — 엔진 제어 하에 자동 실행
+- SDK 미설치 시 `{ ok: false, error: 'sdk_not_available' }` 반환 — graceful fallback
+- Rate limit 발생 시 exponential backoff 자동 재시도 (maxRetries: 3)
+
+### 에스컬레이션
+
+리뷰 점수 기반 자동 에스컬레이션:
+- Haiku 점수 ≥ 20 → 즉시 pass (단일 모델, ~$0.05)
+- Haiku 점수 15-19 → Sonnet 심층 리뷰 (~$0.15)
+- Haiku 점수 < 15 → Opus rescue (~$0.30)
+- Sonnet 점수 < 20 → Opus rescue
+- Opus도 실패 → reject + escalation.json
+
+---
+
 ## 팀 메커니즘
 
 ### 모델 선택 전략
@@ -215,13 +273,6 @@ tool 이벤트 hook에 `if` 필드로 실행 대상을 제한하여 불필요한
 | 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
 | 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
 | 설계/디버깅/분석 | **Sonnet** (기본) | Researcher, Planner (에스컬레이션 시 Opus) |
-
-### 에스컬레이션
-
-Sonnet 에이전트가 품질 미달 시 자동으로 Opus로 재시도:
-- Reviewer 점수 15/25 미만 → SubagentStop hook이 `escalation.json` 생성
-- Orchestrator가 일회성 Opus 에스컬레이션 directive 주입 후 flag 삭제
-- PM reject 2회 연속 → Auto 모드 자동 중단
 
 ### Teammate vs Subagent
 
@@ -253,8 +304,8 @@ Conflict Manager가 최종 병합 + 충돌 해결
 
 ### 승인 메커니즘 — 파일 기반
 
-- **Reviewer** (Subagent, Sonnet) → `review-{step}.md` (X/25 점수 + 이슈)
-- **PM** → `approval-{step}.json` (`decision: "approve"/"reject"`)
+- **SDK 모드**: sdk-reviewer.js가 3단계 리뷰 → review-{step}.md + approval-{step}.json 자동 생성
+- **비-SDK 모드**: Reviewer (Subagent, Sonnet) → `review-{step}.md` → PM → `approval-{step}.json`
 - 엔진 exit gate가 파일 확인 → 없으면 transition 차단
 
 ---
@@ -361,14 +412,20 @@ Claude: [VG-02] → 복구 테이블 참조 → vela-engine transition 실행
 ```
 $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   ├── SKILL.md                   ← 스킬 진입점
+  ├── package.json               ← optionalDependencies: @anthropic-ai/claude-agent-sdk
   ├── scripts/
   │   ├── hooks/                 ← 18 hooks
-  │   │   └── shared/            ← pipeline.js, constants.js
+  │   │   └── shared/            ← pipeline.js, constants.js, 5개 SDK 모듈
+  │   │       ├── sdk-runner.js        ← SDK 인프라 (인증/폴백/rate limit/hook 격리)
+  │   │       ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+  │   │       ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
+  │   │       ├── sdk-researcher.js    ← 3관점 병렬 분석
+  │   │       └── sdk-executor.js      ← Sonnet TDD 실행
   │   ├── cli/                   ← vela-engine, vela-read, vela-write, vela-cost, vela-report
   │   ├── agents/                ← vela.md, researcher, planner, executor, reviewer, conflict-manager, leader
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
-  │   ├── tests/                 ← 7개 계약 테스트 스위트 (149 assertions)
+  │   ├── tests/                 ← 14개 계약 테스트 스위트
   │   ├── install.js             ← 설치/검증/복구/upgrade
   │   └── statusline.sh          ← ⛵ 하단 바
   ├── templates/                 ← pipeline.json, config.json, presets.json
@@ -407,9 +464,68 @@ vela-engine branch [--mode auto|prompt|none]
 vela-engine commit [--message TEXT]
 vela-engine cancel
 vela-engine history
+vela-engine review                               # SDK 3단계 리뷰 (Haiku→Sonnet→Opus)
+vela-engine plan-check                           # SDK plan.md 구조 검증 (Haiku)
+vela-engine research                             # SDK 3-관점 병렬 리서치 (Haiku × 3)
+vela-engine execute                              # SDK 단일 실행 (Sonnet)
 vela-cost                                        # 파이프라인 비용/메트릭
 vela-report [--html output.html]                 # 파이프라인 리포트/대시보드
 ```
+
+---
+
+## 테스트
+
+14개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
+
+```bash
+# 전체 SDK 통합 테스트 (81 assertions)
+bash scripts/tests/test-sdk-integration.sh
+
+# 개별 테스트 스위트
+bash scripts/tests/test-sdk-runner.sh       # 14 assertions — SDK 인프라
+bash scripts/tests/test-sdk-reviewer.sh     # 18 assertions — 3단계 리뷰
+bash scripts/tests/test-sdk-plan-checker.sh # 13 assertions — plan.md 검증
+bash scripts/tests/test-sdk-researcher.sh   # 23 assertions — 3관점 분석
+bash scripts/tests/test-sdk-executor.sh     # 13 assertions — 코드 실행
+bash scripts/tests/test-gate-vk07.sh        # Gate Keeper 규칙
+bash scripts/tests/test-auto-mode.sh        # Auto 모드 (16 assertions)
+bash scripts/tests/test-stop-hook.sh        # Stop hook
+bash scripts/tests/test-subagent-stop.sh    # SubagentStop + 에스컬레이션
+bash scripts/tests/test-permission-hook.sh  # PermissionRequest 자동 승인
+bash scripts/tests/test-failure-hooks.sh    # Failure/StopFailure/TeammateIdle
+bash scripts/tests/test-prompt-async-hooks.sh # ReviewPrompt + TestAsync
+bash scripts/tests/test-notification-hook.sh  # 데스크톱 알림
+```
+
+⚠️ SDK 테스트 스위트들은 공유 mock 디렉토리를 사용하므로 **순차 실행** 필수 (병렬 실행 시 mock collision 발생).
+
+---
+
+## 커스텀 어조 — persona.md
+
+`.vela/persona.md` 파일에 어조 규칙을 작성하면 Orchestrator가 모든 세션에 자동 주입한다.
+
+- 파이프라인 활성 여부와 무관하게 항상 주입된다
+- 파일이 없거나 비어있으면 아무것도 출력하지 않는다
+
+예시 (`.vela/persona.md`):
+```markdown
+- 한국어로 답변하라
+- 간결하고 명확하게 말하라
+- 코드 주석은 영어로 작성하라
+```
+
+---
+
+## 버전 이력
+
+| 버전 | 마일스톤 | 주요 변경 |
+|------|---------|----------|
+| v1.0 | — | Gate Keeper + Gate Guard + Orchestrator + Tracker 기본 4 hook, 5종 파이프라인 |
+| v2.0 | M001 | 비용 최적화(Opus→Sonnet), Auto 모드, PM 속독, Bash 완화, persona.md |
+| v2.5 | M002 | Hook 4→18개, Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification |
+| v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단 |
 
 ---
 
