@@ -1,37 +1,68 @@
 #!/bin/bash
-# ⛵ Vela Engine — One-line installer (Plugin format)
-# Usage: curl -fsSL https://raw.githubusercontent.com/EcoKG/vela/main/install.sh | bash
+# ⛵ Vela Engine v3.0 — One-line installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
+#
+# Installs Vela as a Claude Code skill in $HOME/.claude/skills/vela/
 
-REPO="https://github.com/EcoKG/vela.git"
+set -e
+
+REPO="https://github.com/EcoKG/Vela-Skill.git"
 TMP="$HOME/.vela-install-tmp"
-PLUGIN_DIR="$HOME/.claude/skills/vela"
+SKILL_DIR="$HOME/.claude/skills/vela"
 SETTINGS="$HOME/.claude/settings.json"
 
-echo "⛵ Vela Engine — Installing as plugin..."
+echo ""
+echo "⛵ Vela Engine v3.0 — Installing..."
+echo ""
 
-# Clean previous attempts
+# ─── Clean previous attempts ───
 rm -rf "$TMP" 2>/dev/null
 
-# Clone
-git clone --depth 1 "$REPO" "$TMP" 2>/dev/null || { echo "❌ git clone failed"; exit 1; }
+# ─── Clone ───
+git clone --depth 1 "$REPO" "$TMP" 2>/dev/null || {
+  echo "❌ git clone failed. Check network and try again."
+  exit 1
+}
 
-# Create plugin directory
-mkdir -p "$PLUGIN_DIR"
+# ─── Create skill directory ───
+mkdir -p "$SKILL_DIR"
 
-# Copy plugin structure
-cp -r "$TMP/.claude-plugin" "$PLUGIN_DIR/"
-cp -r "$TMP/skills" "$PLUGIN_DIR/"
-cp -r "$TMP/scripts" "$PLUGIN_DIR/"
-cp -r "$TMP/templates" "$PLUGIN_DIR/"
-cp "$TMP/README.md" "$PLUGIN_DIR/" 2>/dev/null
+# ─── Copy skill structure ───
+# Core skill file
+cp "$TMP/SKILL.md" "$SKILL_DIR/"
+cp "$TMP/README.md" "$SKILL_DIR/" 2>/dev/null
 
-# Keep SKILL.md as fallback
-cp "$TMP/SKILL.md" "$PLUGIN_DIR/" 2>/dev/null
+# Scripts (hooks, cli, agents, cache, guidelines, tests, shared, install)
+if [ -d "$TMP/scripts" ]; then
+  rm -rf "$SKILL_DIR/scripts" 2>/dev/null
+  cp -r "$TMP/scripts" "$SKILL_DIR/scripts"
+fi
 
-# Cleanup
-rm -rf "$TMP" 2>/dev/null
+# Templates
+if [ -d "$TMP/templates" ]; then
+  rm -rf "$SKILL_DIR/templates" 2>/dev/null
+  cp -r "$TMP/templates" "$SKILL_DIR/templates"
+fi
 
-# Enable Agent Teams in global settings
+# References
+if [ -d "$TMP/references" ]; then
+  rm -rf "$SKILL_DIR/references" 2>/dev/null
+  cp -r "$TMP/references" "$SKILL_DIR/references"
+fi
+
+# Skills (sub-skills: init, start)
+if [ -d "$TMP/skills" ]; then
+  rm -rf "$SKILL_DIR/skills" 2>/dev/null
+  cp -r "$TMP/skills" "$SKILL_DIR/skills"
+fi
+
+# Plugin metadata
+if [ -d "$TMP/.claude-plugin" ]; then
+  rm -rf "$SKILL_DIR/.claude-plugin" 2>/dev/null
+  cp -r "$TMP/.claude-plugin" "$SKILL_DIR/.claude-plugin"
+fi
+
+# ─── Enable Agent Teams in global settings ───
 if command -v node &>/dev/null; then
   mkdir -p "$HOME/.claude"
   node -e "
@@ -42,18 +73,32 @@ if command -v node &>/dev/null; then
     if (!d.env) d.env = {};
     d.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1';
     fs.writeFileSync(p, JSON.stringify(d, null, 2));
-    console.log('🌟 Agent Teams enabled');
-  " 2>/dev/null || echo "⚠ Add manually: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+    console.log('  🌟 Agent Teams enabled in settings.json');
+  " 2>/dev/null || echo "  ⚠ Agent Teams: add CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 manually"
+fi
+
+# ─── Cleanup ───
+rm -rf "$TMP" 2>/dev/null
+
+# ─── Verify ───
+HOOK_COUNT=0
+if [ -d "$SKILL_DIR/scripts/hooks" ]; then
+  HOOK_COUNT=$(ls "$SKILL_DIR/scripts/hooks/"*.js 2>/dev/null | wc -l | tr -d ' ')
 fi
 
 echo ""
-echo "✦ Vela Engine installed successfully! ✦"
+echo "✦───────────────────────────────────────✦"
+echo "  ⛵ Vela Engine installed successfully!"
+echo "✦───────────────────────────────────────✦"
 echo ""
-echo "⛵ Plugin: $PLUGIN_DIR"
-echo "🌟 Agent Teams: enabled"
+echo "  📂 Location: $SKILL_DIR"
+echo "  🔧 Hooks: ${HOOK_COUNT} scripts"
+echo "  🌟 Agent Teams: enabled"
 echo ""
-echo "🧭 Commands:"
-echo "   /vela:init    — 프로젝트에 Vela 환경 구축"
-echo "   /vela:start   — 파이프라인 바로 시작"
+echo "  🧭 Quick Start:"
+echo "     /vela init    — 프로젝트에 Vela 환경 구축"
+echo "     /vela start   — 파이프라인 바로 시작"
+echo "     /vela auto    — 무인 자동 실행"
 echo ""
-echo "✦─────────────────────✦"
+echo "  📖 Docs: https://github.com/EcoKG/Vela-Skill"
+echo ""
