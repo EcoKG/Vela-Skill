@@ -1,0 +1,107 @@
+{
+  "ok": true,
+  "deps": {
+    "ok": true,
+    "findings": [
+      {
+        "name": "lodash",
+        "severity": "high",
+        "isDirect": true,
+        "title": "Prototype Pollution in lodash",
+        "url": "https://github.com/advisories/GHSA-jf85-cpcp-j695",
+        "fixAvailable": true
+      },
+      {
+        "name": "minimist",
+        "severity": "critical",
+        "isDirect": false,
+        "title": "Prototype Pollution in minimist",
+        "url": "https://github.com/advisories/GHSA-xvch-5gv4-984h",
+        "fixAvailable": true
+      }
+    ],
+    "outdated": [
+      {
+        "name": "express",
+        "current": "4.17.1",
+        "wanted": "4.18.2",
+        "latest": "5.0.0"
+      },
+      {
+        "name": "chalk",
+        "current": "4.1.0",
+        "wanted": "4.1.2",
+        "latest": "5.3.0"
+      }
+    ],
+    "metadata": {
+      "totalVulnerabilities": 2,
+      "bySeverity": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 1,
+        "critical": 1
+      },
+      "outdatedCount": 2
+    }
+  },
+  "codeAnalysis": {
+    "ok": true,
+    "perspectives": [
+      {
+        "perspective": "security",
+        "ok": true,
+        "findings": [
+          {
+            "name": "SQL Injection in user query",
+            "severity": "critical",
+            "file": "src/auth.js",
+            "line": 42,
+            "description": "User input concatenated directly into SQL query string without parameterization",
+            "suggestion": "Use parameterized queries with prepared statements"
+          },
+          {
+            "name": "Missing CSRF token validation",
+            "severity": "high",
+            "file": "src/routes/api.js",
+            "line": 15,
+            "description": "POST endpoint lacks CSRF token check, vulnerable to cross-site request forgery",
+            "suggestion": "Add CSRF middleware to all state-changing endpoints"
+          }
+        ],
+        "cost": 0.02,
+        "durationMs": 5200
+      },
+      {
+        "perspective": "performance",
+        "ok": true,
+        "findings": [
+          {
+            "name": "N+1 query in user listing",
+            "severity": "moderate",
+            "file": "src/services/users.js",
+            "line": 88,
+            "description": "Each user triggers a separate DB query for profile data inside a loop",
+            "suggestion": "Use a single JOIN query or batch fetch to load all profiles"
+          }
+        ],
+        "cost": 0.015,
+        "durationMs": 4100
+      },
+      {
+        "perspective": "bugs",
+        "ok": false,
+        "findings": [],
+        "error": "sdk_not_available",
+        "cost": 0,
+        "durationMs": 0
+      }
+    ],
+    "totalCost": 0.035,
+    "totalDurationMs": 9300,
+    "model": "claude-haiku-4-5-20250929"
+  },
+  "selectedItems": ["deps", "security", "performance", "bugs"],
+  "generatedAt": "2026-03-30T00:00:00.000Z"
+}
