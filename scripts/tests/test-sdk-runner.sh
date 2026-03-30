@@ -27,6 +27,7 @@ MODULE="$PROJECT_ROOT/scripts/hooks/shared/sdk-runner.js"
 MODULE_DIR="$PROJECT_ROOT/scripts/hooks/shared"
 MOCK_NM="$MODULE_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
 CAPTURE_FILE=""
+COUNTER_FILE=""
 
 PASS=0
 FAIL=0
@@ -68,6 +69,7 @@ assert_contains() {
 # so dynamic import() resolves it during module resolution.
 setup_mock_sdk() {
   CAPTURE_FILE="$(mktemp)"
+  COUNTER_FILE="$(mktemp)"
   mkdir -p "$MOCK_NM"
 
   # package.json with exports field (required for ESM dynamic import)
@@ -79,6 +81,7 @@ MPKG
   cat > "$MOCK_NM/index.js" <<'MOCK'
 'use strict';
 const fs = require('fs');
+const path = require('path');
 
 function query(args) {
   const captureFile = process.env.SDK_CAPTURE_FILE || '';
@@ -88,10 +91,65 @@ function query(args) {
 
   const prompt = (args && args.prompt) || '';
 
+  // Rate limit call counter — track across retries within the same process
+  const counterFile = process.env.SDK_CALL_COUNTER_FILE || '';
+
+  function getCallCount() {
+    if (!counterFile) return 0;
+    try { return parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0; } catch { return 0; }
+  }
+
+  function incrementCallCount() {
+    if (!counterFile) return;
+    const count = getCallCount() + 1;
+    fs.writeFileSync(counterFile, String(count));
+  }
+
   return (async function*() {
     yield { type: 'system', subtype: 'init', session_id: 'mock-session-001' };
 
-    if (prompt.includes('__error_test__')) {
+    if (prompt.includes('__rate_limit__')) {
+      // First call: rate limit event + error_during_execution
+      // Subsequent calls: success
+      incrementCallCount();
+      const callNum = getCallCount();
+
+      if (callNum <= 1) {
+        yield { type: 'rate_limit_event', status: 'rejected', resets_at: Date.now() + 100 };
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          result: 'Rate limited',
+          errors: ['Rate limit exceeded'],
+          total_cost_usd: 0.0005,
+          num_turns: 1,
+          duration_ms: 200
+        };
+      } else {
+        yield {
+          type: 'result',
+          subtype: 'success',
+          result: 'Recovered after rate limit',
+          total_cost_usd: 0.001,
+          model: 'mock-model-v1',
+          session_id: 'mock-session-001',
+          num_turns: 3,
+          duration_ms: 1500
+        };
+      }
+    } else if (prompt.includes('__rate_limit_exhaust__')) {
+      // Always return rate limit error (for max retries exhaustion test)
+      yield { type: 'rate_limit_event', status: 'rejected' };
+      yield {
+        type: 'result',
+        subtype: 'error_during_execution',
+        result: 'Rate limited',
+        errors: ['Rate limit exceeded'],
+        total_cost_usd: 0.0005,
+        num_turns: 1,
+        duration_ms: 200
+      };
+    } else if (prompt.includes('__error_test__')) {
       yield {
         type: 'result',
         subtype: 'error_max_turns',
@@ -124,12 +182,13 @@ teardown_mock_sdk() {
   # Remove the temporary mock from sdk-runner.js's node_modules
   rm -rf "$MODULE_DIR/node_modules" 2>/dev/null || true
   rm -f "$CAPTURE_FILE" 2>/dev/null || true
+  rm -f "$COUNTER_FILE" 2>/dev/null || true
 }
 
 # Run node with cache clearing, capture file env, from project root.
 run_with_mock() {
   local js_code="$1"
-  SDK_CAPTURE_FILE="$CAPTURE_FILE" node -e "
+  SDK_CAPTURE_FILE="$CAPTURE_FILE" SDK_CALL_COUNTER_FILE="$COUNTER_FILE" node -e "
     // Clear cached modules to pick up mock on each test
     Object.keys(require.cache).forEach(k => {
       if (k.includes('sdk-runner') || k.includes('claude-agent-sdk')) delete require.cache[k];
@@ -261,6 +320,80 @@ result=$(run_with_mock "
   });
 ")
 assert_eq "error result shape" "PASS" "$result"
+
+# ── Test 9: Rate limit → auto retry → success ──
+echo ""
+echo "📋 Test 9: Rate limit → auto retry → success (cost accumulated)"
+# Reset call counter for this test
+echo "0" > "$COUNTER_FILE"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__rate_limit__', retryDelayMs: 10 }).then(r => {
+    const checks = [
+      r.ok === true,
+      r.result === 'Recovered after rate limit',
+      r.cost > 0.001,   // accumulated: 0.0005 (fail) + 0.001 (success)
+      r.retriesAttempted === 1
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  });
+")
+assert_eq "rate limit retry → success" "PASS" "$result"
+
+# ── Test 10: Rate limit exhaust → error with retriesAttempted ──
+echo ""
+echo "📋 Test 10: Rate limit max retries exhausted → error + retriesAttempted"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__rate_limit_exhaust__', maxRetries: 2, retryDelayMs: 10 }).then(r => {
+    const checks = [
+      r.ok === false,
+      r.error === 'error_during_execution',
+      r.retriesAttempted === 2,
+      r.cost > 0  // accumulated across retries
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  });
+")
+assert_eq "max retries exhausted" "PASS" "$result"
+
+# ── Test 11: Rate limit retry cost accumulation ──
+echo ""
+echo "📋 Test 11: Rate limit retry — cost accumulated correctly"
+echo "0" > "$COUNTER_FILE"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__rate_limit__', retryDelayMs: 10 }).then(r => {
+    // Cost = 0.0005 (rate-limited attempt) + 0.001 (successful attempt) = 0.0015
+    const expectedCost = 0.0015;
+    const costMatch = Math.abs(r.cost - expectedCost) < 0.0001;
+    console.log(costMatch ? 'PASS' : 'FAIL:cost=' + r.cost + ',expected=' + expectedCost);
+  });
+")
+assert_eq "cost accumulated across retries" "PASS" "$result"
+
+# ── Test 12: computeRetryDelay — backoff clamping ──
+echo ""
+echo "📋 Test 12: computeRetryDelay — exponential backoff with min/max clamping"
+result=$(node -e "
+  const { computeRetryDelay } = require('$MODULE');
+  const checks = [
+    // attempt=0, base=2000 → 2^0 * 2000 = 2000
+    computeRetryDelay(0, 2000, null) === 2000,
+    // attempt=2, base=2000 → 2^2 * 2000 = 8000
+    computeRetryDelay(2, 2000, null) === 8000,
+    // attempt=10, base=2000 → clamped to 60000
+    computeRetryDelay(10, 2000, null) === 60000,
+    // attempt=0, base=100 → clamped to 1000 (minimum)
+    computeRetryDelay(0, 100, null) === 1000,
+    // with resetsAt in the future
+    computeRetryDelay(0, 2000, Date.now() + 3000) >= 2000 && computeRetryDelay(0, 2000, Date.now() + 3000) <= 3500,
+    // with resetsAt in the past → falls back to exponential
+    computeRetryDelay(0, 2000, Date.now() - 1000) === 2000
+  ];
+  console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + checks.map((c,i) => i + ':' + c).join(','));
+" 2>/dev/null)
+assert_eq "computeRetryDelay backoff" "PASS" "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""
