@@ -48,7 +48,8 @@ const commands = {
   commit: cmdCommit,
   cancel: cmdCancel,
   history: cmdHistory,
-  review: cmdReview
+  review: cmdReview,
+  'plan-check': cmdPlanCheck
 };
 
 if (!command || !commands[command]) {
@@ -741,6 +742,37 @@ async function cmdReview() {
   output({
     ok: result.ok,
     command: 'review',
+    ...result
+  });
+}
+
+async function cmdPlanCheck() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, error: 'No active pipeline.' });
+  }
+
+  const artifactDir = state._artifactDir;
+  if (!artifactDir) {
+    return output({ ok: false, error: 'No artifact directory found for active pipeline.' });
+  }
+
+  // Check plan.md exists (entry gate equivalent)
+  const planPath = path.join(artifactDir, 'plan.md');
+  if (!fs.existsSync(planPath)) {
+    return output({
+      ok: false,
+      error: 'plan.md not found in artifact directory.',
+      artifactDir
+    });
+  }
+
+  const { sdkPlanCheck } = require('../hooks/shared/sdk-plan-checker.js');
+  const result = await sdkPlanCheck({ artifactDir, cwd: CWD });
+
+  output({
+    ok: result.ok,
+    command: 'plan-check',
     ...result
   });
 }
