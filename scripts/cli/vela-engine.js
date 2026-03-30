@@ -49,7 +49,8 @@ const commands = {
   cancel: cmdCancel,
   history: cmdHistory,
   review: cmdReview,
-  'plan-check': cmdPlanCheck
+  'plan-check': cmdPlanCheck,
+  research: cmdResearch
 };
 
 if (!command || !commands[command]) {
@@ -773,6 +774,29 @@ async function cmdPlanCheck() {
   output({
     ok: result.ok,
     command: 'plan-check',
+    ...result
+  });
+}
+
+async function cmdResearch() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, error: 'No active pipeline.' });
+  }
+
+  const artifactDir = state._artifactDir;
+  if (!artifactDir) {
+    return output({ ok: false, error: 'No artifact directory found for active pipeline.' });
+  }
+
+  const step = state.current_step || 'unknown';
+
+  const { sdkResearch } = require('../hooks/shared/sdk-researcher.js');
+  const result = await sdkResearch({ step, artifactDir, cwd: CWD });
+
+  output({
+    ok: result.ok,
+    command: 'research',
     ...result
   });
 }
