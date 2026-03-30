@@ -122,7 +122,8 @@ async function main() {
       output.push(`│`);
       output.push(`│ 🌟 Team Step ────────────────────`);
       output.push(`│ │ Worker: ${stepDef.team.worker_role}`);
-      output.push(`│ │ Reviewer: subagent (Sonnet)`);
+      output.push(`│ │ Reviewer: SDK (Haiku→Sonnet)`);
+      output.push(`│ │   → node .vela/cli/vela-engine.js review`);
       // Check for approval file (PM writes directly)
       if (state._artifactDir) {
         const approvalFile = `approval-${state.current_step}.json`;

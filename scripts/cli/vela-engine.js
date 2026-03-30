@@ -15,6 +15,7 @@
  *   branch [--mode auto|prompt|none]               — Create feature branch
  *   commit [--message TEXT]                        — Commit changes
  *   cancel                                         — Cancel active pipeline
+ *   review                                         — Run SDK 2-stage code review
  *
  * Team coordination uses Claude Code Agent Teams (SendMessage).
  * Approval tracked via file artifacts (approval-{step}.json).
@@ -46,7 +47,8 @@ const commands = {
   branch: cmdBranch,
   commit: cmdCommit,
   cancel: cmdCancel,
-  history: cmdHistory
+  history: cmdHistory,
+  review: cmdReview
 };
 
 if (!command || !commands[command]) {
@@ -58,7 +60,13 @@ if (!command || !commands[command]) {
   process.exit(1);
 }
 
-commands[command]();
+const result = commands[command]();
+if (result && typeof result.then === 'function') {
+  result.catch(err => {
+    output({ ok: false, error: err.message });
+    process.exit(1);
+  });
+}
 
 // ─── Commands ───
 
@@ -696,6 +704,44 @@ function cmdHistory() {
     command: 'history',
     count: pipelines.length,
     pipelines: pipelines
+  });
+}
+
+async function cmdReview() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, error: 'No active pipeline.' });
+  }
+
+  // Validate current step has a reviewer_role
+  const pipelineDef = loadPipelineDefinition();
+  const steps = resolveSteps(pipelineDef, state.pipeline_type);
+  const currentStepDef = steps.find(s => s.id === state.current_step);
+
+  if (!currentStepDef || !currentStepDef.team || !currentStepDef.team.reviewer_role) {
+    return output({
+      ok: false,
+      error: 'Current step does not have a reviewer role.',
+      current_step: state.current_step
+    });
+  }
+
+  const artifactDir = state._artifactDir;
+  if (!artifactDir) {
+    return output({ ok: false, error: 'No artifact directory found for active pipeline.' });
+  }
+
+  const { sdkReview } = require('../hooks/shared/sdk-reviewer.js');
+  const result = await sdkReview({
+    step: state.current_step,
+    artifactDir,
+    cwd: CWD
+  });
+
+  output({
+    ok: result.ok,
+    command: 'review',
+    ...result
   });
 }
 

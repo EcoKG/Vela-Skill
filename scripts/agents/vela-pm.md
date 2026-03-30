@@ -48,7 +48,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 - **Plan**: Planner subagent (model: "sonnet") — 독립 설계
 - **Execute 단일**: Executor subagent (model: "sonnet") — 독립 구현
 - **Execute CrossLayer**: Teammate 3~5명 (model: "sonnet", team_name + worktree) — 소통 필요
-- **모든 단계**: Reviewer subagent (model: "sonnet") → PM이 review 읽고 approve/reject 판단
+- **모든 단계**: `node .vela/cli/vela-engine.js review` 실행 → SDK Reviewer가 2-stage (Haiku→Sonnet) 리뷰 수행 → PM이 결과 확인하고 approve/reject 판단
 
 approval-{step}.json에 `approve` 작성해야만 transition 가능.
 reject 시 Worker 재소환하여 피드백 반영 후 재작업.

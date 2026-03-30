@@ -10,30 +10,30 @@
    - 프로젝트 분석 수행
    - 요구사항 파악 → 코드베이스 탐색 → 의존성/제약 분석 → 결론
 3. PM이 리포트를 검토하여 research.md 작성
-4. Reviewer subagent (model: "sonnet") → review-research.md
+4. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-research.md 생성
 5. PM이 review 읽고 approve/reject 판단
 
 [Plan] — Subagent (Sonnet)
 6. Planner subagent (model: "sonnet") → plan.md
-7. Reviewer subagent (model: "sonnet") → review-plan.md
+7. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-plan.md 생성
 8. PM approve/reject
 
 [Execute — 단일 모듈] — Subagent (Sonnet)
 9. Executor subagent (model: "sonnet") → 코드 구현
-10. Reviewer subagent → review-execute.md
+10. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-execute.md 생성
 11. PM approve/reject
 
 [Execute — CrossLayer/다중 모듈] — Teammate (Sonnet)
 9. Teammate 3~5명 (model: "sonnet", team_name, isolation: "worktree")
-10. Reviewer subagent → review-execute.md
+10. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-execute.md 생성
 11. PM approve/reject
 
 12. TeamDelete
 ```
 
 ## Quick Pipeline (medium)
-Plan: Planner subagent (Sonnet) + Reviewer subagent (Sonnet)
-Execute: Executor subagent (Sonnet) + Reviewer subagent (Sonnet)
+Plan: Planner subagent (Sonnet) + SDK Reviewer (`vela-engine.js review`)
+Execute: Executor subagent (Sonnet) + SDK Reviewer (`vela-engine.js review`)
 팀 소환 없음.
 
 ## Trivial Pipeline (small)
