@@ -95,6 +95,16 @@ if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
   }
 fi
 
+# ─── Optional: Install Claude Agent SDK (enables SDK mode) ───
+if command -v npm &>/dev/null; then
+  echo "  🔌 Installing Claude Agent SDK (optional)..."
+  if (cd "$SKILL_DIR" && npm install @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null); then
+    echo "  ✅ Claude Agent SDK installed — SDK mode available"
+  else
+    echo "  ⚠ Claude Agent SDK not installed — non-SDK mode will be used (fully functional)"
+  fi
+fi
+
 # ─── Cleanup ───
 rm -rf "$TMP" 2>/dev/null
 

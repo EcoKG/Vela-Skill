@@ -703,6 +703,12 @@ function upgrade() {
     { src: 'scripts/guidelines/coding-standards.md', dst: 'guidelines/coding-standards.md' },
     { src: 'scripts/guidelines/error-handling.md', dst: 'guidelines/error-handling.md' },
     { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' },
+    // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
+    { src: 'scripts/hooks/shared/sdk-runner.js', dst: 'hooks/shared/sdk-runner.js' },
+    { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
+    { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
+    { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
+    { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
   ];
 
   // Do NOT overwrite config.json (user may have customized it)
@@ -845,7 +851,13 @@ function validate() {
     { src: 'scripts/guidelines/index.md', dst: 'guidelines/index.md' },
     { src: 'scripts/guidelines/coding-standards.md', dst: 'guidelines/coding-standards.md' },
     { src: 'scripts/guidelines/error-handling.md', dst: 'guidelines/error-handling.md' },
-    { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' }
+    { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' },
+    // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
+    { src: 'scripts/hooks/shared/sdk-runner.js', dst: 'hooks/shared/sdk-runner.js' },
+    { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
+    { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
+    { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
+    { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' }
   ];
 
   for (const f of requiredFiles) {
