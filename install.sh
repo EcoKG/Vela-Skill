@@ -28,9 +28,10 @@ git clone --depth 1 -b main "$REPO" "$TMP" 2>/dev/null || {
 mkdir -p "$SKILL_DIR"
 
 # ─── Copy skill structure ───
-# Core skill file
+# Core files
 cp "$TMP/SKILL.md" "$SKILL_DIR/"
 cp "$TMP/README.md" "$SKILL_DIR/" 2>/dev/null
+cp "$TMP/package.json" "$SKILL_DIR/" 2>/dev/null
 
 # Scripts (hooks, cli, agents, cache, guidelines, tests, shared, install)
 if [ -d "$TMP/scripts" ]; then
@@ -77,6 +78,23 @@ if command -v node &>/dev/null; then
   " 2>/dev/null || echo "  ⚠ Agent Teams: add CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 manually"
 fi
 
+# ─── Install npm dependencies (SQLite backends for TreeNode cache) ───
+if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
+  echo "  📦 Installing SQLite backends..."
+  (cd "$SKILL_DIR" && npm install --no-audit --no-fund 2>/dev/null) && {
+    SQLITE_BACKEND="better-sqlite3"
+  } || {
+    # better-sqlite3 needs native compilation — try sql.js (pure WASM) as fallback
+    echo "  ⚠ Native build failed — installing sql.js (WASM fallback)..."
+    (cd "$SKILL_DIR" && npm install sql.js --no-audit --no-fund 2>/dev/null) && {
+      SQLITE_BACKEND="sql.js"
+    } || {
+      SQLITE_BACKEND="json-fallback"
+      echo "  ⚠ npm install failed — TreeNode cache will use JSON fallback"
+    }
+  }
+fi
+
 # ─── Cleanup ───
 rm -rf "$TMP" 2>/dev/null
 
@@ -93,6 +111,7 @@ echo "✦───────────────────────�
 echo ""
 echo "  📂 Location: $SKILL_DIR"
 echo "  🔧 Hooks: ${HOOK_COUNT} scripts"
+echo "  💾 SQLite: ${SQLITE_BACKEND:-not checked}"
 echo "  🌟 Agent Teams: enabled"
 echo ""
 echo "  🧭 Quick Start:"

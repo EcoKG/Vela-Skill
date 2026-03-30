@@ -979,12 +979,20 @@ function validate() {
     }
   }
 
-  // sqlite3 (optional, for TreeNode cache)
-  try {
-    execSync('which sqlite3', { stdio: 'pipe' });
-    results.ok.push('sqlite3');
-  } catch (e) {
-    results.warnings.push('sqlite3 not found (optional, for TreeNode cache)');
+  // SQLite backend for TreeNode cache (optional — multiple fallbacks available)
+  let sqliteBackend = 'none';
+  try { require('better-sqlite3'); sqliteBackend = 'better-sqlite3'; }
+  catch (e) {
+    try { require('sql.js'); sqliteBackend = 'sql.js'; }
+    catch (e2) {
+      try { execSync('which sqlite3', { stdio: 'pipe' }); sqliteBackend = 'sqlite3-cli'; }
+      catch (e3) { /* will use JSON fallback */ }
+    }
+  }
+  if (sqliteBackend !== 'none') {
+    results.ok.push(`TreeNode cache: ${sqliteBackend}`);
+  } else {
+    results.warnings.push('No SQLite backend found — TreeNode cache will use JSON fallback. Run: npm install better-sqlite3 (or sql.js for WSL1/proxy)');
   }
 
   return results;

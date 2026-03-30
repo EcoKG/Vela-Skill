@@ -29,6 +29,7 @@ mkdir -p "$SKILL_DIR"
 # Core files
 cp "$TMP/SKILL.md" "$SKILL_DIR/"
 cp "$TMP/README.md" "$SKILL_DIR/" 2>/dev/null
+cp "$TMP/package.json" "$SKILL_DIR/" 2>/dev/null
 
 # Scripts (full replace to catch new hooks/files)
 if [ -d "$TMP/scripts" ]; then
@@ -61,6 +62,14 @@ if [ -d "$TMP/.claude-plugin" ]; then
 fi
 
 HOOK_COUNT=$(ls "$SKILL_DIR/scripts/hooks/"*.js 2>/dev/null | wc -l | tr -d ' ')
+
+# Update npm dependencies
+if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
+  (cd "$SKILL_DIR" && npm install --no-audit --no-fund 2>/dev/null) || {
+    (cd "$SKILL_DIR" && npm install sql.js --no-audit --no-fund 2>/dev/null) || true
+  }
+fi
+
 echo "  ✦ Global skill updated: $SKILL_DIR ($HOOK_COUNT hooks)"
 
 # ─── Local project update (--local) ───
