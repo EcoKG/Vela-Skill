@@ -14,7 +14,7 @@
     },
     "bugfix": {
       "description": "버그 수정 (테스트 통과까지 반복)",
-      "scale": "ralph",
+      "scale": "small",
       "type": "code-bug",
       "request_template": "{description} 버그 수정"
     },

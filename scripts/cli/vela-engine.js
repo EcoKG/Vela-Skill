@@ -6,7 +6,7 @@
  * All state transitions happen through this CLI, never by direct file edits.
  *
  * Commands:
- *   init <request> [--type TYPE] [--scale SCALE]  — Start a new pipeline
+ *   init <request> [--type TYPE] [--scale SIZE]  — Start a new pipeline
  *   state                                          — Show current pipeline state
  *   transition                                     — Advance to the next step
  *   dispatch [--role ROLE]                         — Get agent specification
@@ -106,18 +106,24 @@ function cmdInit() {
       ok: false,
       error: 'Pipeline scale selection required. Ask the user to choose.',
       options: {
-        small: 'trivial pipeline (init → execute → commit → finalize) — 단일 파일, 10줄 이하',
-        medium: 'quick pipeline (init → plan → execute → verify → commit → finalize) — 3파일 이하, 100줄 이하',
-        large: 'standard pipeline (full 10-step with research, plan, team review) — 대규모 작업',
-        ralph: 'ralph pipeline (테스트 통과까지 자동 반복) — 버그 수정, TDD',
-        hotfix: 'hotfix pipeline (init → execute → commit) — 문서, 설정 등 비-소스 수정'
+        small: '간단한 작업 — 단일 파일, 설정 변경, 소소한 수정',
+        medium: '보통 작업 — 여러 파일, 계획 후 구현',
+        large: '대규모 작업 — 리서치, 설계, 팀 리뷰 포함'
       },
-      usage: 'vela-engine init "task" --scale small|medium|large|ralph|hotfix',
-      message: 'User must select pipeline scale. Present the options and let them choose.'
+      types: {
+        code: '기능 추가/구현 (기본값)',
+        'code-bug': '버그 수정 (테스트 통과까지 자동 반복)',
+        'code-refactor': '리팩토링',
+        docs: '문서/설정/비-소스 수정'
+      },
+      usage: 'vela-engine init "task" --scale small|medium|large [--type code|code-bug|code-refactor|docs]',
+      message: 'User must select scale (size of work). Type is optional — defaults to code.'
     });
   }
 
-  const pipelineType = scaleToPipeline(scale);
+  // Support legacy scale values (ralph, hotfix, trivial, quick, standard)
+  const normalizedScale = normalizeLegacyScale(scale);
+  const pipelineType = resolvePipeline(normalizedScale, type);
 
   // Load pipeline definition (before creating any directories)
   const pipelineDef = loadPipelineDefinition();
@@ -163,7 +169,7 @@ function cmdInit() {
     pipeline_type: pipelineType,
     request: request,
     type: type,
-    scale: scale,
+    scale: normalizedScale,
     current_step: firstStep.id,
     current_step_index: 0,
     steps: steps.map(s => s.id),
@@ -200,7 +206,7 @@ function cmdInit() {
     ok: true,
     command: 'init',
     pipeline_type: pipelineType,
-    scale: scale,
+    scale: normalizedScale,
     current_step: firstStep.id,
     current_mode: firstStep.mode,
     artifact_dir: artifactDir,
@@ -1312,13 +1318,50 @@ function autoDetectScale(request) {
   return 'large';
 }
 
-function scaleToPipeline(scale) {
+/**
+ * Normalize legacy scale values to small/medium/large.
+ * Keeps backward compatibility with ralph, hotfix, trivial, quick, standard.
+ */
+function normalizeLegacyScale(scale) {
+  switch (scale) {
+    case 'trivial': return 'small';
+    case 'quick': return 'medium';
+    case 'standard': return 'large';
+    // ralph and hotfix pass through — handled by resolvePipeline
+    case 'small': case 'medium': case 'large':
+    case 'ralph': case 'hotfix':
+      return scale;
+    default: return 'medium';
+  }
+}
+
+/**
+ * Resolve pipeline type from scale + type combination.
+ * 
+ * Matrix:
+ *   size\type    code/refactor    code-bug     docs
+ *   small        trivial          ralph        hotfix
+ *   medium       quick            ralph        quick
+ *   large        standard         standard     quick
+ *   ralph        ralph            ralph        ralph
+ *   hotfix       hotfix           hotfix       hotfix
+ */
+function resolvePipeline(scale, type) {
+  // Direct pipeline names (legacy/explicit)
+  if (scale === 'ralph') return 'ralph';
+  if (scale === 'hotfix') return 'hotfix';
+
+  if (type === 'code-bug') {
+    return scale === 'large' ? 'standard' : 'ralph';
+  }
+  if (type === 'docs') {
+    return scale === 'small' ? 'hotfix' : 'quick';
+  }
+  // code, code-refactor
   switch (scale) {
     case 'small': return 'trivial';
     case 'medium': return 'quick';
     case 'large': return 'standard';
-    case 'ralph': return 'ralph';
-    case 'hotfix': return 'hotfix';
     default: return 'standard';
   }
 }

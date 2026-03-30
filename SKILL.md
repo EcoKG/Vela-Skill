@@ -84,15 +84,26 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
 3. **파이프라인 규모 선택**
    사용자에게 선택지를 제시한다:
-   - ⛵ **small**: trivial (init → execute → commit → finalize) — 단일 파일, 10줄 이하
-   - 🧭 **medium**: quick (init → plan → execute → verify → commit → finalize) — 3파일 이하
-   - ✦ **large**: standard (full 10-step with research, plan, team review) — 대규모 작업
-   - 🔄 **ralph**: ralph (테스트 통과까지 자동 반복) — 버그 수정, TDD
-   - 🔧 **hotfix**: hotfix (init → execute → commit) — 문서, 설정 등 비-소스 수정
+   - ⛵ **small**: 간단한 작업 — 단일 파일, 설정 변경, 소소한 수정
+   - 🧭 **medium**: 보통 작업 — 여러 파일, 계획 후 구현
+   - ✦ **large**: 대규모 작업 — 리서치, 설계, 팀 리뷰 포함
+
+   type은 선택 사항 (기본값: code):
+   - `code`: 기능 추가/구현
+   - `code-bug`: 버그 수정 (테스트 통과까지 자동 반복)
+   - `code-refactor`: 리팩토링
+   - `docs`: 문서/설정/비-소스 수정
+
+   scale + type 조합으로 파이프라인이 자동 결정된다:
+   - small + code → trivial (init → execute → commit → finalize)
+   - small + code-bug → ralph (자동 반복)
+   - small + docs → hotfix (init → execute → commit)
+   - medium + code → quick (init → plan → execute → verify → commit → finalize)
+   - large + code → standard (full 10-step)
 
 4. **파이프라인 시작**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large|ralph|hotfix> --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
    ```
 
 5. **파이프라인 진행**
@@ -124,7 +135,7 @@ node .vela/cli/vela-engine.js auto
 
 4. **파이프라인 시작 (auto 플래그 추가)**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large|ralph|hotfix> --type <code|code-bug|code-refactor|docs> --auto
+   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs> --auto
    ```
 
 5. **자동 진행**
@@ -260,7 +271,7 @@ node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
 **옵션:**
 | 옵션 | 설명 |
 |------|------|
-| `--scale <size>` | 파이프라인 규모 (small/medium/large/ralph/hotfix) |
+| `--scale <size>` | 파이프라인 규모 (small/medium/large) |
 | `--type <type>` | 작업 유형 (code/code-bug/code-refactor/docs) |
 | `--auto` | auto 모드 — 각 단계 완료 후 자동 transition. reject 2회 연속 시 중단. |
 | `--force` | dirty tree 체크 스킵 |
