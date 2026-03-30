@@ -936,17 +936,20 @@ function validate() {
     }
   }
 
-  // 7. .gitignore — ensure Vela entries
+  // 7. .gitignore — ensure all Vela files are hidden from git
   const gitignorePath = path.join(PROJECT_ROOT, '.gitignore');
+  const velaGitEntries = ['.vela/', '.claude/', 'CLAUDE.md'];
+  let gitignoreContent = '';
   if (fs.existsSync(gitignorePath)) {
-    const content = fs.readFileSync(gitignorePath, 'utf-8');
-    const velaEntries = ['.vela/cache/', '.vela/state/', '.vela/artifacts/',
-      '.vela/tracker-signals.json', '.vela/write-log.jsonl', '*.vela-tmp'];
-    const missing = velaEntries.filter(e => !content.includes(e));
-    if (missing.length > 0 && !content.includes('# Vela Engine')) {
-      fs.appendFileSync(gitignorePath, '\n# Vela Engine (auto-managed)\n' + missing.join('\n') + '\n');
-      results.fixed.push(`Added ${missing.length} entries to .gitignore`);
-    }
+    gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
+  }
+  const missingGit = velaGitEntries.filter(e => !gitignoreContent.includes(e));
+  if (missingGit.length > 0) {
+    const block = gitignoreContent.includes('# Vela Engine')
+      ? missingGit.join('\n') + '\n'
+      : '\n# Vela Engine (auto-managed)\n' + velaGitEntries.join('\n') + '\n';
+    fs.appendFileSync(gitignorePath, block);
+    results.fixed.push(`Added ${missingGit.length} entries to .gitignore: ${missingGit.join(', ')}`);
   }
 
   // 8. System dependencies — install if missing

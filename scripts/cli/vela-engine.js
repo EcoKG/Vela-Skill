@@ -136,10 +136,8 @@ function cmdInit() {
     });
   }
 
-  // Ensure .vela/ entries in .gitignore
-  if (gitState.is_repo) {
-    ensureGitignore();
-  }
+  // Ensure Vela files are hidden from git
+  ensureGitignore();
 
   // Auto mode flag
   const autoMode = hasFlag('--auto');
@@ -1081,12 +1079,9 @@ function ensureGitignore() {
   const gitignorePath = path.join(CWD, '.gitignore');
   const velaEntries = [
     '# Vela Engine (auto-managed)',
-    '.vela/cache/',
-    '.vela/state/',
-    '.vela/artifacts/',
-    '.vela/tracker-signals.json',
-    '.vela/write-log.jsonl',
-    '*.vela-tmp'
+    '.vela/',
+    '.claude/',
+    'CLAUDE.md'
   ];
 
   let content = '';
@@ -1102,6 +1097,9 @@ function ensureGitignore() {
     const block = '\n' + velaEntries.join('\n') + '\n';
     if (!content.includes('# Vela Engine')) {
       fs.appendFileSync(gitignorePath, block);
+    } else {
+      // Header exists but entries missing — append only missing
+      fs.appendFileSync(gitignorePath, missingEntries.join('\n') + '\n');
     }
   }
 }
