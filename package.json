@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "better-sqlite3": "^12.8.0",
+    "pdfkit": "^0.18.0",
     "sql.js": "^1.14.1"
   },
   "optionalDependencies": {

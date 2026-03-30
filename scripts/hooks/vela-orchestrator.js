@@ -117,6 +117,16 @@ async function main() {
       output.push(`│ Task: ${state.request.substring(0, 80)}`);
     }
 
+    // Show expected artifacts for current step (prevents agents from guessing filenames)
+    if (stepDef && stepDef.artifacts && stepDef.artifacts.length > 0) {
+      const displayArtifacts = stepDef.artifacts
+        .filter(a => !a.includes('{'))  // Skip template patterns like {date}_{id}
+        .join(', ');
+      if (displayArtifacts) {
+        output.push(`│ Artifacts: ${displayArtifacts}`);
+      }
+    }
+
     // Show team step info (Agent Teams)
     if (stepDef && stepDef.team) {
       output.push(`│`);

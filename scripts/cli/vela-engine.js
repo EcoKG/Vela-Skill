@@ -1297,7 +1297,10 @@ function checkExitGate(stepDef, state) {
         }
         break;
       case 'verification_md_exists':
-        if (!artifactDir || !fs.existsSync(path.join(artifactDir, 'verification.md'))) missing.push(gate);
+        if (!artifactDir || (
+          !fs.existsSync(path.join(artifactDir, 'verification.md')) &&
+          !fs.existsSync(path.join(artifactDir, 'verify.md'))
+        )) missing.push(gate);
         break;
       case 'report_md_exists':
         // Finalize gate - report is the output of this step
