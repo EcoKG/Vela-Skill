@@ -234,6 +234,10 @@ node .vela/cli/vela-engine.js branch                # 브랜치 생성 (branch �
 node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commit 단계)
 node .vela/cli/vela-engine.js sub-transition         # execute sub-phase 전진
 node .vela/cli/vela-engine.js cancel                # 파이프라인 취소 (복구 안내 포함)
+node .vela/cli/vela-engine.js review                # SDK 3단계 코드 리뷰 (Haiku→Sonnet→Opus)
+node .vela/cli/vela-engine.js plan-check            # SDK plan.md 구조 검증 (Haiku)
+node .vela/cli/vela-engine.js research              # SDK 3-관점 병렬 리서치 (Haiku)
+node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
 ```
 
 **옵션:**
@@ -298,38 +302,52 @@ node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js sub-transition
 ```
 
-### 3단계 검증 — Subagent/Teammate 기반
+### 3단계 검증 — SDK 기반
 
-Vela는 Claude Code의 **Agent/Subagent/Teams**를 작업 유형에 따라 구분하여 소환한다.
+Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계획 검증, 실행을 엔진 CLI에서 직접 수행한다.
 
-#### 검증 흐름
+#### SDK 모드 검증 흐름
 
 ```
-PM이 Worker 소환 (Teammate 또는 Subagent, 모델은 작업별 선택)
-  → Worker: 작업 수행 → 산출물 작성 → PM에게 완료 보고
-  → PM이 Reviewer subagent 소환 (Sonnet)
-  → Reviewer: 산출물만 읽고 review-{step}.md 작성 → 결과 반환 (Subagent)
-  → PM이 review 기반으로 approve/reject 판단 → approval-{step}.json 작성
+엔진이 SDK Review 직접 실행 (review 커맨드)
+  → Stage 1 (Haiku): 빠른 초기 리뷰, 점수 ≥ 20 → pass
+  → Stage 2 (Sonnet): 심층 리뷰 (점수 15-19일 때 에스컬레이션)
+  → Stage 3 (Opus): 최종 에스컬레이션 (점수 < 15)
+  → review-{step}.md 작성 → approval-{step}.json 자동 생성
      ├─ approve → transition 호출
      └─ reject → Worker에게 피드백 전달 → 재작업
 ```
 
-#### 에이전트 소환 — 목차 기반 로딩
+#### SDK 커맨드
 
-에이전트 MD 파일은 TOC 기반 구조. 전체를 읽지 않고 필요한 섹션만 읽는다.
+| 커맨드 | 모델 | 설명 |
+|--------|------|------|
+| `review` | Haiku→Sonnet→Opus (3단계) | 코드/산출물 리뷰, 점수 기반 에스컬레이션 |
+| `plan-check` | Haiku | plan.md 구조 검증 (필수 섹션 + 200byte 최소 분량) |
+| `research` | Haiku × 3 (병렬) | 아키텍처/보안/품질 3-관점 병렬 분석 |
+| `execute` | Sonnet | TDD 기반 코드 구현 (readwrite 권한) |
+
+각 커맨드는 `runSdkAgent()`를 통해 SDK를 호출한다:
+- `settingSources: []` — SDK 에이전트에 Vela 훅이 로드되지 않음 (훅 격리)
+- `permissionMode: 'bypassPermissions'` — 엔진 제어 하에 자동 실행
+- 인증은 `process.env.ANTHROPIC_API_KEY` 상속
+
+#### 비-SDK 폴백 모드
+
+SDK가 설치되지 않은 환경(`@anthropic-ai/claude-agent-sdk` 미설치)에서는 기존 Subagent/Teammate 방식으로 자동 폴백한다:
 
 ```
-Agent 도구:
-  name: "executor"
-  model: "sonnet"
-  prompt: ".vela/agents/executor.md의 목차(첫 15줄)를 읽고,
-           필요한 섹션만 선택적으로 읽으세요.
-           담당 파일: {files}
-           태스크: {task_list}
-           아티팩트 경로: {artifact_dir}"
+PM이 Worker 소환 (Teammate 또는 Subagent)
+  → Worker: 작업 수행 → 산출물 작성
+  → PM이 Reviewer 소환 (Sonnet)
+  → Reviewer: review-{step}.md 작성
+  → PM이 approve/reject 판단
 ```
 
-에이전트 지시사항 (`.vela/agents/`):
+SDK 설치 여부는 `install.sh` 실행 시 자동 감지되며, 실패 시 경고만 출력하고 설치를 중단하지 않는다.
+
+#### 에이전트 지시사항 (`.vela/agents/`)
+
 - `researcher.md` (Sonnet, Subagent) — 프로젝트 분석, research.md 작성
 - `planner.md` (Sonnet, Subagent) — 아키텍처 설계, plan.md 작성
 - `executor.md` (Sonnet, Subagent/Teammate) — TDD 기반 코드 구현
@@ -357,7 +375,7 @@ PM이 Reviewer 리포트를 읽고 `approval-{step}.json`을 작성한다:
 PM이 reject하면:
 1. `approval-{step}.json`에 `decision: "reject"`, `feedback: "..."` 작성
 2. Worker에게 피드백과 함께 재작업 요청
-3. Worker가 산출물 수정 → Reviewer 재소환 → PM 재판단
+3. Worker가 산출물 수정 → 리뷰 재실행 → PM 재판단
 4. approve될 때까지 반복
 
 ---
