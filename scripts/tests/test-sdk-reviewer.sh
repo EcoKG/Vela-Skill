@@ -17,9 +17,13 @@
 # Test 5:  Clear pass details → score 25, stage haiku
 # Test 6:  Borderline (score 17) → triggers Sonnet second pass
 # Test 7:  Borderline details → Sonnet score 22, stage sonnet, approve
-# Test 8:  Clear fail (score 10) → reject + escalation.json written
-# Test 9:  Escalation details → score 10, threshold 15
+# Test 8:  Clear fail (score 10) → Opus escalation → approve + escalated:true
+# Test 9:  Opus escalation approval artifact → escalation_model: opus
 # Test 10: settingSources isolation — captured SDK options include settingSources: []
+# Test 11: __opus_pass__ → Haiku fail (10) → Opus pass (22) → approve + escalated:true
+# Test 12: __opus_also_fail__ → Haiku fail (10) → Opus fail (8) → reject + escalated:true + escalation.json
+# Test 13: __borderline_opus__ → Haiku borderline (17) → Sonnet fail (14) → Opus pass (21) → approve + escalated:true
+# Test 14: Escalation.json has auto_escalated:true when Opus fails
 # K001:    settingSources present in sdk-reviewer.js source
 # Broad:   No stale Reviewer subagent references in updated files
 # ──────────────────────────────────────────────────────────────
@@ -86,8 +90,13 @@ teardown_temp_dirs() {
 # Mock returns configurable scores based on prompt content:
 #   __score_25__ → 25/25 (clear pass)
 #   __score_17__ → 17/25 (borderline); Stage 2 → 22/25
-#   __score_10__ → 10/25 (clear fail)
-# Differentiates Stage 1 vs Stage 2 by checking for "이전 Haiku 리뷰" in prompt.
+#   __score_10__ → 10/25 (clear fail); Stage 3 Opus → determined by marker variant
+#   __opus_pass__  → Haiku 10 (fail) → Opus 22 (pass)
+#   __opus_also_fail__ → Haiku 10 (fail) → Opus 8 (fail)
+#   __borderline_opus__ → Haiku 17 (borderline) → Sonnet 14 (fail) → Opus 21 (pass)
+# Differentiates stages by:
+#   - Stage 2 Sonnet: prompt contains "이전 Haiku 리뷰"
+#   - Stage 3 Opus: options.model contains "opus"
 setup_mock_sdk() {
   CAPTURE_FILE="$(mktemp)"
   mkdir -p "$MOCK_NM"
@@ -107,14 +116,36 @@ function query(args) {
   }
 
   const prompt = (args && args.prompt) || '';
+  const model = (args && args.options && args.options.model) || '';
+  const isOpus = model.includes('opus');
+  const isStage2 = prompt.includes('\uC774\uC804 Haiku \uB9AC\uBDF0');
 
   return (async function*() {
     yield { type: 'system', subtype: 'init', session_id: 'mock-reviewer-session' };
 
     let scoreText = '';
-    const isStage2 = prompt.includes('\uC774\uC804 Haiku \uB9AC\uBDF0');
 
-    if (prompt.includes('__score_25__')) {
+    if (prompt.includes('__opus_pass__')) {
+      if (isOpus) {
+        scoreText = 'Opus escalation review \u2014 rescued.\n\n## Total: 22/25';
+      } else {
+        scoreText = 'Haiku fail review.\n\n## Total: 10/25';
+      }
+    } else if (prompt.includes('__opus_also_fail__')) {
+      if (isOpus) {
+        scoreText = 'Opus escalation review \u2014 still bad.\n\n## Total: 8/25';
+      } else {
+        scoreText = 'Haiku severe fail.\n\n## Total: 10/25';
+      }
+    } else if (prompt.includes('__borderline_opus__')) {
+      if (isOpus) {
+        scoreText = 'Opus escalation review \u2014 borderline rescued.\n\n## Total: 21/25';
+      } else if (isStage2) {
+        scoreText = 'Sonnet deep review \u2014 still below threshold.\n\n## Total: 14/25';
+      } else {
+        scoreText = 'Haiku borderline review.\n\n## Total: 17/25';
+      }
+    } else if (prompt.includes('__score_25__')) {
       scoreText = 'Mock review \u2014 all dimensions excellent.\n\n## Total: 25/25';
     } else if (prompt.includes('__score_17__')) {
       if (isStage2) {
@@ -123,7 +154,11 @@ function query(args) {
         scoreText = 'Haiku initial review \u2014 borderline quality.\n\n## Total: 17/25';
       }
     } else if (prompt.includes('__score_10__')) {
-      scoreText = 'Severe design issues found.\n\n## Total: 10/25';
+      if (isOpus) {
+        scoreText = 'Opus escalation \u2014 default pass.\n\n## Total: 22/25';
+      } else {
+        scoreText = 'Severe design issues found.\n\n## Total: 10/25';
+      }
     } else {
       scoreText = 'Default review.\n\n## Total: 20/25';
     }
@@ -133,7 +168,7 @@ function query(args) {
       subtype: 'success',
       result: scoreText,
       total_cost_usd: 0.001,
-      model: 'mock-model',
+      model: isOpus ? 'mock-opus-model' : 'mock-model',
       session_id: 'mock-reviewer-session',
       num_turns: 3,
       duration_ms: 500
@@ -276,31 +311,29 @@ assert_eq "Sonnet score 22, stage sonnet, approve" "PASS" "$result"
 rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
 rm -f "$CWD_DIR/.vela/state/escalation.json" 2>/dev/null || true
 
-# ── Test 8: Clear fail (score 10) → reject + escalation ──
+# ── Test 8: Clear fail (score 10) → Opus escalation → approve + escalated ──
 echo ""
-echo "📋 Test 8: Clear fail (score 10) → reject + escalation.json"
+echo "📋 Test 8: Clear fail (score 10) → Opus escalation → approve + escalated:true"
 result=$(run_reviewer_test "
   const { sdkReview } = require('$MODULE');
   const fs = require('fs');
   sdkReview({ step: '__score_10__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
     const approvalPath = '$ARTIFACT_DIR/approval-__score_10__.json';
-    const escalationPath = '$CWD_DIR/.vela/state/escalation.json';
     const ap = JSON.parse(fs.readFileSync(approvalPath, 'utf8'));
-    const escExists = fs.existsSync(escalationPath);
-    const checks = [r.ok === true, r.decision === 'reject', ap.decision === 'reject', escExists];
-    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify({ r: r, ap: ap, escExists: escExists }));
+    const checks = [r.ok === true, r.decision === 'approve', r.stage === 'opus', r.escalated === true, ap.escalated === true];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify({ r: r, ap: ap }));
   }).catch(e => console.log('ERROR:' + e.message));
 ")
-assert_eq "clear fail: reject + escalation" "PASS" "$result"
+assert_eq "clear fail: Opus escalation → approve + escalated" "PASS" "$result"
 
-# ── Test 9: Escalation details — score 10, threshold 15 ──
+# ── Test 9: Opus escalation approval artifact has escalation_model ──
 echo ""
-echo "📋 Test 9: Escalation → score 10, threshold 15"
+echo "📋 Test 9: Opus escalation approval artifact → escalation_model: opus"
 result=$(node -e "
-  const esc = JSON.parse(require('fs').readFileSync('$CWD_DIR/.vela/state/escalation.json', 'utf8'));
-  console.log(esc.score === 10 && esc.threshold === 15 ? 'PASS' : 'FAIL:score=' + esc.score + ',threshold=' + esc.threshold);
+  const ap = JSON.parse(require('fs').readFileSync('$ARTIFACT_DIR/approval-__score_10__.json', 'utf8'));
+  console.log(ap.escalation_model === 'opus' && ap.stage === 'opus' ? 'PASS' : 'FAIL:' + JSON.stringify(ap));
 " 2>/dev/null)
-assert_eq "escalation score 10, threshold 15" "PASS" "$result"
+assert_eq "approval escalation_model=opus, stage=opus" "PASS" "$result"
 
 # ── Clean artifacts for settingSources test ──
 rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
@@ -318,6 +351,116 @@ result=$(run_reviewer_test "
   }).catch(e => console.log('ERROR:' + e.message));
 ")
 assert_eq "settingSources is []" "PASS" "$result"
+
+# ── Clean artifacts + escalation for Opus tests ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+rm -f "$CWD_DIR/.vela/state/escalation.json" 2>/dev/null || true
+
+# ── Test 11: __opus_pass__ → Haiku fail (10) → Opus pass (22) → approve + escalated ──
+echo ""
+echo "📋 Test 11: __opus_pass__ → Haiku fail → Opus pass → approve + escalated:true"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: '__opus_pass__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const approvalPath = '$ARTIFACT_DIR/approval-__opus_pass__.json';
+    const ap = JSON.parse(fs.readFileSync(approvalPath, 'utf8'));
+    const checks = [
+      r.ok === true,
+      r.decision === 'approve',
+      r.stage === 'opus',
+      r.escalated === true,
+      r.score === 22,
+      ap.decision === 'approve',
+      ap.escalated === true,
+      ap.escalation_model === 'opus'
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify({ r: r, ap: ap }));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "opus_pass: Haiku fail → Opus approve + escalated" "PASS" "$result"
+
+# ── Clean for opus_also_fail ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+rm -f "$CWD_DIR/.vela/state/escalation.json" 2>/dev/null || true
+
+# ── Test 12: __opus_also_fail__ → Haiku fail (10) → Opus fail (8) → reject + escalated + escalation.json ──
+echo ""
+echo "📋 Test 12: __opus_also_fail__ → Haiku fail → Opus fail → reject + escalated:true + escalation.json"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: '__opus_also_fail__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const approvalPath = '$ARTIFACT_DIR/approval-__opus_also_fail__.json';
+    const escalationPath = '$CWD_DIR/.vela/state/escalation.json';
+    const ap = JSON.parse(fs.readFileSync(approvalPath, 'utf8'));
+    const escExists = fs.existsSync(escalationPath);
+    let escOk = false;
+    if (escExists) {
+      const esc = JSON.parse(fs.readFileSync(escalationPath, 'utf8'));
+      escOk = esc.auto_escalated === true;
+    }
+    const checks = [
+      r.ok === true,
+      r.decision === 'reject',
+      r.stage === 'opus',
+      r.escalated === true,
+      r.score === 8,
+      ap.decision === 'reject',
+      ap.escalated === true,
+      escExists,
+      escOk
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify({ r: r, ap: ap, escExists: escExists, escOk: escOk }));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "opus_also_fail: reject + escalated + auto_escalated" "PASS" "$result"
+
+# ── Clean for borderline_opus ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+rm -f "$CWD_DIR/.vela/state/escalation.json" 2>/dev/null || true
+
+# ── Test 13: __borderline_opus__ → Haiku 17 → Sonnet 14 → Opus 21 → approve + escalated ──
+echo ""
+echo "📋 Test 13: __borderline_opus__ → borderline → Sonnet fail → Opus pass → approve + escalated:true"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: '__borderline_opus__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const approvalPath = '$ARTIFACT_DIR/approval-__borderline_opus__.json';
+    const ap = JSON.parse(fs.readFileSync(approvalPath, 'utf8'));
+    const checks = [
+      r.ok === true,
+      r.decision === 'approve',
+      r.stage === 'opus',
+      r.escalated === true,
+      r.score === 21,
+      ap.decision === 'approve',
+      ap.escalated === true,
+      ap.escalation_model === 'opus'
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify({ r: r, ap: ap }));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "borderline_opus: Sonnet fail → Opus approve + escalated" "PASS" "$result"
+
+# ── Test 14: escalation.json auto_escalated field on Opus reject ──
+echo ""
+echo "📋 Test 14: escalation.json has auto_escalated:true on Opus reject"
+# Re-use the escalation.json from Test 12
+rm -f "$CWD_DIR/.vela/state/escalation.json" 2>/dev/null || true
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: '__opus_also_fail__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const escalationPath = '$CWD_DIR/.vela/state/escalation.json';
+    const esc = JSON.parse(fs.readFileSync(escalationPath, 'utf8'));
+    const checks = [esc.auto_escalated === true, esc.score === 8, esc.threshold === 15];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(esc));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "escalation.json auto_escalated:true, score, threshold" "PASS" "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""
