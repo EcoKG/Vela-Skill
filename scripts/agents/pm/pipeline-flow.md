@@ -19,7 +19,7 @@
 8. PM approve/reject
 
 [Execute — 단일 모듈] — Subagent (Sonnet)
-9. Executor subagent (model: "sonnet") → 코드 구현
+9. `node .vela/cli/vela-engine.js execute` → SDK Executor (Sonnet) 코드 구현
 10. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-execute.md 생성
 11. PM approve/reject
 
@@ -33,7 +33,7 @@
 
 ## Quick Pipeline (medium)
 Plan: Planner subagent (Sonnet) + SDK Reviewer (`vela-engine.js review`)
-Execute: Executor subagent (Sonnet) + SDK Reviewer (`vela-engine.js review`)
+Execute: SDK Executor (`vela-engine.js execute`) + SDK Reviewer (`vela-engine.js review`)
 팀 소환 없음.
 
 ## Trivial Pipeline (small)

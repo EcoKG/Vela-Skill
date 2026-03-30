@@ -46,7 +46,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 - **Research**: Researcher subagent 1명 (model: "sonnet") — 프로젝트 분석
 - **Plan**: Planner subagent (model: "sonnet") — 독립 설계
-- **Execute 단일**: Executor subagent (model: "sonnet") — 독립 구현
+- **Execute 단일**: `node .vela/cli/vela-engine.js execute` → SDK Executor (Sonnet) — 독립 구현
 - **Execute CrossLayer**: Teammate 3~5명 (model: "sonnet", team_name + worktree) — 소통 필요
 - **모든 단계**: `node .vela/cli/vela-engine.js review` 실행 → SDK Reviewer가 2-stage (Haiku→Sonnet) 리뷰 수행 → PM이 결과 확인하고 approve/reject 판단
 

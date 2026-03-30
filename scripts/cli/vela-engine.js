@@ -50,7 +50,8 @@ const commands = {
   history: cmdHistory,
   review: cmdReview,
   'plan-check': cmdPlanCheck,
-  research: cmdResearch
+  research: cmdResearch,
+  execute: cmdExecute
 };
 
 if (!command || !commands[command]) {
@@ -774,6 +775,44 @@ async function cmdPlanCheck() {
   output({
     ok: result.ok,
     command: 'plan-check',
+    ...result
+  });
+}
+
+async function cmdExecute() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, error: 'No active pipeline.' });
+  }
+
+  // Validate current step has an executor worker_role
+  const pipelineDef = loadPipelineDefinition();
+  const steps = resolveSteps(pipelineDef, state.pipeline_type);
+  const currentStepDef = steps.find(s => s.id === state.current_step);
+
+  if (!currentStepDef || !currentStepDef.team || currentStepDef.team.worker_role !== 'executor') {
+    return output({
+      ok: false,
+      error: 'Current step does not have an executor worker role.',
+      current_step: state.current_step
+    });
+  }
+
+  const artifactDir = state._artifactDir;
+  if (!artifactDir) {
+    return output({ ok: false, error: 'No artifact directory found for active pipeline.' });
+  }
+
+  const { sdkExecute } = require('../hooks/shared/sdk-executor.js');
+  const result = await sdkExecute({
+    step: state.current_step,
+    artifactDir,
+    cwd: CWD
+  });
+
+  output({
+    ok: result.ok,
+    command: 'execute',
     ...result
   });
 }

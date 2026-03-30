@@ -124,6 +124,10 @@ async function main() {
       output.push(`│ │ Worker: ${stepDef.team.worker_role}`);
       output.push(`│ │ Reviewer: SDK (Haiku→Sonnet)`);
       output.push(`│ │   → node .vela/cli/vela-engine.js review`);
+      if (stepDef.team.worker_role === 'executor') {
+        output.push(`│ │ Executor: SDK (Sonnet)`);
+        output.push(`│ │   → node .vela/cli/vela-engine.js execute`);
+      }
       // Check for approval file (PM writes directly)
       if (state._artifactDir) {
         const approvalFile = `approval-${state.current_step}.json`;
