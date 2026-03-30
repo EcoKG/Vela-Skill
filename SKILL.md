@@ -143,6 +143,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    │   ├── vela-gate-guard.js   ← 가이드라인 (PreToolUse)
    │   ├── vela-orchestrator.js ← 상태주입 (UserPromptSubmit)
    │   ├── vela-tracker.js      ← 추적기 (PostToolUse)
+   │   ├── vela-notification.js ← 데스크톱 알림 (Notification)
    │   └── shared/
    │       ├── constants.js
    │       └── pipeline.js
@@ -514,6 +515,46 @@ Research 단계에서 Subagent(Sonnet)가 단독으로 프로젝트 분석을 �
 - 간결하고 명확하게 말하라
 - 코드 주석은 영어로 작성하라
 ```
+
+---
+
+## 훅 목록 (18개)
+
+Vela는 Claude Code의 hook event에 18개의 훅을 등록한다.
+
+| # | Hook ID | Event | 유형 | 설명 |
+|---|---------|-------|------|------|
+| 1 | vela-gate-keeper | PreToolUse | command | 수문장 — 파이프라인 규칙 위반 차단 |
+| 2 | vela-gate-guard | PreToolUse | command | 가이드라인 — 코딩 규칙 안내 |
+| 3 | vela-orchestrator | UserPromptSubmit | command | 상태 주입 — 파이프라인 컨텍스트 주입 |
+| 4 | vela-tracker | PostToolUse | command | 추적기 — 도구 사용 기록 |
+| 5 | vela-stop | Stop | command | 정지 제어 — auto 모드 중단 방지 |
+| 6 | vela-session-start | SessionStart | command | 세션 시작 시 상태 복구 |
+| 7 | vela-compact | PreCompact | command | 컴팩트 전 상태 보존 |
+| 8 | vela-compact | PostCompact | command | 컴팩트 후 상태 복원 |
+| 9 | vela-subagent-start | SubagentStart | command | 서브에이전트 시작 추적 |
+| 10 | vela-task-completed | TaskCompleted | command | 태스크 완료 기록 |
+| 11 | vela-subagent-stop | SubagentStop | command | 서브에이전트 종료 + 산출물 수확 |
+| 12 | vela-permission | PermissionRequest | command | 파일 쓰기 권한 자동 승인 |
+| 13 | vela-failure | PostToolUseFailure | command | 도구 실패 추적 + 연속 실패 경고 |
+| 14 | vela-stop-failure | StopFailure | command | 비정상 종료 시 파이프라인 스냅샷 |
+| 15 | vela-teammate-idle | TeammateIdle | command | 유휴 팀원 알림 |
+| 16 | vela-review-prompt | PostToolUse | prompt | 코드 변경 자동 리뷰 |
+| 17 | vela-test-async | PostToolUse | command | 관련 테스트 비동기 실행 |
+| 18 | vela-notification | Notification | command | 데스크톱 알림 전송 (macOS/Linux) |
+
+### if 조건 최적화
+
+`PermissionRequest` 이벤트의 `vela-permission` 훅에는 `if: 'Write(*)|Edit(*)|NotebookEdit(*)'` 조건이 적용된다. Claude Code는 이 조건에 매칭되는 도구 호출에서만 훅 프로세스를 spawn하므로, Bash/Read 등 비-파일수정 도구 사용 시 불필요한 프로세스 생성이 방지된다.
+
+### Notification Hook (vela-notification)
+
+`Notification` 이벤트 수신 시 OS 네이티브 데스크톱 알림을 전송한다:
+- **macOS**: `osascript display notification`
+- **Linux**: `notify-send` (freedesktop.org)
+- **기타 플랫폼**: silent no-op
+
+알림 실패는 항상 무시되며 exit code에 영향을 주지 않는다. 자체 완결형 훅으로 pipeline.js나 config 의존성 없음.
 
 ---
 
