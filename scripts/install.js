@@ -147,6 +147,7 @@ const VELA_HOOKS = [
     matcher: 'PermissionRequest',
     hookId: 'vela-permission',
     script: 'vela-permission.js',
+    if: 'Write(*)|Edit(*)|NotebookEdit(*)',
     description: '⛵ Checking crew clearance...'
   },
   {
@@ -183,6 +184,12 @@ const VELA_HOOKS = [
     script: 'vela-test-async.js',
     async: true,
     description: '🧪 Running related tests...'
+  },
+  {
+    matcher: 'Notification',
+    hookId: 'vela-notification',
+    script: 'vela-notification.js',
+    description: '🔔 Sending desktop notification...'
   }
 ];
 
@@ -273,6 +280,11 @@ function install() {
     // Add model field if present
     if (hook.model) {
       hookEntry.model = hook.model;
+    }
+
+    // Add if condition if present (tool events only)
+    if (hook.if) {
+      hookEntry.if = hook.if;
     }
 
     // Add the hook in correct Claude Code format:
@@ -643,6 +655,7 @@ function upgrade() {
     { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
     { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
     { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
+    { src: 'scripts/hooks/vela-notification.js', dst: 'hooks/vela-notification.js' },
     { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
     { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
     { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
@@ -783,6 +796,7 @@ function validate() {
     { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
     { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
     { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
+    { src: 'scripts/hooks/vela-notification.js', dst: 'hooks/vela-notification.js' },
     { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
     { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
     { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
