@@ -12,7 +12,12 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 `$ARGUMENTS`를 확인한다:
 - `$ARGUMENTS`가 `init` → `/vela:init` 절차 실행
 - `$ARGUMENTS`가 `start` 또는 `start <작업설명>` → `/vela:start` 절차 실행
-- `$ARGUMENTS`가 `auto` 또는 `auto <작업설명>` → `/vela:auto` 절차 실행
+- `$ARGUMENTS`가 `auto` (인자 없음) → 활성 파이프라인이 있으면 auto 모드 토글:
+  ```bash
+  node .vela/cli/vela-engine.js auto
+  ```
+  활성 파이프라인이 없으면 `/vela:auto` 절차 실행 (새 파이프라인 시작)
+- `$ARGUMENTS`가 `auto <작업설명>` → `/vela:auto` 절차 실행
 - `$ARGUMENTS`가 `status` → 현재 파이프라인 상태를 보여준다:
   ```bash
   node .vela/cli/vela-engine.js state
@@ -97,11 +102,22 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
 ---
 
-## /vela:auto — 자동 진행 파이프라인
+## /vela:auto — 자동 진행 파이프라인 (토글)
 
-`/vela auto` (또는 `/vela:auto`)는 `/vela:start`와 동일하되, 각 단계 완료 후 PM이 자동으로 transition을 호출하여 파이프라인을 끝까지 진행한다.
+`/vela auto` (또는 `/vela:auto`)는 두 가지 동작을 한다:
 
-### 절차
+### 1. 활성 파이프라인이 있을 때 → Auto 모드 토글
+
+이미 파이프라인이 진행 중이면 auto 모드를 켜거나 끈다:
+```bash
+node .vela/cli/vela-engine.js auto
+```
+- Auto ON → OFF: 수동 모드로 전환. 각 단계를 직접 진행해야 한다.
+- Auto OFF → ON: 자동 모드로 전환. reject 카운터가 초기화된다.
+
+### 2. 활성 파이프라인이 없을 때 → Auto 모드로 새 파이프라인 시작
+
+`/vela:start`와 동일하되 `--auto` 플래그를 추가한다:
 
 1~3단계는 `/vela:start`와 동일.
 

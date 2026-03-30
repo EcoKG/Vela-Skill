@@ -51,7 +51,8 @@ const commands = {
   review: cmdReview,
   'plan-check': cmdPlanCheck,
   research: cmdResearch,
-  execute: cmdExecute
+  execute: cmdExecute,
+  auto: cmdAuto
 };
 
 if (!command || !commands[command]) {
@@ -229,6 +230,7 @@ function cmdState() {
     current_mode: currentStepDef ? currentStepDef.mode : 'read',
     completed_steps: state.completed_steps,
     remaining_steps: state.steps.filter(s => !state.completed_steps.includes(s)),
+    auto: state.auto || false,
     revisions: state.revisions,
     sub_phase: state.sub_phases ? state.sub_phases[state.current_step] || null : null,
     git: state.git || null,
@@ -617,6 +619,34 @@ function cmdCommit() {
     branch: state.git.current_branch || state.git.pipeline_branch,
     files_in_diff: status.split('\n').length,
     message: `Committed: ${commitMessage} (${commitHash.substring(0, 7)})`
+  });
+}
+
+function cmdAuto() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, command: 'auto', error: 'No active pipeline.', message: 'Start a pipeline first: vela-engine init "task" --scale <size>' });
+  }
+
+  const wasAuto = state.auto === true;
+  state.auto = !wasAuto;
+
+  // Reset reject counter when enabling auto mode
+  if (state.auto) {
+    state.auto_reject_count = 0;
+  }
+
+  state.updated_at = new Date().toISOString();
+  writeJSON(state._path, cleanState(state));
+
+  return output({
+    ok: true,
+    command: 'auto',
+    auto: state.auto,
+    previous: wasAuto,
+    message: state.auto
+      ? '⚡ Auto mode ON — 파이프라인이 자동으로 진행됩니다.'
+      : '⏸ Auto mode OFF — 수동 모드로 전환되었습니다.'
   });
 }
 
