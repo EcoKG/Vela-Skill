@@ -172,8 +172,8 @@ const VELA_HOOKS = [
     matcher: 'PostToolUse',
     hookId: 'vela-review-prompt',
     hookType: 'prompt',
-    toolMatcher: 'Edit|Write',
-    prompt: 'Review this code change for bugs, security issues, and style problems. Context: $ARGUMENTS. Respond with JSON: {"ok": true} if acceptable, or {"ok": false, "reason": "description of issues found"} if there are problems. Focus on: 1) Logic errors 2) Security vulnerabilities 3) Missing error handling 4) Breaking changes.',
+    toolMatcher: 'Edit(*)|Write(*)',
+    prompt: 'If the file is a markdown (.md), JSON (.json), YAML (.yaml/.yml), or config file, respond with {"ok": true}. Only review source code files (.js, .ts, .py, .go, .rs, .java, .sh, etc). For source code: review for bugs, security issues, and style problems. Context: $ARGUMENTS. Respond with JSON: {"ok": true} if acceptable, or {"ok": false, "reason": "brief description"} if there are critical bugs or security vulnerabilities. Ignore style nitpicks. Be concise.',
     description: '🔭 코드 변경을 검수합니다...'
   },
   {
