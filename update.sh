@@ -99,7 +99,7 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     # Agents (top-level + subdirectories)
     mkdir -p .vela/agents
     cp "$TMP/scripts/agents/"*.md .vela/agents/ 2>/dev/null
-    for sub in pm researcher planner executor reviewer conflict-manager; do
+    for sub in pm researcher planner executor reviewer conflict-manager leader; do
       if [ -d "$TMP/scripts/agents/$sub" ]; then
         mkdir -p ".vela/agents/$sub"
         cp "$TMP/scripts/agents/$sub/"*.md ".vela/agents/$sub/" 2>/dev/null
@@ -117,6 +117,18 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     # References
     mkdir -p .vela/references
     cp "$TMP/references/"*.md .vela/references/ 2>/dev/null
+
+    # Sub-skills (init, start, git-clean, etc.)
+    if [ -d "$TMP/skills" ]; then
+      rm -rf .vela/skills 2>/dev/null
+      cp -r "$TMP/skills" .vela/skills
+    fi
+
+    # Test fixtures
+    if [ -d "$TMP/test-fixtures" ]; then
+      rm -rf .vela/test-fixtures 2>/dev/null
+      cp -r "$TMP/test-fixtures" .vela/test-fixtures
+    fi
 
     # Update .claude/agents/vela.md
     if [ -d ".claude/agents" ]; then

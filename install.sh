@@ -12,7 +12,7 @@ SKILL_DIR="$HOME/.claude/skills/vela"
 SETTINGS="$HOME/.claude/settings.json"
 
 echo ""
-echo "⛵ Vela Engine v3.0 — Installing..."
+echo "⛵ Vela Engine v3.1 — Installing..."
 echo ""
 
 # ─── Clean previous attempts ───
