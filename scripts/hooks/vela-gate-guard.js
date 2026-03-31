@@ -207,7 +207,8 @@ async function main() {
     // PM should not directly write source code during execute step.
     // Subagents/Teammates must do the actual implementation.
     // Delegation is signaled by .vela/state/delegation.json existing.
-    if (executeReached && currentStep === 'execute') {
+    // Trivial pipelines are exempt — single-line fixes don't need delegation.
+    if (executeReached && currentStep === 'execute' && state.pipeline_type !== 'trivial') {
       const delegationPath = path.join(velaDir, 'state', 'delegation.json');
       let isDelegated = false;
       try {

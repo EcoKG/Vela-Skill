@@ -16,7 +16,6 @@ const CODE_EXTENSIONS = new Set([
   '.swift',
   '.html', '.htm', '.css', '.scss', '.sass', '.less',
   '.vue', '.svelte',
-  '.json', '.yaml', '.yml', '.toml',
   '.sql',
   '.sh', '.bash', '.zsh',
   '.tf', '.hcl',

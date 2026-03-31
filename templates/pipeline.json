@@ -183,7 +183,8 @@
       },
       "overrides": {
         "execute": {
-          "max_revisions": 1
+          "max_revisions": 1,
+          "exit_gate": []
         },
         "commit": {
           "exit_gate": []
@@ -201,7 +202,8 @@
       "overrides": {
         "execute": {
           "max_revisions": 1,
-          "mode": "readwrite"
+          "mode": "readwrite",
+          "exit_gate": []
         },
         "commit": {
           "exit_gate": []
