@@ -376,7 +376,14 @@ switch (command) {
   case 'uninstall': uninstall(); break;
   case 'validate': {
     const results = validate();
-    console.log(JSON.stringify({ ok: true, command: 'validate', details: results }, null, 2));
+    console.log(JSON.stringify({
+      ok: true,
+      command: 'validate',
+      fixed: results.fixed.length,
+      refreshed: results.refreshed.length,
+      warnings: results.warnings.length,
+      details: results
+    }, null, 2));
     break;
   }
   case 'status': status(); break;
@@ -899,7 +906,7 @@ function upgrade() {
 // ─── Validate & Repair ───
 
 function validate() {
-  const results = { fixed: [], warnings: [], ok: [] };
+  const results = { fixed: [], refreshed: [], warnings: [], ok: [] };
   const velaDir = path.join(PROJECT_ROOT, '.vela');
 
   // 1. Required directories
@@ -923,9 +930,9 @@ function validate() {
 
   for (const f of requiredFiles) {
     const dstPath = path.join(velaDir, f.dst);
+    const srcPath = path.join(skillBase, f.src);
     if (!fs.existsSync(dstPath)) {
-      // Try to copy from skill directory
-      const srcPath = path.join(skillBase, f.src);
+      // Missing — try to restore from skill directory
       if (fs.existsSync(srcPath)) {
         const dstDir = path.dirname(dstPath);
         if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
@@ -933,6 +940,18 @@ function validate() {
         results.fixed.push(`Restored missing file: .vela/${f.dst}`);
       } else {
         results.warnings.push(`Missing file: .vela/${f.dst} (source not found)`);
+      }
+    } else if (fs.existsSync(srcPath)) {
+      // Exists — check if content is current (binary comparison)
+      const srcBuf = fs.readFileSync(srcPath);
+      const dstBuf = fs.readFileSync(dstPath);
+      if (!srcBuf.equals(dstBuf)) {
+        const dstDir = path.dirname(dstPath);
+        if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
+        fs.copyFileSync(srcPath, dstPath);
+        results.refreshed.push(`Refreshed stale file: .vela/${f.dst}`);
+      } else {
+        results.ok.push(f.dst);
       }
     } else {
       results.ok.push(f.dst);

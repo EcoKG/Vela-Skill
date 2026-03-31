@@ -151,6 +151,80 @@ VALIDATE_OUT=$(node "$INSTALL_JS" validate 2>/dev/null || true)
 [ ! -f "$VELA_DIR/hooks/vela-pm.md" ] && pass "validate() removed hooks/vela-pm.md via manifest" || fail "validate() did not remove hooks/vela-pm.md"
 [ ! -f "$VELA_DIR/cli/phantom.js" ] && pass "validate() removed cli/phantom.js via manifest" || fail "validate() did not remove cli/phantom.js"
 
+# --- Test 6: validate() refreshes stale files ---
+echo ""
+echo "=== Test 6: validate() refreshes stale files (content mismatch) ==="
+
+# First ensure a known managed file exists by running upgrade
+cd "$TMPDIR_TEST"
+node "$INSTALL_JS" upgrade >/dev/null 2>&1 || true
+
+# Pick a known managed file and corrupt its content to make it stale
+# Use the first manifest entry's dst to find a real managed file
+STALE_FILE=$(node -e "
+  const m = require('$INSTALL_JS'.replace(/install\.js$/, 'install.js'));
+" 2>/dev/null || true)
+
+# Simpler approach: find a managed file that exists and overwrite its content
+STALE_TARGET=""
+for candidate in hooks/vela-gate-keeper.js hooks/vela-orchestrator.js cli/vela-engine.js; do
+  if [ -f "$VELA_DIR/$candidate" ]; then
+    STALE_TARGET="$candidate"
+    break
+  fi
+done
+
+if [ -n "$STALE_TARGET" ]; then
+  # Save original content hash
+  ORIG_HASH=$(md5sum "$VELA_DIR/$STALE_TARGET" | awk '{print $1}')
+  
+  # Corrupt the file to make it stale
+  echo "// STALE CONTENT — this is outdated" > "$VELA_DIR/$STALE_TARGET"
+  STALE_HASH=$(md5sum "$VELA_DIR/$STALE_TARGET" | awk '{print $1}')
+  
+  [ "$ORIG_HASH" != "$STALE_HASH" ] && pass "File corrupted for stale test: $STALE_TARGET" || fail "Failed to corrupt file"
+  
+  # Run validate
+  cd "$TMPDIR_TEST"
+  VALIDATE_OUT=$(node "$INSTALL_JS" validate 2>/dev/null || true)
+  
+  # Check that file was refreshed (content restored)
+  NEW_HASH=$(md5sum "$VELA_DIR/$STALE_TARGET" | awk '{print $1}')
+  [ "$NEW_HASH" = "$ORIG_HASH" ] && pass "Stale file refreshed: $STALE_TARGET" || fail "Stale file NOT refreshed: $STALE_TARGET (hash: $NEW_HASH vs $ORIG_HASH)"
+  
+  # Check JSON output has refreshed field
+  HAS_REFRESHED=$(echo "$VALIDATE_OUT" | node -e "
+    let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+      try {
+        const j=JSON.parse(d);
+        if (j.refreshed > 0 && j.details && j.details.refreshed && j.details.refreshed.length > 0) {
+          console.log('yes');
+        } else {
+          console.log('no');
+        }
+      } catch(e) { console.log('parse_error: ' + e.message); }
+    });
+  ")
+  [ "$HAS_REFRESHED" = "yes" ] && pass "refreshed field in validate JSON output" || fail "refreshed field missing or zero (got: $HAS_REFRESHED)"
+  
+  # Check that the refreshed array contains the stale file
+  HAS_TARGET=$(echo "$VALIDATE_OUT" | node -e "
+    let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+      try {
+        const j=JSON.parse(d);
+        const found = (j.details.refreshed || []).some(s => s.includes('$STALE_TARGET'));
+        console.log(found ? 'yes' : 'no');
+      } catch(e) { console.log('parse_error'); }
+    });
+  ")
+  [ "$HAS_TARGET" = "yes" ] && pass "refreshed list includes stale target file" || fail "refreshed list does not include $STALE_TARGET"
+else
+  fail "No managed file found for stale test — skipping"
+  fail "No managed file found for stale test — skipping"
+  fail "No managed file found for stale test — skipping"
+  fail "No managed file found for stale test — skipping"
+fi
+
 # --- Summary ---
 echo ""
 echo "=== Results ==="
