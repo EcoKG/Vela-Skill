@@ -51,10 +51,16 @@ if [ -d "$TMP/references" ]; then
   cp -r "$TMP/references" "$SKILL_DIR/references"
 fi
 
-# Skills (sub-skills: init, start)
+# Skills (sub-skills: init, start, git-clean)
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
+fi
+
+# Test fixtures (sample data for analyze/report)
+if [ -d "$TMP/test-fixtures" ]; then
+  rm -rf "$SKILL_DIR/test-fixtures" 2>/dev/null
+  cp -r "$TMP/test-fixtures" "$SKILL_DIR/test-fixtures"
 fi
 
 # Plugin metadata
@@ -103,6 +109,79 @@ if command -v npm &>/dev/null; then
   else
     echo "  ⚠ Claude Agent SDK not installed — non-SDK mode will be used (fully functional)"
   fi
+fi
+
+# ─── Auto-upgrade existing local .vela/ projects ───
+# If install.sh is run from inside a project that already has .vela/,
+# automatically update the local project too (same as update.sh --local).
+if [ -d ".vela" ]; then
+  echo "  🧭 Detected existing .vela/ — auto-upgrading local project..."
+
+  # Hooks
+  cp "$SKILL_DIR/scripts/hooks/"*.js .vela/hooks/ 2>/dev/null
+  mkdir -p .vela/hooks/shared
+  cp "$SKILL_DIR/scripts/hooks/shared/"*.js .vela/hooks/shared/ 2>/dev/null
+
+  # CLI
+  mkdir -p .vela/cli
+  cp "$SKILL_DIR/scripts/cli/"*.js .vela/cli/ 2>/dev/null
+
+  # Cache
+  mkdir -p .vela/cache
+  cp "$SKILL_DIR/scripts/cache/"*.js .vela/cache/ 2>/dev/null
+
+  # Install script
+  cp "$SKILL_DIR/scripts/install.js" .vela/ 2>/dev/null
+
+  # Statusline
+  cp "$SKILL_DIR/scripts/statusline.sh" .vela/ 2>/dev/null
+
+  # Agents (top-level + subdirectories)
+  mkdir -p .vela/agents
+  cp "$SKILL_DIR/scripts/agents/"*.md .vela/agents/ 2>/dev/null
+  for sub in pm researcher planner executor reviewer conflict-manager leader; do
+    if [ -d "$SKILL_DIR/scripts/agents/$sub" ]; then
+      mkdir -p ".vela/agents/$sub"
+      cp "$SKILL_DIR/scripts/agents/$sub/"*.md ".vela/agents/$sub/" 2>/dev/null
+    fi
+  done
+
+  # Guidelines
+  mkdir -p .vela/guidelines
+  cp "$SKILL_DIR/scripts/guidelines/"*.md .vela/guidelines/ 2>/dev/null
+
+  # Templates (skip config.json to preserve user settings)
+  mkdir -p .vela/templates
+  cp "$SKILL_DIR/templates/pipeline.json" .vela/templates/ 2>/dev/null
+  cp "$SKILL_DIR/templates/presets.json" .vela/templates/ 2>/dev/null
+
+  # References
+  mkdir -p .vela/references
+  cp "$SKILL_DIR/references/"*.md .vela/references/ 2>/dev/null
+
+  # Sub-skills
+  if [ -d "$SKILL_DIR/skills" ]; then
+    rm -rf .vela/skills 2>/dev/null
+    cp -r "$SKILL_DIR/skills" .vela/skills
+  fi
+
+  # Test fixtures
+  if [ -d "$SKILL_DIR/test-fixtures" ]; then
+    rm -rf .vela/test-fixtures 2>/dev/null
+    cp -r "$SKILL_DIR/test-fixtures" .vela/test-fixtures
+  fi
+
+  # Update .claude/agents/vela.md
+  if [ -d ".claude/agents" ]; then
+    cp "$SKILL_DIR/scripts/agents/vela.md" .claude/agents/ 2>/dev/null
+  fi
+
+  # Re-run install to update settings.local.json with new hooks
+  if [ -f ".vela/install.js" ]; then
+    node .vela/install.js 2>/dev/null | tail -1
+  fi
+
+  echo "  ✦ Local project auto-upgraded"
 fi
 
 # ─── Cleanup ───
