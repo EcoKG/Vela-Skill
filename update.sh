@@ -1,5 +1,5 @@
 #!/bin/bash
-# ⛵ Vela Engine v3.1 — Update script
+# ⛵ Vela Engine — Update script
 # Updates global skill and optionally the current project's .vela/
 #
 # Global only:    curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash
@@ -88,6 +88,9 @@ git clone --depth 1 -b main "$REPO" "$TMP" 2>/dev/null || {
   exit 1
 }
 
+# ─── Read version from package.json (single source of truth) ───
+VELA_VERSION=$(node -e "process.stdout.write(require('$TMP/package.json').version)" 2>/dev/null || echo '?')
+
 # ─── Global skill update ───
 mkdir -p "$SKILL_DIR"
 
@@ -162,6 +165,6 @@ rm -rf "$TMP" 2>/dev/null
 
 echo ""
 echo "✦───────────────────────────────────────✦"
-echo "  ⛵ Update complete!"
+echo "  ⛵ Update complete! (v${VELA_VERSION})"
 echo "✦───────────────────────────────────────✦"
 echo ""

@@ -16,6 +16,9 @@ elif [ -d ".vela" ]; then
   VELA_DIR=".vela"
 fi
 
+# Read version from package.json (single source of truth)
+VELA_VER=$(node -e "process.stdout.write(require('$HOME/.claude/skills/vela/package.json').version)" 2>/dev/null || echo '?')
+
 # Context % color gradient: green ≤50%, yellow 51-80%, red >80%
 context_color() {
   local pct=$1
@@ -31,7 +34,7 @@ context_color() {
 if [ -z "$VELA_DIR" ]; then
   COLOR=$(context_color "$PCT")
   RST='\033[0m'
-  echo -e "⛵ Vela v3.1 │ Explore │ $MODEL ${COLOR}${PCT}%${RST}"
+  echo -e "⛵ Vela v${VELA_VER} │ Explore │ $MODEL ${COLOR}${PCT}%${RST}"
   exit 0
 fi
 
@@ -82,5 +85,5 @@ if [ "$PIPELINE_STATE" = "active" ]; then
   PROGRESS=$(progress_bar "$STEP_INDEX" "$TOTAL_STEPS")
   echo -e "⛵ Vela ▸ \033[32m${PIPELINE_TYPE}\033[0m 🧭 ${CURRENT_STEP} ${PROGRESS} │ ${REQUEST}… │ ${COLOR}${PCT}%${RST}"
 else
-  echo -e "⛵ Vela v3.1 │ Explore │ $MODEL ${COLOR}${PCT}%${RST}"
+  echo -e "⛵ Vela v${VELA_VER} │ Explore │ $MODEL ${COLOR}${PCT}%${RST}"
 fi

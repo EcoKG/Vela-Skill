@@ -1,5 +1,5 @@
 #!/bin/bash
-# ⛵ Vela Engine v3.1 — One-line installer
+# ⛵ Vela Engine — One-line installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
 #
 # Installs Vela as a Claude Code skill in $HOME/.claude/skills/vela/
@@ -12,7 +12,7 @@ SKILL_DIR="$HOME/.claude/skills/vela"
 SETTINGS="$HOME/.claude/settings.json"
 
 echo ""
-echo "⛵ Vela Engine v3.1 — Installing..."
+echo "⛵ Vela Engine — Installing..."
 echo ""
 
 # ─── Clean previous attempts ───
@@ -23,6 +23,9 @@ git clone --depth 1 -b main "$REPO" "$TMP" 2>/dev/null || {
   echo "❌ git clone failed. Check network and try again."
   exit 1
 }
+
+# ─── Read version from package.json (single source of truth) ───
+VELA_VERSION=$(node -e "process.stdout.write(require('$TMP/package.json').version)" 2>/dev/null || echo '?')
 
 # ─── Create skill directory ───
 mkdir -p "$SKILL_DIR"
@@ -199,7 +202,7 @@ fi
 
 echo ""
 echo "✦───────────────────────────────────────✦"
-echo "  ⛵ Vela Engine installed successfully!"
+echo "  ⛵ Vela Engine v${VELA_VERSION} installed successfully!"
 echo "✦───────────────────────────────────────✦"
 echo ""
 echo "  📂 Location: $SKILL_DIR"

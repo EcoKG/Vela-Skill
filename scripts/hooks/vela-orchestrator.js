@@ -45,7 +45,14 @@ async function main() {
 
   // ─── Session Health Check (first prompt only) ───
   if (isFirstPrompt) {
-    output.push('╭─ ⛵ Vela Engine v3.1 ───────────────╮');
+    // Read version from package.json (single source of truth)
+    let velaVersion = '?';
+    try {
+      const skillPkg = path.join(process.env.HOME || '', '.claude', 'skills', 'vela', 'package.json');
+      velaVersion = JSON.parse(fs.readFileSync(skillPkg, 'utf-8')).version || '?';
+    } catch { /* fallback to '?' */ }
+    const pad = '─'.repeat(Math.max(0, 20 - velaVersion.length));
+    output.push(`╭─ ⛵ Vela Engine v${velaVersion} ${pad}╮`);
     output.push(`│ Sandbox: ACTIVE | Mode: auto-detect`);
 
     const hooks = ['vela-gate-keeper', 'vela-gate-guard', 'vela-orchestrator', 'vela-tracker'];
