@@ -368,6 +368,74 @@ function removeEmptyDirs(velaDir) {
   return removed;
 }
 
+// ─── Config Migration (shallow merge for upgrade) ───
+
+/**
+ * Migrate user config.json by shallow-merging new template keys.
+ * - Adds top-level keys from template that are missing in user config
+ * - Never overwrites existing user values
+ * - Restores entire template if user config is broken JSON
+ * - Skips if user config.json doesn't exist (fresh install — config comes from install())
+ *
+ * @param {string} velaDir - Path to .vela/ in the target project
+ * @param {string} skillBase - Path to the skill repository root
+ * @returns {{ added: string[], preserved: string[], restored: boolean, skipped: boolean }}
+ */
+function migrateConfig(velaDir, skillBase) {
+  const result = { added: [], preserved: [], restored: false, skipped: false };
+
+  const userConfigPath = path.join(velaDir, 'config.json');
+  const templatePath = path.join(skillBase, 'templates', 'config.json');
+
+  // No user config → fresh install, skip (install() copies config.json)
+  if (!fs.existsSync(userConfigPath)) {
+    result.skipped = true;
+    return result;
+  }
+
+  // Load template
+  let template;
+  try {
+    template = JSON.parse(fs.readFileSync(templatePath, 'utf-8'));
+  } catch (e) {
+    // Template itself is broken or missing — nothing to merge from
+    result.skipped = true;
+    return result;
+  }
+
+  // Load user config
+  let userConfig;
+  try {
+    const raw = fs.readFileSync(userConfigPath, 'utf-8');
+    if (raw.trim() === '') throw new Error('empty file');
+    userConfig = JSON.parse(raw);
+  } catch (e) {
+    // Broken or empty user config → restore entire template
+    fs.writeFileSync(userConfigPath, JSON.stringify(template, null, 2));
+    result.restored = true;
+    result.added = Object.keys(template);
+    return result;
+  }
+
+  // Shallow merge: add missing top-level keys only
+  let changed = false;
+  for (const key of Object.keys(template)) {
+    if (!(key in userConfig)) {
+      userConfig[key] = template[key];
+      result.added.push(key);
+      changed = true;
+    } else {
+      result.preserved.push(key);
+    }
+  }
+
+  if (changed) {
+    fs.writeFileSync(userConfigPath, JSON.stringify(userConfig, null, 2));
+  }
+
+  return result;
+}
+
 const command = (process.argv[2] && !process.argv[2].startsWith('-')) ? process.argv[2] : 'install';
 
 switch (command) {
@@ -869,6 +937,9 @@ function upgrade() {
     }
   }
 
+  // ── Config migration: merge new template keys into user config.json ──
+  results.configMigration = migrateConfig(velaDir, skillBase);
+
   // ── Orphan cleanup: remove files in managed dirs not in FILE_MANIFEST ──
   results.orphansRemoved = [];
   try {
@@ -898,6 +969,7 @@ function upgrade() {
     added: results.added.length,
     skipped: results.skipped.length,
     orphansRemoved: results.orphansRemoved.length,
+    configMigration: results.configMigration,
     errors: results.errors,
     details: results
   }, null, 2));
