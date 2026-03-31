@@ -16,8 +16,22 @@ elif [ -d ".vela" ]; then
   VELA_DIR=".vela"
 fi
 
+# Context % color gradient: green ≤50%, yellow 51-80%, red >80%
+context_color() {
+  local pct=$1
+  if [ "$pct" -le 50 ]; then
+    printf '\033[32m'
+  elif [ "$pct" -le 80 ]; then
+    printf '\033[33m'
+  else
+    printf '\033[31m'
+  fi
+}
+
 if [ -z "$VELA_DIR" ]; then
-  echo "$MODEL | ${PCT}% ctx"
+  COLOR=$(context_color "$PCT")
+  RST='\033[0m'
+  echo -e "⛵ Vela v3.1 │ Explore │ $MODEL ${COLOR}${PCT}%${RST}"
   exit 0
 fi
 
@@ -46,7 +60,7 @@ if [ -d "$VELA_DIR/artifacts" ]; then
   fi
 fi
 
-# Build progress bar
+# Unicode progress bar using █ (filled) and ░ (empty)
 progress_bar() {
   local current=$1
   local total=$2
@@ -54,18 +68,19 @@ progress_bar() {
   if [ "$total" -gt 0 ]; then
     local filled=$(( (current * width) / total ))
     local empty=$(( width - filled ))
-    printf "["
-    for i in $(seq 1 $filled); do printf "="; done
-    if [ $filled -lt $width ]; then printf ">"; empty=$((empty - 1)); fi
-    for i in $(seq 1 $empty); do printf "-"; done
-    printf "] %d/%d" "$((current + 1))" "$total"
+    for i in $(seq 1 $filled); do printf "█"; done
+    for i in $(seq 1 $empty); do printf "░"; done
+    printf " %d/%d" "$((current + 1))" "$total"
   fi
 }
 
 # Build status line
+COLOR=$(context_color "$PCT")
+RST='\033[0m'
+
 if [ "$PIPELINE_STATE" = "active" ]; then
   PROGRESS=$(progress_bar "$STEP_INDEX" "$TOTAL_STEPS")
-  echo -e "⛵ Vela ✦ \033[32m${PIPELINE_TYPE}\033[0m 🧭 ${CURRENT_STEP} ${PROGRESS} │ ${REQUEST}… │ ${PCT}%"
+  echo -e "⛵ Vela ▸ \033[32m${PIPELINE_TYPE}\033[0m 🧭 ${CURRENT_STEP} ${PROGRESS} │ ${REQUEST}… │ ${COLOR}${PCT}%${RST}"
 else
-  echo -e "⛵ Vela ✦ Explore │ $MODEL ${PCT}%"
+  echo -e "⛵ Vela v3.1 │ Explore │ $MODEL ${COLOR}${PCT}%${RST}"
 fi
