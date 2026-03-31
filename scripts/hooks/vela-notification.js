@@ -25,7 +25,7 @@
  * Notification types: permission_prompt, idle_prompt, auth_success, elicitation_dialog
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 async function main() {
   // ─── Parse stdin JSON ───
@@ -51,17 +51,15 @@ async function main() {
 
   try {
     if (platform === 'darwin') {
-      // macOS: osascript display notification
-      execSync(
-        `osascript -e 'display notification "${message}" with title "${title}"'`,
-        { stdio: 'ignore', timeout: 5000 }
-      );
+      // macOS: osascript display notification (execFileSync — no shell interpretation)
+      execFileSync('osascript', ['-e', `display notification "${message}" with title "${title}"`], {
+        stdio: 'ignore', timeout: 5000
+      });
     } else if (platform === 'linux') {
-      // Linux: notify-send (freedesktop.org notification)
-      execSync(
-        `notify-send "${title}" "${message}"`,
-        { stdio: 'ignore', timeout: 5000 }
-      );
+      // Linux: notify-send (execFileSync — no shell interpretation)
+      execFileSync('notify-send', [title, message], {
+        stdio: 'ignore', timeout: 5000
+      });
     }
     // Other platforms: silent no-op
   } catch {

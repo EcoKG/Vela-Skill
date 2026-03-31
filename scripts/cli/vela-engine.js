@@ -25,7 +25,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const { generateKey, verifyFile, readKey } = require('../hooks/shared/hmac');
 
 const CWD = process.cwd();
@@ -390,7 +390,7 @@ function cmdRecord() {
   // Auto mode: reject counter and reset logic
   const verdictLower = verdict.toLowerCase();
   if (state.auto === true) {
-    if (verdictLower === 'reject') {
+    if (verdictLower === 'reject' || verdictLower === 'fail') {
       state.auto_reject_count = (state.auto_reject_count || 0) + 1;
       if (state.auto_reject_count >= 2) {
         state.auto = false;
@@ -491,7 +491,7 @@ function cmdBranch() {
   }
 
   const mode = getFlag('--mode') || 'auto';
-  const currentBranch = gitExec('git rev-parse --abbrev-ref HEAD').trim();
+  const currentBranch = gitExec('rev-parse', '--abbrev-ref', 'HEAD').trim();
   const isProtected = PROTECTED_BRANCHES.includes(currentBranch);
 
   // If already on a non-protected branch, use it
@@ -533,11 +533,11 @@ function cmdBranch() {
 
   // Auto mode: create branch
   try {
-    gitExec(`git checkout -b ${branchName}`);
+    gitExec('checkout', '-b', branchName);
   } catch (e) {
     // Branch might exist, try checkout
     try {
-      gitExec(`git checkout ${branchName}`);
+      gitExec('checkout', branchName);
     } catch (e2) {
       return output({ ok: false, error: `Failed to create branch: ${e2.message}` });
     }
@@ -545,7 +545,7 @@ function cmdBranch() {
 
   state.git.pipeline_branch = branchName;
   state.git.current_branch = branchName;
-  state.git.checkpoint_hash = gitExec('git rev-parse HEAD').trim();
+  state.git.checkpoint_hash = gitExec('rev-parse', 'HEAD').trim();
   state.updated_at = new Date().toISOString();
   writeJSON(state._path, cleanState(state));
 
@@ -571,9 +571,9 @@ function cmdCommit() {
   }
 
   // Check for uncommitted changes
-  const status = gitExec('git status --porcelain').trim();
+  const status = gitExec('status', '--porcelain').trim();
   if (!status) {
-    state.git.commit_hash = gitExec('git rev-parse HEAD').trim();
+    state.git.commit_hash = gitExec('rev-parse', 'HEAD').trim();
     state.updated_at = new Date().toISOString();
     writeJSON(state._path, cleanState(state));
     return output({ ok: true, command: 'commit', action: 'no_changes', message: 'No changes to commit.' });
@@ -594,7 +594,7 @@ function cmdCommit() {
 
   // Capture diff as artifact
   try {
-    const diff = gitExec('git diff HEAD');
+    const diff = gitExec('diff', 'HEAD');
     if (diff && state._artifactDir) {
       fs.writeFileSync(path.join(state._artifactDir, 'diff.patch'), diff);
     }
@@ -602,14 +602,14 @@ function cmdCommit() {
 
   // Stage all changes (excluding .vela/ internals)
   try {
-    gitExec('git add -A');
+    gitExec('add', '-A');
     // Unstage .vela/ internal files
     const velaFiles = [
       '.vela/cache/', '.vela/state/', '.vela/artifacts/',
       '.vela/tracker-signals.json', '.vela/write-log.jsonl'
     ];
     for (const vf of velaFiles) {
-      try { gitExec(`git reset HEAD -- "${vf}"`); } catch (e) {}
+      try { gitExec('reset', 'HEAD', '--', vf); } catch (e) {}
     }
   } catch (e) {
     return output({ ok: false, error: `Failed to stage files: ${e.message}` });
@@ -620,13 +620,13 @@ function cmdCommit() {
   try {
     const tmpMsgFile = path.join(VELA_DIR, '_commit-msg.tmp');
     fs.writeFileSync(tmpMsgFile, fullMessage);
-    gitExec(`git commit -F "${tmpMsgFile}"`);
+    gitExec('commit', '-F', tmpMsgFile);
     try { fs.unlinkSync(tmpMsgFile); } catch (e) {}
   } catch (e) {
     return output({ ok: false, error: `Commit failed: ${e.message}` });
   }
 
-  const commitHash = gitExec('git rev-parse HEAD').trim();
+  const commitHash = gitExec('rev-parse', 'HEAD').trim();
   state.git.commit_hash = commitHash;
   state.updated_at = new Date().toISOString();
   writeJSON(state._path, cleanState(state));
@@ -636,7 +636,7 @@ function cmdCommit() {
     command: 'commit',
     action: 'committed',
     hash: commitHash,
-    message: commitMessage,
+    commit_message: commitMessage,
     branch: state.git.current_branch || state.git.pipeline_branch,
     files_in_diff: status.split('\n').length,
     message: `Committed: ${commitMessage} (${commitHash.substring(0, 7)})`
@@ -707,7 +707,7 @@ function cmdCancel() {
 // ─── Git Clean: Scan (read-only, report findings) ───
 function cmdCleanScan() {
   try {
-    gitExec('git rev-parse --git-dir');
+    gitExec('rev-parse', '--git-dir');
   } catch (e) {
     return output({ ok: false, error: 'Not a git repository.' });
   }
@@ -717,10 +717,10 @@ function cmdCleanScan() {
   // 1. Tracked-but-ignored files
   findings.trackedIgnored = [];
   try {
-    const tracked = gitExec('git ls-files').trim().split('\n').filter(Boolean);
+    const tracked = gitExec('ls-files').trim().split('\n').filter(Boolean);
     for (const file of tracked) {
       try {
-        gitExec(`git check-ignore --no-index -q "${file}"`);
+        gitExec('check-ignore', '--no-index', '-q', file);
         findings.trackedIgnored.push(file);
       } catch (e) { /* not ignored */ }
     }
@@ -731,8 +731,8 @@ function cmdCleanScan() {
   try {
     const mainBranch = detectMainBranch();
     if (mainBranch) {
-      const currentBranch = gitExec('git rev-parse --abbrev-ref HEAD').trim();
-      const raw = gitExec(`git branch --merged ${mainBranch}`).trim();
+      const currentBranch = gitExec('rev-parse', '--abbrev-ref', 'HEAD').trim();
+      const raw = gitExec('branch', '--merged', mainBranch).trim();
       if (raw) {
         findings.mergedBranches = raw.split('\n')
           .map(b => b.replace('*', '').trim())
@@ -744,7 +744,7 @@ function cmdCleanScan() {
   // 3. Ignored files on disk (git clean preview)
   findings.ignoredFiles = { count: 0, preview: [] };
   try {
-    const raw = gitExec('git clean -fdXn').trim();
+    const raw = gitExec('clean', '-fdXn').trim();
     if (raw) {
       const lines = raw.split('\n').filter(Boolean);
       findings.ignoredFiles.count = lines.length;
@@ -787,7 +787,7 @@ function cmdCleanScan() {
   // 6. Remote prunable refs
   findings.prunableRefs = [];
   try {
-    const raw = gitExec('git remote prune origin --dry-run 2>&1').trim();
+    const raw = gitExecShell('git remote prune origin --dry-run 2>&1').trim();
     if (raw) {
       const pruned = raw.split('\n').filter(l => l.includes('[would prune]'));
       findings.prunableRefs = pruned.map(l => l.replace(/.*\[would prune\]\s*/, '').trim());
@@ -812,7 +812,7 @@ function cmdCleanScan() {
 // ─── Git Clean: Execute selected categories ───
 function cmdCleanExec() {
   try {
-    gitExec('git rev-parse --git-dir');
+    gitExec('rev-parse', '--git-dir');
   } catch (e) {
     return output({ ok: false, error: 'Not a git repository.' });
   }
@@ -826,17 +826,17 @@ function cmdCleanExec() {
 
   if (selected.has('tracked')) {
     try {
-      const tracked = gitExec('git ls-files').trim().split('\n').filter(Boolean);
+      const tracked = gitExec('ls-files').trim().split('\n').filter(Boolean);
       const toUntrack = [];
       for (const file of tracked) {
-        try { gitExec(`git check-ignore --no-index -q "${file}"`); toUntrack.push(file); } catch (e) {}
+        try { gitExec('check-ignore', '--no-index', '-q', file); toUntrack.push(file); } catch (e) {}
       }
       if (toUntrack.length > 0) {
-        for (const f of toUntrack) { try { gitExec(`git rm --cached "${f}"`); } catch (e) {} }
+        for (const f of toUntrack) { try { gitExec('rm', '--cached', f); } catch (e) {} }
         try {
-          gitExec('git add .gitignore 2>/dev/null || true');
-          gitExec('git add -u');
-          gitExec('git commit -m "chore: untrack ignored files" --no-verify');
+          gitExecShell('git add .gitignore 2>/dev/null || true');
+          gitExec('add', '-u');
+          gitExec('commit', '-m', 'chore: untrack ignored files', '--no-verify');
         } catch (e) {}
         actions.push({ type: 'untracked', count: toUntrack.length, files: toUntrack });
       }
@@ -846,13 +846,13 @@ function cmdCleanExec() {
   if (selected.has('branches')) {
     try {
       const mainBranch = detectMainBranch();
-      const currentBranch = gitExec('git rev-parse --abbrev-ref HEAD').trim();
+      const currentBranch = gitExec('rev-parse', '--abbrev-ref', 'HEAD').trim();
       if (mainBranch) {
-        const raw = gitExec(`git branch --merged ${mainBranch}`).trim();
+        const raw = gitExec('branch', '--merged', mainBranch).trim();
         if (raw) {
           raw.split('\n').map(b => b.replace('*', '').trim())
             .filter(b => b.startsWith('vela/') && b !== mainBranch && b !== currentBranch)
-            .forEach(b => { try { gitExec(`git branch -d "${b}"`); actions.push({ type: 'branch_deleted', branch: b }); } catch (e) {} });
+            .forEach(b => { try { gitExec('branch', '-d', b); actions.push({ type: 'branch_deleted', branch: b }); } catch (e) {} });
         }
       }
     } catch (e) {}
@@ -860,7 +860,7 @@ function cmdCleanExec() {
 
   if (selected.has('ignored')) {
     try {
-      const cleaned = gitExec('git clean -fdX').trim();
+      const cleaned = gitExec('clean', '-fdX').trim();
       if (cleaned) actions.push({ type: 'ignored_cleaned', count: cleaned.split('\n').filter(Boolean).length });
     } catch (e) {}
   }
@@ -899,15 +899,15 @@ function cmdCleanExec() {
   }
 
   if (selected.has('prune')) {
-    try { gitExec('git remote prune origin'); actions.push({ type: 'remote_pruned' }); } catch (e) {}
+    try { gitExec('remote', 'prune', 'origin'); actions.push({ type: 'remote_pruned' }); } catch (e) {}
   }
 
   output({ ok: true, command: 'clean-exec', actions, message: `🧹 ${actions.length}개 작업 완료.` });
 }
 
 function detectMainBranch() {
-  try { gitExec('git rev-parse --verify main'); return 'main'; } catch (e) {}
-  try { gitExec('git rev-parse --verify master'); return 'master'; } catch (e) {}
+  try { gitExec('rev-parse', '--verify', 'main'); return 'main'; } catch (e) {}
+  try { gitExec('rev-parse', '--verify', 'master'); return 'master'; } catch (e) {}
   return null;
 }
 
@@ -1501,25 +1501,29 @@ function cleanupCancelledArtifacts(hoursOld) {
 
 // ─── Git Helpers ───
 
-function gitExec(cmd) {
+function gitExec(...args) {
+  return execFileSync('git', args, { cwd: CWD, stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 }).toString();
+}
+
+function gitExecShell(cmd) {
   return execSync(cmd, { cwd: CWD, stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 }).toString();
 }
 
 function snapshotGitState() {
   try {
-    gitExec('git rev-parse --git-dir');
+    gitExec('rev-parse', '--git-dir');
   } catch (e) {
     return { is_repo: false };
   }
 
   try {
-    const currentBranch = gitExec('git rev-parse --abbrev-ref HEAD').trim();
-    const status = gitExec('git status --porcelain').trim();
-    const headHash = gitExec('git rev-parse HEAD').trim();
+    const currentBranch = gitExec('rev-parse', '--abbrev-ref', 'HEAD').trim();
+    const status = gitExec('status', '--porcelain').trim();
+    const headHash = gitExec('rev-parse', 'HEAD').trim();
 
     let remote = null;
     try {
-      remote = gitExec('git remote').trim().split('\n')[0] || null;
+      remote = gitExec('remote').trim().split('\n')[0] || null;
     } catch (e) {}
 
     return {
