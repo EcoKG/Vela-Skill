@@ -71,4 +71,8 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => process.exit(0));
+main().catch((e) => {
+  process.stderr.write('⛵ [Vela] Stop hook error: ' + (e && e.message || String(e)) + '\n');
+  process.stdout.write(JSON.stringify({ decision: 'block', reason: 'Stop hook crashed: ' + (e && e.message || String(e)) }));
+  process.exit(0);
+});

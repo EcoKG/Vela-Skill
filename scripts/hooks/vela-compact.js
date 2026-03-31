@@ -31,43 +31,54 @@ async function main() {
   const state = findActivePipeline(velaDir);
   if (!state) process.exit(0);
 
-  const compactFile = path.join(velaDir, 'state', 'compact-context.json');
   const stateDir = path.join(velaDir, 'state');
+  const compactFile = path.join(stateDir, 'compact-context.json');
 
-  // Determine if PreCompact or PostCompact based on whether compact-context exists
-  // PreCompact: save state
-  // PostCompact: inject state (file exists from PreCompact)
+  // Determine event type from hook input
+  const eventName = input.hook_event_name || '';
 
-  const step = state.current_step;
-  const ptype = state.pipeline_type;
-  const request = state.request;
-  const artifactDir = state._artifactDir;
+  if (eventName === 'PreCompact') {
+    // PreCompact: save state only, no output
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
 
-  // Always save/update the compact context
-  if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    const compactContext = {
+      pipeline_type: state.pipeline_type,
+      current_step: state.current_step,
+      request: state.request,
+      completed_steps: state.completed_steps || [],
+      artifact_dir: state._artifactDir,
+      git: state.git || null,
+      saved_at: new Date().toISOString()
+    };
 
-  const compactContext = {
-    pipeline_type: ptype,
-    current_step: step,
-    request: request,
-    completed_steps: state.completed_steps || [],
-    artifact_dir: artifactDir,
-    git: state.git || null,
-    saved_at: new Date().toISOString()
-  };
+    fs.writeFileSync(compactFile, JSON.stringify(compactContext, null, 2));
+    process.exit(0);
+  }
 
-  fs.writeFileSync(compactFile, JSON.stringify(compactContext, null, 2));
+  // PostCompact: read saved context and inject additionalContext
+  let ctx;
+  try {
+    ctx = JSON.parse(fs.readFileSync(compactFile, 'utf-8'));
+  } catch (e) {
+    // No saved context — fall back to live state
+    ctx = {
+      pipeline_type: state.pipeline_type,
+      current_step: state.current_step,
+      request: state.request,
+      completed_steps: state.completed_steps || [],
+      artifact_dir: state._artifactDir
+    };
+  }
 
-  // Inject context back (works for both pre and post)
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PostCompact',
       additionalContext:
         `⛵ [Vela] 파이프라인 컨텍스트 복원:\n` +
-        `  🧭 ${ptype} │ Step: ${step}\n` +
-        `  Task: ${request}\n` +
-        `  Completed: ${(state.completed_steps || []).join(' → ')}\n` +
-        `  Artifact: ${artifactDir}\n` +
+        `  🧭 ${ctx.pipeline_type} │ Step: ${ctx.current_step}\n` +
+        `  Task: ${ctx.request}\n` +
+        `  Completed: ${(ctx.completed_steps || []).join(' → ')}\n` +
+        `  Artifact: ${ctx.artifact_dir}\n` +
         `  이 파이프라인을 계속 진행하세요. node .vela/cli/vela-engine.js state 로 현재 상태를 확인하세요.`
     }
   }));

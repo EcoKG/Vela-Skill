@@ -15,24 +15,40 @@ const CWD = process.cwd();
 const VELA_DIR = path.join(CWD, '.vela');
 const ARTIFACTS_DIR = path.join(VELA_DIR, 'artifacts');
 
-// Find active or most recent pipeline
+// Find active or most recent pipeline (flat format: YYYY-MM-DD_id_slug/)
 let artifactDir = null;
 if (fs.existsSync(ARTIFACTS_DIR)) {
-  const dateDirs = fs.readdirSync(ARTIFACTS_DIR)
-    .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
-  for (const dd of dateDirs) {
-    const dp = path.join(ARTIFACTS_DIR, dd);
-    const slugs = fs.readdirSync(dp).filter(d => {
-      try { return fs.statSync(path.join(dp, d)).isDirectory(); } catch { return false; }
-    }).sort().reverse();
-    for (const s of slugs) {
-      const sp = path.join(dp, s, 'pipeline-state.json');
-      if (fs.existsSync(sp)) {
-        artifactDir = path.join(dp, s);
-        break;
-      }
+  // Primary: flat structure artifacts/{date}_{id}_{slug}/pipeline-state.json
+  const flatDirs = fs.readdirSync(ARTIFACTS_DIR)
+    .filter(d => /^\d{4}-\d{2}-\d{2}_/.test(d))
+    .filter(d => { try { return fs.statSync(path.join(ARTIFACTS_DIR, d)).isDirectory(); } catch { return false; } })
+    .sort().reverse();
+  for (const dir of flatDirs) {
+    const sp = path.join(ARTIFACTS_DIR, dir, 'pipeline-state.json');
+    if (fs.existsSync(sp)) {
+      artifactDir = path.join(ARTIFACTS_DIR, dir);
+      break;
     }
-    if (artifactDir) break;
+  }
+
+  // Backward compatibility: nested structure artifacts/{date}/{slug}/
+  if (!artifactDir) {
+    const dateDirs = fs.readdirSync(ARTIFACTS_DIR)
+      .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
+    for (const dd of dateDirs) {
+      const dp = path.join(ARTIFACTS_DIR, dd);
+      const nested = fs.readdirSync(dp).filter(d => {
+        try { return fs.statSync(path.join(dp, d)).isDirectory(); } catch { return false; }
+      }).sort().reverse();
+      for (const s of nested) {
+        const sp = path.join(dp, s, 'pipeline-state.json');
+        if (fs.existsSync(sp)) {
+          artifactDir = path.join(dp, s);
+          break;
+        }
+      }
+      if (artifactDir) break;
+    }
   }
 }
 

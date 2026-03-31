@@ -143,15 +143,20 @@ function writeApprovalArtifact(artifactDir, step, approval) {
  * @param {Object} [extra] - Additional fields (e.g. auto_escalated)
  */
 function writeEscalation(cwd, score, extra) {
-  const stateDir = path.join(cwd, '.vela', 'state');
-  const escalationPath = path.join(stateDir, 'escalation.json');
-  fs.writeFileSync(escalationPath, JSON.stringify({
-    reason: 'reviewer_score_below_threshold',
-    score,
-    threshold: FAIL_THRESHOLD,
-    timestamp: new Date().toISOString(),
-    ...(extra || {})
-  }, null, 2), 'utf8');
+  try {
+    const stateDir = path.join(cwd, '.vela', 'state');
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    const escalationPath = path.join(stateDir, 'escalation.json');
+    fs.writeFileSync(escalationPath, JSON.stringify({
+      reason: 'reviewer_score_below_threshold',
+      score,
+      threshold: FAIL_THRESHOLD,
+      timestamp: new Date().toISOString(),
+      ...(extra || {})
+    }, null, 2), 'utf8');
+  } catch (e) {
+    // Escalation is supplementary — never crash the review result
+  }
 }
 
 /**

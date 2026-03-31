@@ -68,9 +68,14 @@ async function main() {
 
   if (is_interrupt) {
     // Interrupt is user-caused — reset counter
-    counter = { count: 0, last_tool: null, last_timestamp: null };
+    counter = { count: 0, step: null, last_tool: null, last_timestamp: null };
   } else {
+    // Step transition detected — reset count (failures in previous step are irrelevant)
+    if (counter.step && counter.step !== state.current_step) {
+      counter.count = 0;
+    }
     counter.count = (counter.count || 0) + 1;
+    counter.step = state.current_step;
     counter.last_tool = tool_name || 'unknown';
     counter.last_timestamp = Date.now();
   }
@@ -91,7 +96,7 @@ async function main() {
     // Reset counter after emitting warning
     try {
       const tmpPath = counterPath + '.tmp';
-      fs.writeFileSync(tmpPath, JSON.stringify({ count: 0, last_tool: null, last_timestamp: null }, null, 2));
+      fs.writeFileSync(tmpPath, JSON.stringify({ count: 0, step: null, last_tool: null, last_timestamp: null }, null, 2));
       fs.renameSync(tmpPath, counterPath);
     } catch (e) {}
   }
