@@ -72,6 +72,8 @@ fi
 # ─── Enable Agent Teams in global settings ───
 if command -v node &>/dev/null; then
   mkdir -p "$HOME/.claude"
+  # AUDIT-030: Backup settings.json before modification
+  cp "$SETTINGS" "$SETTINGS.bak" 2>/dev/null || true
   node -e "
     const fs = require('fs');
     const p = '$SETTINGS';
@@ -111,72 +113,78 @@ if command -v npm &>/dev/null; then
   fi
 fi
 
-# ─── Auto-upgrade existing local .vela/ projects ───
-# If install.sh is run from inside a project that already has .vela/,
-# automatically update the local project too (same as update.sh --local).
-if [ -d ".vela" ]; then
-  echo "  🧭 Detected existing .vela/ — auto-upgrading local project..."
+# ─── Shared function: sync local .vela/ project from source ───
+# Used by auto-upgrade block (below) and update.sh --local
+sync_local_project() {
+  local SRC="$1"
 
   # Hooks
-  cp "$SKILL_DIR/scripts/hooks/"*.js .vela/hooks/ 2>/dev/null
+  cp "$SRC/scripts/hooks/"*.js .vela/hooks/ 2>/dev/null
   mkdir -p .vela/hooks/shared
-  cp "$SKILL_DIR/scripts/hooks/shared/"*.js .vela/hooks/shared/ 2>/dev/null
+  cp "$SRC/scripts/hooks/shared/"*.js .vela/hooks/shared/ 2>/dev/null
 
   # CLI
   mkdir -p .vela/cli
-  cp "$SKILL_DIR/scripts/cli/"*.js .vela/cli/ 2>/dev/null
+  cp "$SRC/scripts/cli/"*.js .vela/cli/ 2>/dev/null
 
   # Cache
   mkdir -p .vela/cache
-  cp "$SKILL_DIR/scripts/cache/"*.js .vela/cache/ 2>/dev/null
+  cp "$SRC/scripts/cache/"*.js .vela/cache/ 2>/dev/null
 
   # Install script
-  cp "$SKILL_DIR/scripts/install.js" .vela/ 2>/dev/null
+  cp "$SRC/scripts/install.js" .vela/ 2>/dev/null
 
   # Statusline
-  cp "$SKILL_DIR/scripts/statusline.sh" .vela/ 2>/dev/null
+  cp "$SRC/scripts/statusline.sh" .vela/ 2>/dev/null
 
   # Agents (top-level + subdirectories)
   mkdir -p .vela/agents
-  cp "$SKILL_DIR/scripts/agents/"*.md .vela/agents/ 2>/dev/null
+  cp "$SRC/scripts/agents/"*.md .vela/agents/ 2>/dev/null
   for sub in pm researcher planner executor reviewer conflict-manager leader; do
-    if [ -d "$SKILL_DIR/scripts/agents/$sub" ]; then
+    if [ -d "$SRC/scripts/agents/$sub" ]; then
       mkdir -p ".vela/agents/$sub"
-      cp "$SKILL_DIR/scripts/agents/$sub/"*.md ".vela/agents/$sub/" 2>/dev/null
+      cp "$SRC/scripts/agents/$sub/"*.md ".vela/agents/$sub/" 2>/dev/null
     fi
   done
 
   # Guidelines
   mkdir -p .vela/guidelines
-  cp "$SKILL_DIR/scripts/guidelines/"*.md .vela/guidelines/ 2>/dev/null
+  cp "$SRC/scripts/guidelines/"*.md .vela/guidelines/ 2>/dev/null
 
   # Templates (skip config.json to preserve user settings)
   mkdir -p .vela/templates
-  cp "$SKILL_DIR/templates/pipeline.json" .vela/templates/ 2>/dev/null
-  cp "$SKILL_DIR/templates/presets.json" .vela/templates/ 2>/dev/null
+  cp "$SRC/templates/pipeline.json" .vela/templates/ 2>/dev/null
+  cp "$SRC/templates/presets.json" .vela/templates/ 2>/dev/null
 
   # References
   mkdir -p .vela/references
-  cp "$SKILL_DIR/references/"*.md .vela/references/ 2>/dev/null
+  cp "$SRC/references/"*.md .vela/references/ 2>/dev/null
 
   # Note: skills/ directory is NOT copied to .vela/ — skills live only in the skill repository
 
   # Test fixtures
-  if [ -d "$SKILL_DIR/test-fixtures" ]; then
+  if [ -d "$SRC/test-fixtures" ]; then
     rm -rf .vela/test-fixtures 2>/dev/null
-    cp -r "$SKILL_DIR/test-fixtures" .vela/test-fixtures
+    cp -r "$SRC/test-fixtures" .vela/test-fixtures
   fi
 
   # Update .claude/agents/vela.md
   if [ -d ".claude/agents" ]; then
-    cp "$SKILL_DIR/scripts/agents/vela.md" .claude/agents/ 2>/dev/null
+    cp "$SRC/scripts/agents/vela.md" .claude/agents/ 2>/dev/null
   fi
 
   # Re-run install to update settings.local.json with new hooks
   if [ -f ".vela/install.js" ]; then
     node .vela/install.js 2>/dev/null | tail -1
   fi
+}
 
+# ─── Auto-upgrade existing local .vela/ projects ───
+# If install.sh is run from inside a project that already has .vela/,
+# automatically update the local project too (same as update.sh --local).
+if [ -d ".vela" ]; then
+  echo "  🧭 Detected existing .vela/ — auto-upgrading local project..."
+  sync_local_project "$SKILL_DIR"
   echo "  ✦ Local project auto-upgraded"
 fi
 

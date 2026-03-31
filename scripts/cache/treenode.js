@@ -271,9 +271,11 @@ async function sqlJsIngest(entries) {
   const { db } = await sqlJsOpen();
   db.run('BEGIN TRANSACTION');
   for (const e of entries) {
-    // Get current count
-    const res = db.exec(`SELECT access_count FROM treenode WHERE path='${esc(e.filePath)}'`);
-    const count = (res.length > 0 && res[0].values.length > 0) ? res[0].values[0][0] : 0;
+    // Get current count — parameterized query (AUDIT-031)
+    const stmt = db.prepare('SELECT access_count FROM treenode WHERE path=?');
+    stmt.bind([e.filePath]);
+    const count = stmt.step() ? stmt.get()[0] : 0;
+    stmt.free();
     db.run(
       `INSERT OR REPLACE INTO treenode (path, dir, name, ext, relative_path, last_seen, access_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [e.filePath, e.dir, e.name, e.ext, e.relativePath, e.timestamp, count + 1]
@@ -286,10 +288,17 @@ async function sqlJsIngest(entries) {
 
 async function sqlJsQuery(prefix) {
   const { db } = await sqlJsOpen();
-  const result = db.exec(`SELECT path, relative_path, last_seen, access_count FROM treenode WHERE path LIKE '${esc(prefix)}%' ORDER BY path`);
+  // Parameterized LIKE query (AUDIT-031) — bind prefix with wildcard appended
+  const stmt = db.prepare('SELECT path, relative_path, last_seen, access_count FROM treenode WHERE path LIKE ? ORDER BY path');
+  stmt.bind([prefix + '%']);
+  const rows = [];
+  while (stmt.step()) {
+    const r = stmt.get();
+    rows.push({ path: r[0], relative_path: r[1], last_seen: r[2], access_count: r[3] });
+  }
+  stmt.free();
   db.close();
-  if (result.length === 0) return [];
-  return result[0].values.map(r => ({ path: r[0], relative_path: r[1], last_seen: r[2], access_count: r[3] }));
+  return rows;
 }
 
 async function sqlJsStats() {
@@ -479,7 +488,10 @@ async function dbExportAll() {
 // ─── Utilities ───
 
 function esc(str) {
-  return (str || '').replace(/'/g, "''");
+  return (str || '')
+    .replace(/\0/g, '')       // Strip NULL bytes
+    .replace(/\\/g, '\\\\')   // Double backslashes
+    .replace(/'/g, "''");     // Escape single quotes
 }
 
 function output(data) {
