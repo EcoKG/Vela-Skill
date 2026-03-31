@@ -589,6 +589,7 @@ bash scripts/tests/test-notification-hook.sh  # 데스크톱 알림
 | v2.5 | M002 | Hook 4→18개, Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification |
 | v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단 |
 | v3.1 | M004 | 분석 보고서, dep-analyzer + sdk-analyzer, vela-analyze CLI, PDF 생성, `/vela analyze` |
+| v3.1 | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션+유니코드 프로그레스 바, Orchestrator 박스 드로잉, 18개 hook description 항해 세계관 통합 |
 
 ---
 

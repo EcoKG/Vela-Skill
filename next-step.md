@@ -8,6 +8,7 @@
 | **v2.5** | M002 | Hook API 고급화 — Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification. Hook 4→18개 | ✅ 완료 |
 | **v3.0** | M003 | Agent SDK 통합 — 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단, 81 assertion 통합 테스트 | ✅ 완료 |
 | **v3.1** | M004 | 분석 보고서 — dep-analyzer + sdk-analyzer 5관점, vela-analyze CLI (deps/report/run/full), PDF 생성, `/vela analyze` 스킬 통합, E2E 22/22 PASS | ✅ 완료 |
+| **v3.1** | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션(green/yellow/red)+유니코드 프로그레스 바(█░), Orchestrator 유니코드 박스 드로잉(╭╮╰╯│─), 18개 hook description 항해 세계관 통합, spinner/tips/announcements 전면 교체 | ✅ 완료 |
 
 ---
 
