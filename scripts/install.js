@@ -81,92 +81,92 @@ const VELA_HOOKS = [
     matcher: 'PreToolUse',
     hookId: 'vela-gate-keeper',
     script: 'vela-gate-keeper.js',
-    description: '⛵ Checking harbor clearance...'
+    description: '⚓ 수문장이 입항을 허가합니다...'
   },
   {
     matcher: 'PreToolUse',
     hookId: 'vela-gate-guard',
     script: 'vela-gate-guard.js',
-    description: '🌟 Verifying navigation chart...'
+    description: '🧭 항해 규칙을 대조합니다...'
   },
   {
     matcher: 'UserPromptSubmit',
     hookId: 'vela-orchestrator',
     script: 'vela-orchestrator.js',
-    description: '🧭 Plotting current position...'
+    description: '✦ 별자리를 읽고 항로를 설정합니다...'
   },
   {
     matcher: 'PostToolUse',
     hookId: 'vela-tracker',
     script: 'vela-tracker.js',
-    description: '🔭 Logging voyage data...'
+    description: '🔭 항해 일지에 기록합니다...'
   },
   {
     matcher: 'Stop',
     hookId: 'vela-stop',
     script: 'vela-stop.js',
-    description: '⛵ Checking active voyage...'
+    description: '⚓ 정박 준비를 확인합니다...'
   },
   {
     matcher: 'SessionStart',
     hookId: 'vela-session-start',
     script: 'vela-session-start.js',
-    description: '⛵ Scanning for interrupted voyages...'
+    description: '🔭 이전 항해의 흔적을 탐색합니다...'
   },
   {
     matcher: 'PreCompact',
     hookId: 'vela-compact',
     script: 'vela-compact.js',
-    description: '✦ Preserving navigation state...'
+    description: '✦ 항해 기억을 보존합니다...'
   },
   {
     matcher: 'PostCompact',
     hookId: 'vela-compact',
     script: 'vela-compact.js',
-    description: '✦ Restoring navigation state...'
+    description: '✦ 항해 기억을 복원합니다...'
   },
   {
     matcher: 'SubagentStart',
     hookId: 'vela-subagent-start',
     script: 'vela-subagent-start.js',
-    description: '⛵ Briefing crew member...'
+    description: '🌟 선원에게 임무를 전달합니다...'
   },
   {
     matcher: 'TaskCompleted',
     hookId: 'vela-task-completed',
     script: 'vela-task-completed.js',
-    description: '✦ Verifying voyage milestone...'
+    description: '🌟 항해 이정표를 확인합니다...'
   },
   {
     matcher: 'SubagentStop',
     hookId: 'vela-subagent-stop',
     script: 'vela-subagent-stop.js',
-    description: '⛵ Harvesting crew report...'
+    description: '🧭 선원의 보고를 수집합니다...'
   },
   {
     matcher: 'PermissionRequest',
     hookId: 'vela-permission',
     script: 'vela-permission.js',
     if: 'Write(*)|Edit(*)|NotebookEdit(*)',
-    description: '⛵ Checking crew clearance...'
+    description: '⛵ 조타 권한을 확인합니다...'
   },
   {
     matcher: 'PostToolUseFailure',
     hookId: 'vela-failure',
     script: 'vela-failure.js',
-    description: '🔭 Recording tool failure...'
+    description: '🛟 항해 사고를 기록합니다...'
   },
   {
     matcher: 'StopFailure',
     hookId: 'vela-stop-failure',
     script: 'vela-stop-failure.js',
-    description: '🛟 Preserving voyage state...'
+    description: '🛟 비상 상태를 보존합니다...'
   },
   {
     matcher: 'TeammateIdle',
     hookId: 'vela-teammate-idle',
     script: 'vela-teammate-idle.js',
-    description: '⛵ Checking idle crew...'
+    description: '🌊 대기 선원의 상태를 점검합니다...'
   },
   {
     matcher: 'PostToolUse',
@@ -174,7 +174,7 @@ const VELA_HOOKS = [
     hookType: 'prompt',
     toolMatcher: 'Edit|Write',
     prompt: 'Review this code change for bugs, security issues, and style problems. Context: $ARGUMENTS. Respond with JSON: {"ok": true} if acceptable, or {"ok": false, "reason": "description of issues found"} if there are problems. Focus on: 1) Logic errors 2) Security vulnerabilities 3) Missing error handling 4) Breaking changes.',
-    description: '🔍 Reviewing code change...'
+    description: '🔭 코드 변경을 검수합니다...'
   },
   {
     matcher: 'PostToolUse',
@@ -183,13 +183,13 @@ const VELA_HOOKS = [
     toolMatcher: 'Edit|Write',
     script: 'vela-test-async.js',
     async: true,
-    description: '🧪 Running related tests...'
+    description: '🌊 시험 항해를 실행합니다...'
   },
   {
     matcher: 'Notification',
     hookId: 'vela-notification',
     script: 'vela-notification.js',
-    description: '🔔 Sending desktop notification...'
+    description: '🌟 신호탄을 발사합니다...'
   }
 ];
 
@@ -340,10 +340,10 @@ function install() {
   settings.spinnerVerbs = {
     mode: 'replace',
     verbs: [
-      '⛵ Navigating', '🧭 Charting', '✦ Stargazing',
-      '🔭 Observing', '⚓ Anchoring', '🌟 Reading Stars',
-      '🧭 Plotting Course', '⛵ Setting Sail', '✦ Crossing Meridian',
-      '🔭 Scanning Horizon', '⛵ Catching Wind', '🌟 Trimming Sails'
+      '⛵ 돛을 올리는 중', '🧭 해도를 펼치는 중', '✦ 별자리를 읽는 중',
+      '🔭 수평선을 살피는 중', '⚓ 닻을 내리는 중', '🌟 항성을 추적하는 중',
+      '🌊 조류를 읽는 중', '⛵ 순풍을 잡는 중', '✦ 자오선을 넘는 중',
+      '🧭 경도를 측정하는 중', '🔭 성운을 관측하는 중', '🌟 천구를 회전하는 중'
     ]
   };
 
@@ -356,28 +356,28 @@ function install() {
       '🧭 연구 → 계획 → 실행 → 검증 — 항로를 건너뛰지 마라',
       '✦ Reviewer는 독립적으로 판단한다 — 편향 없는 별빛',
       '⛵ Vela(돛자리)는 하늘에서 가장 큰 별자리의 일부였다',
-      '🔭 research.md → plan.md → approval.json — 항해의 기록',
+      '🔭 각 단계는 산출물로 증명된다 — 기록 없는 항해는 없다',
       '🧭 /vela:start 로 새로운 항해를 시작하세요',
       '✦ 같은 세션에서 자기 작업을 검증하면 편향이 생긴다',
-      '⛵ Gate Keeper는 수문장, Gate Guard는 가이드라인',
-      '🌟 approval 없이는 다음 항구로 갈 수 없다',
-      '🔭 Agent Teams — 독립된 선원들이 각자의 관점으로 항해한다',
-      '⛵ 구조로 강제하라, 지시로 의존하지 마라'
+      '⚓ Gate Keeper는 수문장, Gate Guard는 항해 규칙의 안내자',
+      '🌟 승인 없이는 다음 항구로 갈 수 없다 — 검증이 통행증이다',
+      '🌊 Agent Teams — 독립된 선원들이 각자의 관점으로 항해한다',
+      '⛵ 구조로 강제하라, 지시에 의존하지 마라'
     ]
   };
 
   // ─── Startup Announcements ───
   settings.companyAnnouncements = [
-    '⛵ Vela Engine — 별자리가 항해를 안내합니다. /vela:start 로 파이프라인을 시작하세요.',
-    '✦ Vela — 구조로 강제하고, 독립으로 검증하고, 기록으로 추적합니다.',
-    '🧭 Vela Pipeline — 연구 → 계획 → 실행 → 검증. 항로를 따르세요.',
-    '⛵ 모든 항해에는 별자리가 길을 안내합니다. Vela와 함께.'
+    '⛵ Vela Engine 기관 점화 — 별자리가 오늘의 항로를 안내합니다.',
+    '✦ 구조로 강제하고, 독립으로 검증하고, 기록으로 추적한다 — Vela의 세 가지 원칙.',
+    '🧭 연구 → 계획 → 실행 → 검증. 돛자리의 네 별이 항로를 비춥니다.',
+    '🌟 모든 위대한 항해는 첫 닻을 올리는 것에서 시작됩니다. /vela:start'
   ];
 
   // ─── Attribution (커밋/PR에 Vela 참조) ───
   settings.attribution = {
-    commit: '⛵ Managed by Vela Engine (https://github.com/EcoKG/vela)',
-    pr: '⛵ This PR was managed by [Vela Engine](https://github.com/EcoKG/vela) — pipeline-driven development governance.'
+    commit: '⛵ Navigated by Vela Engine (https://github.com/EcoKG/vela)',
+    pr: '⛵ This PR was navigated by [Vela Engine](https://github.com/EcoKG/vela) — 별자리 항해 기반 개발 거버넌스.'
   };
 
   // ─── Auto Mode (sandbox-safe bash auto-allow) ───
