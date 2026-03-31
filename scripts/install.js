@@ -192,6 +192,102 @@ const VELA_HOOKS = [
   }
 ];
 
+// ─── File Manifest (single source of truth for managed files) ───
+
+const FILE_MANIFEST = [
+  // Hook files
+  { src: 'scripts/hooks/vela-gate-keeper.js', dst: 'hooks/vela-gate-keeper.js' },
+  { src: 'scripts/hooks/vela-gate-guard.js', dst: 'hooks/vela-gate-guard.js' },
+  { src: 'scripts/hooks/vela-orchestrator.js', dst: 'hooks/vela-orchestrator.js' },
+  { src: 'scripts/hooks/vela-tracker.js', dst: 'hooks/vela-tracker.js' },
+  { src: 'scripts/hooks/vela-stop.js', dst: 'hooks/vela-stop.js' },
+  { src: 'scripts/hooks/vela-session-start.js', dst: 'hooks/vela-session-start.js' },
+  { src: 'scripts/hooks/vela-compact.js', dst: 'hooks/vela-compact.js' },
+  { src: 'scripts/hooks/vela-subagent-start.js', dst: 'hooks/vela-subagent-start.js' },
+  { src: 'scripts/hooks/vela-task-completed.js', dst: 'hooks/vela-task-completed.js' },
+  { src: 'scripts/hooks/vela-subagent-stop.js', dst: 'hooks/vela-subagent-stop.js' },
+  { src: 'scripts/hooks/vela-permission.js', dst: 'hooks/vela-permission.js' },
+  { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
+  { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
+  { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
+  { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
+  { src: 'scripts/hooks/vela-notification.js', dst: 'hooks/vela-notification.js' },
+  { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
+  { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
+  { src: 'scripts/hooks/shared/dep-analyzer.js', dst: 'hooks/shared/dep-analyzer.js' },
+  // CLI tools
+  { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
+  { src: 'scripts/cli/vela-read.js', dst: 'cli/vela-read.js' },
+  { src: 'scripts/cli/vela-write.js', dst: 'cli/vela-write.js' },
+  { src: 'scripts/cli/vela-analyze.js', dst: 'cli/vela-analyze.js' },
+  { src: 'scripts/cli/vela-cost.js', dst: 'cli/vela-cost.js' },
+  { src: 'scripts/cli/vela-report.js', dst: 'cli/vela-report.js' },
+  // Cache
+  { src: 'scripts/cache/treenode.js', dst: 'cache/treenode.js' },
+  // Root-level managed files
+  { src: 'scripts/statusline.sh', dst: 'statusline.sh' },
+  // Top-level agent files
+  { src: 'scripts/agents/vela.md', dst: 'agents/vela.md' },
+  { src: 'scripts/agents/researcher.md', dst: 'agents/researcher.md' },
+  { src: 'scripts/agents/planner.md', dst: 'agents/planner.md' },
+  { src: 'scripts/agents/executor.md', dst: 'agents/executor.md' },
+  { src: 'scripts/agents/reviewer.md', dst: 'agents/reviewer.md' },
+  { src: 'scripts/agents/leader.md', dst: 'agents/leader.md' },
+  { src: 'scripts/agents/conflict-manager.md', dst: 'agents/conflict-manager.md' },
+  // Templates
+  { src: 'templates/pipeline.json', dst: 'templates/pipeline.json' },
+  { src: 'templates/presets.json', dst: 'templates/presets.json' },
+  { src: 'templates/config.json', dst: 'templates/config.json', skipOnUpgrade: true },
+  // References
+  { src: 'references/interactive-ui.md', dst: 'references/interactive-ui.md' },
+  { src: 'references/gates-and-guards.md', dst: 'references/gates-and-guards.md' },
+  { src: 'references/cli-reference.md', dst: 'references/cli-reference.md' },
+  { src: 'references/messages-en.md', dst: 'references/messages-en.md' },
+  // Agent tree — PM
+  { src: 'scripts/agents/pm/index.md', dst: 'agents/pm/index.md' },
+  { src: 'scripts/agents/pm/prompt-optimizer.md', dst: 'agents/pm/prompt-optimizer.md' },
+  { src: 'scripts/agents/pm/pipeline-flow.md', dst: 'agents/pm/pipeline-flow.md' },
+  { src: 'scripts/agents/pm/team-rules.md', dst: 'agents/pm/team-rules.md' },
+  { src: 'scripts/agents/pm/model-strategy.md', dst: 'agents/pm/model-strategy.md' },
+  { src: 'scripts/agents/pm/block-recovery.md', dst: 'agents/pm/block-recovery.md' },
+  // Agent tree — Researcher
+  { src: 'scripts/agents/researcher/index.md', dst: 'agents/researcher/index.md' },
+  { src: 'scripts/agents/researcher/hypothesis.md', dst: 'agents/researcher/hypothesis.md' },
+  { src: 'scripts/agents/researcher/security.md', dst: 'agents/researcher/security.md' },
+  { src: 'scripts/agents/researcher/architecture.md', dst: 'agents/researcher/architecture.md' },
+  { src: 'scripts/agents/researcher/quality.md', dst: 'agents/researcher/quality.md' },
+  // Agent tree — Executor
+  { src: 'scripts/agents/executor/index.md', dst: 'agents/executor/index.md' },
+  { src: 'scripts/agents/executor/tdd.md', dst: 'agents/executor/tdd.md' },
+  { src: 'scripts/agents/executor/file-ownership.md', dst: 'agents/executor/file-ownership.md' },
+  { src: 'scripts/agents/executor/worktree.md', dst: 'agents/executor/worktree.md' },
+  // Agent tree — Planner
+  { src: 'scripts/agents/planner/index.md', dst: 'agents/planner/index.md' },
+  { src: 'scripts/agents/planner/spec-format.md', dst: 'agents/planner/spec-format.md' },
+  { src: 'scripts/agents/planner/crosslayer.md', dst: 'agents/planner/crosslayer.md' },
+  // Agent tree — Reviewer
+  { src: 'scripts/agents/reviewer/index.md', dst: 'agents/reviewer/index.md' },
+  { src: 'scripts/agents/reviewer/scoring.md', dst: 'agents/reviewer/scoring.md' },
+  // Agent tree — Conflict Manager
+  { src: 'scripts/agents/conflict-manager/index.md', dst: 'agents/conflict-manager/index.md' },
+  { src: 'scripts/agents/conflict-manager/merge-procedure.md', dst: 'agents/conflict-manager/merge-procedure.md' },
+  { src: 'scripts/agents/conflict-manager/interface-watch.md', dst: 'agents/conflict-manager/interface-watch.md' },
+  // Guidelines
+  { src: 'scripts/guidelines/index.md', dst: 'guidelines/index.md' },
+  { src: 'scripts/guidelines/coding-standards.md', dst: 'guidelines/coding-standards.md' },
+  { src: 'scripts/guidelines/error-handling.md', dst: 'guidelines/error-handling.md' },
+  { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' },
+  // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
+  { src: 'scripts/hooks/shared/sdk-runner.js', dst: 'hooks/shared/sdk-runner.js' },
+  { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
+  { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
+  { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
+  { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
+  { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
+  // Security modules
+  { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
+];
+
 const command = (process.argv[2] && !process.argv[2].startsWith('-')) ? process.argv[2] : 'install';
 
 switch (command) {
@@ -637,86 +733,8 @@ function upgrade() {
   const skillBase = path.resolve(__dirname, '..');
   const results = { updated: [], added: [], skipped: [], errors: [] };
 
-  // Same file list as validate()
-  const upgradeFiles = [
-    { src: 'scripts/hooks/vela-gate-keeper.js', dst: 'hooks/vela-gate-keeper.js' },
-    { src: 'scripts/hooks/vela-gate-guard.js', dst: 'hooks/vela-gate-guard.js' },
-    { src: 'scripts/hooks/vela-orchestrator.js', dst: 'hooks/vela-orchestrator.js' },
-    { src: 'scripts/hooks/vela-tracker.js', dst: 'hooks/vela-tracker.js' },
-    { src: 'scripts/hooks/vela-stop.js', dst: 'hooks/vela-stop.js' },
-    { src: 'scripts/hooks/vela-session-start.js', dst: 'hooks/vela-session-start.js' },
-    { src: 'scripts/hooks/vela-compact.js', dst: 'hooks/vela-compact.js' },
-    { src: 'scripts/hooks/vela-subagent-start.js', dst: 'hooks/vela-subagent-start.js' },
-    { src: 'scripts/hooks/vela-task-completed.js', dst: 'hooks/vela-task-completed.js' },
-    { src: 'scripts/hooks/vela-subagent-stop.js', dst: 'hooks/vela-subagent-stop.js' },
-    { src: 'scripts/hooks/vela-permission.js', dst: 'hooks/vela-permission.js' },
-    { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
-    { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
-    { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
-    { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
-    { src: 'scripts/hooks/vela-notification.js', dst: 'hooks/vela-notification.js' },
-    { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
-    { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
-    { src: 'scripts/hooks/shared/dep-analyzer.js', dst: 'hooks/shared/dep-analyzer.js' },
-    { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
-    { src: 'scripts/cli/vela-read.js', dst: 'cli/vela-read.js' },
-    { src: 'scripts/cli/vela-write.js', dst: 'cli/vela-write.js' },
-    { src: 'scripts/cli/vela-analyze.js', dst: 'cli/vela-analyze.js' },
-    { src: 'scripts/cli/vela-cost.js', dst: 'cli/vela-cost.js' },
-    { src: 'scripts/cli/vela-report.js', dst: 'cli/vela-report.js' },
-    { src: 'scripts/cache/treenode.js', dst: 'cache/treenode.js' },
-    { src: 'scripts/statusline.sh', dst: 'statusline.sh' },
-    { src: 'scripts/agents/vela.md', dst: 'agents/vela.md' },
-    { src: 'scripts/agents/researcher.md', dst: 'agents/researcher.md' },
-    { src: 'scripts/agents/planner.md', dst: 'agents/planner.md' },
-    { src: 'scripts/agents/executor.md', dst: 'agents/executor.md' },
-    { src: 'scripts/agents/reviewer.md', dst: 'agents/reviewer.md' },
-    { src: 'scripts/agents/leader.md', dst: 'agents/leader.md' },
-    { src: 'scripts/agents/conflict-manager.md', dst: 'agents/conflict-manager.md' },
-    { src: 'templates/pipeline.json', dst: 'templates/pipeline.json' },
-    { src: 'templates/presets.json', dst: 'templates/presets.json' },
-    { src: 'references/interactive-ui.md', dst: 'references/interactive-ui.md' },
-    { src: 'references/gates-and-guards.md', dst: 'references/gates-and-guards.md' },
-    { src: 'references/cli-reference.md', dst: 'references/cli-reference.md' },
-    { src: 'references/messages-en.md', dst: 'references/messages-en.md' },
-    // Agent tree
-    { src: 'scripts/agents/pm/index.md', dst: 'agents/pm/index.md' },
-    { src: 'scripts/agents/pm/prompt-optimizer.md', dst: 'agents/pm/prompt-optimizer.md' },
-    { src: 'scripts/agents/pm/pipeline-flow.md', dst: 'agents/pm/pipeline-flow.md' },
-    { src: 'scripts/agents/pm/team-rules.md', dst: 'agents/pm/team-rules.md' },
-    { src: 'scripts/agents/pm/model-strategy.md', dst: 'agents/pm/model-strategy.md' },
-    { src: 'scripts/agents/pm/block-recovery.md', dst: 'agents/pm/block-recovery.md' },
-    { src: 'scripts/agents/researcher/index.md', dst: 'agents/researcher/index.md' },
-    { src: 'scripts/agents/researcher/hypothesis.md', dst: 'agents/researcher/hypothesis.md' },
-    { src: 'scripts/agents/researcher/security.md', dst: 'agents/researcher/security.md' },
-    { src: 'scripts/agents/researcher/architecture.md', dst: 'agents/researcher/architecture.md' },
-    { src: 'scripts/agents/researcher/quality.md', dst: 'agents/researcher/quality.md' },
-    { src: 'scripts/agents/executor/index.md', dst: 'agents/executor/index.md' },
-    { src: 'scripts/agents/executor/tdd.md', dst: 'agents/executor/tdd.md' },
-    { src: 'scripts/agents/executor/file-ownership.md', dst: 'agents/executor/file-ownership.md' },
-    { src: 'scripts/agents/executor/worktree.md', dst: 'agents/executor/worktree.md' },
-    { src: 'scripts/agents/planner/index.md', dst: 'agents/planner/index.md' },
-    { src: 'scripts/agents/planner/spec-format.md', dst: 'agents/planner/spec-format.md' },
-    { src: 'scripts/agents/planner/crosslayer.md', dst: 'agents/planner/crosslayer.md' },
-    { src: 'scripts/agents/reviewer/index.md', dst: 'agents/reviewer/index.md' },
-    { src: 'scripts/agents/reviewer/scoring.md', dst: 'agents/reviewer/scoring.md' },
-    { src: 'scripts/agents/conflict-manager/index.md', dst: 'agents/conflict-manager/index.md' },
-    { src: 'scripts/agents/conflict-manager/merge-procedure.md', dst: 'agents/conflict-manager/merge-procedure.md' },
-    { src: 'scripts/agents/conflict-manager/interface-watch.md', dst: 'agents/conflict-manager/interface-watch.md' },
-    { src: 'scripts/guidelines/index.md', dst: 'guidelines/index.md' },
-    { src: 'scripts/guidelines/coding-standards.md', dst: 'guidelines/coding-standards.md' },
-    { src: 'scripts/guidelines/error-handling.md', dst: 'guidelines/error-handling.md' },
-    { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' },
-    // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
-    { src: 'scripts/hooks/shared/sdk-runner.js', dst: 'hooks/shared/sdk-runner.js' },
-    { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
-    { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
-    { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
-    { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
-    { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
-    // Security modules
-    { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
-  ];
+  // Filtered view: exclude files marked skipOnUpgrade (e.g. config.json)
+  const upgradeFiles = FILE_MANIFEST.filter(f => !f.skipOnUpgrade);
 
   // Do NOT overwrite config.json (user may have customized it)
   // Do NOT overwrite install.js itself
@@ -793,87 +811,7 @@ function validate() {
 
   // 2. Required files — check and copy from skill if missing
   const skillBase = path.resolve(__dirname, '..');
-  const requiredFiles = [
-    { src: 'scripts/hooks/vela-gate-keeper.js', dst: 'hooks/vela-gate-keeper.js' },
-    { src: 'scripts/hooks/vela-gate-guard.js', dst: 'hooks/vela-gate-guard.js' },
-    { src: 'scripts/hooks/vela-orchestrator.js', dst: 'hooks/vela-orchestrator.js' },
-    { src: 'scripts/hooks/vela-tracker.js', dst: 'hooks/vela-tracker.js' },
-    { src: 'scripts/hooks/vela-stop.js', dst: 'hooks/vela-stop.js' },
-    { src: 'scripts/hooks/vela-session-start.js', dst: 'hooks/vela-session-start.js' },
-    { src: 'scripts/hooks/vela-compact.js', dst: 'hooks/vela-compact.js' },
-    { src: 'scripts/hooks/vela-subagent-start.js', dst: 'hooks/vela-subagent-start.js' },
-    { src: 'scripts/hooks/vela-task-completed.js', dst: 'hooks/vela-task-completed.js' },
-    { src: 'scripts/hooks/vela-subagent-stop.js', dst: 'hooks/vela-subagent-stop.js' },
-    { src: 'scripts/hooks/vela-permission.js', dst: 'hooks/vela-permission.js' },
-    { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
-    { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
-    { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
-    { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
-    { src: 'scripts/hooks/vela-notification.js', dst: 'hooks/vela-notification.js' },
-    { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
-    { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
-    { src: 'scripts/hooks/shared/dep-analyzer.js', dst: 'hooks/shared/dep-analyzer.js' },
-    { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
-    { src: 'scripts/cli/vela-read.js', dst: 'cli/vela-read.js' },
-    { src: 'scripts/cli/vela-write.js', dst: 'cli/vela-write.js' },
-    { src: 'scripts/cli/vela-analyze.js', dst: 'cli/vela-analyze.js' },
-    { src: 'scripts/cli/vela-cost.js', dst: 'cli/vela-cost.js' },
-    { src: 'scripts/cli/vela-report.js', dst: 'cli/vela-report.js' },
-    { src: 'scripts/cache/treenode.js', dst: 'cache/treenode.js' },
-    { src: 'scripts/statusline.sh', dst: 'statusline.sh' },
-    { src: 'scripts/agents/vela.md', dst: 'agents/vela.md' },
-    { src: 'scripts/agents/researcher.md', dst: 'agents/researcher.md' },
-    { src: 'scripts/agents/planner.md', dst: 'agents/planner.md' },
-    { src: 'scripts/agents/executor.md', dst: 'agents/executor.md' },
-    { src: 'scripts/agents/reviewer.md', dst: 'agents/reviewer.md' },
-    { src: 'scripts/agents/leader.md', dst: 'agents/leader.md' },
-    { src: 'scripts/agents/conflict-manager.md', dst: 'agents/conflict-manager.md' },
-    { src: 'templates/pipeline.json', dst: 'templates/pipeline.json' },
-    { src: 'templates/presets.json', dst: 'templates/presets.json' },
-    { src: 'templates/config.json', dst: 'templates/config.json' },
-    { src: 'references/interactive-ui.md', dst: 'references/interactive-ui.md' },
-    { src: 'references/gates-and-guards.md', dst: 'references/gates-and-guards.md' },
-    { src: 'references/cli-reference.md', dst: 'references/cli-reference.md' },
-    { src: 'references/messages-en.md', dst: 'references/messages-en.md' },
-    // Agent tree structure
-    { src: 'scripts/agents/pm/index.md', dst: 'agents/pm/index.md' },
-    { src: 'scripts/agents/pm/prompt-optimizer.md', dst: 'agents/pm/prompt-optimizer.md' },
-    { src: 'scripts/agents/pm/pipeline-flow.md', dst: 'agents/pm/pipeline-flow.md' },
-    { src: 'scripts/agents/pm/team-rules.md', dst: 'agents/pm/team-rules.md' },
-    { src: 'scripts/agents/pm/model-strategy.md', dst: 'agents/pm/model-strategy.md' },
-    { src: 'scripts/agents/pm/block-recovery.md', dst: 'agents/pm/block-recovery.md' },
-    { src: 'scripts/agents/researcher/index.md', dst: 'agents/researcher/index.md' },
-    { src: 'scripts/agents/researcher/hypothesis.md', dst: 'agents/researcher/hypothesis.md' },
-    { src: 'scripts/agents/researcher/security.md', dst: 'agents/researcher/security.md' },
-    { src: 'scripts/agents/researcher/architecture.md', dst: 'agents/researcher/architecture.md' },
-    { src: 'scripts/agents/researcher/quality.md', dst: 'agents/researcher/quality.md' },
-    { src: 'scripts/agents/executor/index.md', dst: 'agents/executor/index.md' },
-    { src: 'scripts/agents/executor/tdd.md', dst: 'agents/executor/tdd.md' },
-    { src: 'scripts/agents/executor/file-ownership.md', dst: 'agents/executor/file-ownership.md' },
-    { src: 'scripts/agents/executor/worktree.md', dst: 'agents/executor/worktree.md' },
-    { src: 'scripts/agents/planner/index.md', dst: 'agents/planner/index.md' },
-    { src: 'scripts/agents/planner/spec-format.md', dst: 'agents/planner/spec-format.md' },
-    { src: 'scripts/agents/planner/crosslayer.md', dst: 'agents/planner/crosslayer.md' },
-    { src: 'scripts/agents/reviewer/index.md', dst: 'agents/reviewer/index.md' },
-    { src: 'scripts/agents/reviewer/scoring.md', dst: 'agents/reviewer/scoring.md' },
-    { src: 'scripts/agents/conflict-manager/index.md', dst: 'agents/conflict-manager/index.md' },
-    { src: 'scripts/agents/conflict-manager/merge-procedure.md', dst: 'agents/conflict-manager/merge-procedure.md' },
-    { src: 'scripts/agents/conflict-manager/interface-watch.md', dst: 'agents/conflict-manager/interface-watch.md' },
-    // Guidelines
-    { src: 'scripts/guidelines/index.md', dst: 'guidelines/index.md' },
-    { src: 'scripts/guidelines/coding-standards.md', dst: 'guidelines/coding-standards.md' },
-    { src: 'scripts/guidelines/error-handling.md', dst: 'guidelines/error-handling.md' },
-    { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' },
-    // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
-    { src: 'scripts/hooks/shared/sdk-runner.js', dst: 'hooks/shared/sdk-runner.js' },
-    { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
-    { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
-    { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
-    { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
-    { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
-    // Security modules
-    { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
-  ];
+  const requiredFiles = FILE_MANIFEST;
 
   for (const f of requiredFiles) {
     const dstPath = path.join(velaDir, f.dst);
