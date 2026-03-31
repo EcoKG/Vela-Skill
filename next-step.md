@@ -7,6 +7,7 @@
 | **v2.0** | M001 | 비용 최적화 + Auto 모드 — Opus→Sonnet 전환, PM 속독, Auto 모드, Bash 완화, persona.md | ✅ 완료 |
 | **v2.5** | M002 | Hook API 고급화 — Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification. Hook 4→18개 | ✅ 완료 |
 | **v3.0** | M003 | Agent SDK 통합 — 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단, 81 assertion 통합 테스트 | ✅ 완료 |
+| **v3.1** | M004 | 분석 보고서 — dep-analyzer + sdk-analyzer 5관점, vela-analyze CLI (deps/report/run/full), PDF 생성, `/vela analyze` 스킬 통합, E2E 22/22 PASS | ✅ 완료 |
 
 ---
 

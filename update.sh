@@ -1,5 +1,5 @@
 #!/bin/bash
-# ⛵ Vela Engine v3.0 — Update script
+# ⛵ Vela Engine v3.1 — Update script
 # Updates global skill and optionally the current project's .vela/
 #
 # Global only:    curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash

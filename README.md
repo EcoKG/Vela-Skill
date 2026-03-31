@@ -1,4 +1,4 @@
-# ⛵ Vela Engine v3.0 — Sandbox Development System
+# ⛵ Vela Engine v3.1 — Sandbox Development System
 
 **Vela**(돛자리)는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의 파이프라인을 통해서만 진행된다.
@@ -234,6 +234,12 @@ node .vela/cli/vela-engine.js review      # Haiku→Sonnet→Opus 3단계 리뷰
 node .vela/cli/vela-engine.js plan-check   # Haiku plan.md 구조 검증
 node .vela/cli/vela-engine.js research     # 3-관점 병렬 리서치 (Haiku × 3)
 node .vela/cli/vela-engine.js execute      # Sonnet TDD 코드 구현
+
+# 분석 보고서
+node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (무료)
+node .vela/cli/vela-analyze.js run --perspectives security,bugs  # SDK 코드 분석
+node .vela/cli/vela-analyze.js full --items deps,security        # 통합 분석 → PDF
+node .vela/cli/vela-analyze.js report --input data.json          # JSON → PDF
 ```
 
 ### SDK 모듈 구조
@@ -244,7 +250,9 @@ scripts/hooks/shared/
 ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
 ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
 ├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
-└── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
+├── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
+├── sdk-analyzer.js      ← 5관점 병렬 코드 분석 (security/bugs/performance/code-quality/architecture)
+└── dep-analyzer.js      ← npm audit/outdated 의존성 분석 (SDK 불필요)
 ```
 
 각 모듈은 동일한 CJS 패턴을 따른다:
@@ -261,6 +269,48 @@ scripts/hooks/shared/
 - Haiku 점수 < 15 → Opus rescue (~$0.30)
 - Sonnet 점수 < 20 → Opus rescue
 - Opus도 실패 → reject + escalation.json
+
+---
+
+## 분석 보고서 — `/vela analyze`
+
+프로젝트의 의존성과 코드를 분석하여 PDF 보고서를 생성한다. 6개 분석 항목을 체크박스로 선택하고, SDK 관점이 포함되면 모델(Haiku/Sonnet)을 선택한다.
+
+### 분석 항목
+
+| 항목 | 방식 | 비용 |
+|------|------|------|
+| 📦 의존성 (deps) | npm audit/outdated CLI | **무료** |
+| 🔒 보안 (security) | SDK Haiku/Sonnet | 토큰 과금 |
+| 🐛 버그 (bugs) | SDK Haiku/Sonnet | 토큰 과금 |
+| ⚡ 성능 (performance) | SDK Haiku/Sonnet | 토큰 과금 |
+| 📐 코드 품질 (code-quality) | SDK Haiku/Sonnet | 토큰 과금 |
+| 🏗️ 아키텍처 (architecture) | SDK Haiku/Sonnet | 토큰 과금 |
+
+### CLI 사용법
+
+```bash
+# 의존성만 분석 (무료)
+node .vela/cli/vela-analyze.js deps
+
+# JSON → PDF 변환
+node .vela/cli/vela-analyze.js report --input results.json --output report.pdf
+
+# SDK 코드 분석 (관점 선택)
+node .vela/cli/vela-analyze.js run --perspectives security,bugs --model haiku
+
+# 통합 분석 — 의존성 + SDK 분석 → PDF
+node .vela/cli/vela-analyze.js full --items deps,security,performance --model sonnet --output report.pdf
+```
+
+### 분석 모듈
+
+- **dep-analyzer.js**: npm audit/outdated를 실행하여 취약점·outdated 패키지를 정규화된 JSON으로 반환. SDK 불필요.
+- **sdk-analyzer.js**: 5개 관점으로 코드를 병렬 분석. extractFindings()의 3단계 JSON 추출(code block → bare JSON → text fallback)으로 SDK 응답을 정규화.
+
+### PDF 보고서
+
+pdfkit으로 생성. 타이틀 페이지, severity별 색상 코딩(critical=빨강, high=주황, moderate=노랑, low=파랑), outdated 패키지, 코드 분석 관점별 findings 포함. 부분 실패 허용 — 하나의 분석기가 실패해도 나머지 결과로 PDF를 생성한다.
 
 ---
 
@@ -420,8 +470,10 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   │       ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
   │   │       ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
   │   │       ├── sdk-researcher.js    ← 3관점 병렬 분석
-  │   │       └── sdk-executor.js      ← Sonnet TDD 실행
-  │   ├── cli/                   ← vela-engine, vela-read, vela-write, vela-cost, vela-report
+  │   │       ├── sdk-executor.js      ← Sonnet TDD 실행
+  │   │       ├── sdk-analyzer.js      ← 5관점 코드 분석 (security/bugs/perf/quality/arch)
+  │   │       └── dep-analyzer.js      ← npm audit/outdated 의존성 분석
+  │   ├── cli/                   ← vela-engine, vela-read, vela-write, vela-cost, vela-report, vela-analyze
   │   ├── agents/                ← vela.md, researcher, planner, executor, reviewer, conflict-manager, leader
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
@@ -470,17 +522,27 @@ vela-engine research                             # SDK 3-관점 병렬 리서치
 vela-engine execute                              # SDK 단일 실행 (Sonnet)
 vela-cost                                        # 파이프라인 비용/메트릭
 vela-report [--html output.html]                 # 파이프라인 리포트/대시보드
+vela-analyze deps                                # 의존성 분석 (무료, npm audit/outdated)
+vela-analyze run --perspectives <list> [--model]  # SDK 코드 분석
+vela-analyze full --items <list> [--model] [--output] # 통합 분석 → PDF
+vela-analyze report --input <file> [--output]    # JSON → PDF 변환
 ```
 
 ---
 
 ## 테스트
 
-14개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
+16개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
 
 ```bash
 # 전체 SDK 통합 테스트 (81 assertions)
 bash scripts/tests/test-sdk-integration.sh
+
+# 분석 보고서 E2E (22 assertions)
+bash scripts/tests/test-analyze-e2e.sh
+
+# SDK 분석 엔진 (27 assertions)
+bash scripts/tests/test-sdk-analyzer.sh
 
 # 개별 테스트 스위트
 bash scripts/tests/test-sdk-runner.sh       # 14 assertions — SDK 인프라
@@ -526,6 +588,7 @@ bash scripts/tests/test-notification-hook.sh  # 데스크톱 알림
 | v2.0 | M001 | 비용 최적화(Opus→Sonnet), Auto 모드, PM 속독, Bash 완화, persona.md |
 | v2.5 | M002 | Hook 4→18개, Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification |
 | v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단 |
+| v3.1 | M004 | 분석 보고서, dep-analyzer + sdk-analyzer, vela-analyze CLI, PDF 생성, `/vela analyze` |
 
 ---
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# ⛵ Vela Engine v3.0 — One-line installer
+# ⛵ Vela Engine v3.1 — One-line installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
 #
 # Installs Vela as a Claude Code skill in $HOME/.claude/skills/vela/

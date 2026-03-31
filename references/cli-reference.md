@@ -19,6 +19,18 @@ node .vela/cli/vela-engine.js research                           # SDK 3-관점 
 node .vela/cli/vela-engine.js execute                            # SDK 단일 실행 (Sonnet)
 ```
 
+## vela-analyze (분석 보고서)
+
+```bash
+node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (npm audit/outdated, 무료)
+node .vela/cli/vela-analyze.js report --input <file> [--output <file>]  # JSON → PDF 변환
+node .vela/cli/vela-analyze.js run --perspectives <list> [--model haiku|sonnet]  # SDK 코드 분석
+node .vela/cli/vela-analyze.js full --items <list> [--model haiku|sonnet] [--output <file>]  # 통합 분석 → PDF
+
+# perspectives: security, bugs, performance, code-quality, architecture
+# items: deps, security, bugs, performance, code-quality, architecture
+```
+
 ## vela-read (읽기)
 
 ```bash
