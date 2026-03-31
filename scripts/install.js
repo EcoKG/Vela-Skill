@@ -714,6 +714,8 @@ function upgrade() {
     { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
     { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
     { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
+    // Security modules
+    { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
   ];
 
   // Do NOT overwrite config.json (user may have customized it)
@@ -868,7 +870,9 @@ function validate() {
     { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
     { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
     { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
-    { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' }
+    { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
+    // Security modules
+    { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
   ];
 
   for (const f of requiredFiles) {

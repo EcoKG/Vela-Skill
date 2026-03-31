@@ -10,9 +10,15 @@
 |--------|------|------|------|
 | GATE 1 | VK-01, VK-02 | Bash 차단 | Vela CLI 명령 외 Bash 사용 차단. 안전한 읽기 명령(ls, git status 등)은 모든 모드에서 허용. 활성 파이프라인 시 git/gh 명령 허용 (Gate Guard가 단계별 제한) |
 | GATE 2 | VK-03, VK-04 | 모드 강제 | 읽기전용 모드에서 Write/Edit 차단. `.vela/` 내부 파일은 예외 (pipeline-state.json 제외) |
-| GATE 3 | VK-05 | 민감파일 보호 | .env, credentials.json 등 민감 파일 쓰기 차단 |
+| GATE 3 | VK-05 | 민감파일 보호 | .env, credentials.json, config.json 등 민감 파일 쓰기 차단 |
 | GATE 4 | VK-06 | 시크릿 감지 | API 키, 토큰, 비밀키 등 15개 패턴 감지 시 쓰기 차단 |
 | GATE 5 | — | 경로 경고 | node_modules 등 제외 경로 쓰기 시 경고 (차단 아님) |
+| GATE 6 | VK-07 | PM 속독 + HMAC | PM은 Read/Glob/Grep 허용, Write/Edit 차단. delegation.json HMAC-SHA256 검증 (미서명/변조 시 exit 2) |
+| GATE 7 | VK-08 | 체인 연산자 차단 | SAFE_BASH_READ 명령에서 `&&`, `||`, `;`, `|` 연산자 감지 시 차단 (`ls && rm -rf /` 방지) |
+
+### Fail-Closed 모델
+
+Gate Keeper의 모든 오류 경로(corrupt stdin, 빈 stdin, 미처리 예외)는 exit(2)로 도구를 차단한다. 정상 허용만 exit(0)을 반환한다.
 
 ### 모드별 허용 도구
 
@@ -33,8 +39,8 @@
 | GUARD 0 | VG-00 | 파이프라인 중 TaskCreate/TaskUpdate/TaskList 차단 |
 | GUARD 0.5 | — | 비-research 단계에서 5회 이상 Read 경고 (차단 아님) |
 | GUARD 1 | VG-01 | research.md 없이 plan.md 작성 불가 |
-| GUARD 2 | VG-02 | execute 단계 전 소스코드 수정 불가 + pipeline-state.json 보호 |
-| GUARD 3 | VG-03 | 빌드/테스트 실패 시 git commit 불가 |
+| GUARD 2 | VG-02, VG-05 | execute 단계 전 소스코드 수정 불가 + pipeline-state.json 보호 + config.json 쓰기 차단 |
+| GUARD 3 | VG-03 | 빌드/테스트 실패 시 git commit 불가. corrupt signals file 시 exit(2) + 복구 안내 (tracker-signals.json 삭제) |
 | GUARD 4 | VG-04 | verification.md 없이 report.md 작성 불가 |
 | GUARD 5 | VG-05 | pipeline-state.json 직접 수정 불가 |
 | GUARD 6 | VG-06 | 단계별 리비전 한도 초과 시 차단 |
@@ -42,8 +48,24 @@
 | GUARD 8 | VG-08 | verify 완료 전 git push 차단 |
 | GUARD 9 | — | 보호 브랜치 직접 커밋 경고 (차단 아님) |
 | GUARD 11 | VG-11 | 비-team 단계에서 approval-*.json / review-*.md 작성 차단 (team 단계에서만 허용) |
-| GUARD 12 | VG-12 | execute 단계에서 PM 직접 소스 수정 차단 — SubAgent/Teammate 위임 강제 (delegation.json 기반) |
+| GUARD 12 | VG-12 | execute 단계에서 PM 직접 소스 수정 차단 — SubAgent/Teammate 위임 강제 (delegation.json HMAC 검증, trivial 면제) |
+
+### Fail-Closed 모델
+
+Gate Guard의 모든 오류 경로(corrupt stdin, 빈 stdin, 미처리 예외)는 exit(2)로 도구를 차단한다.
 
 ### Permission Deny 규칙 (절대 차단)
 
 - `rm -rf`, `rm -r`, `git push --force`, `git reset --hard`, `git commit --no-verify`, `git clean -f`
+
+### HMAC-SHA256 서명 체인
+
+| 대상 | 서명 시점 | 검증 시점 | 방식 |
+|------|----------|----------|------|
+| delegation.json | SubagentStart hook | VK-07, VG-12, Permission hook | JSON canonical form (sorted keys, `_hmac` 제외) |
+| review-*.md | sdk-reviewer.js | exit gate (transition 시) | Companion `.hmac` sidecar 파일 |
+| config.json | — | VK-05, VG-05 | 쓰기 자체 차단 |
+
+- 키: `.vela/state/hmac-key` (vela-engine init 시 자동 생성)
+- 검증 실패: exit(2) fail-closed
+- 키 없음: graceful skip (null 반환, HMAC 도입 전 파이프라인 호환)

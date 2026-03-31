@@ -9,6 +9,9 @@
 | **v3.0** | M003 | Agent SDK 통합 — 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단, 81 assertion 통합 테스트 | ✅ 완료 |
 | **v3.1** | M004 | 분석 보고서 — dep-analyzer + sdk-analyzer 5관점, vela-analyze CLI (deps/report/run/full), PDF 생성, `/vela analyze` 스킬 통합, E2E 22/22 PASS | ✅ 완료 |
 | **v3.1** | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션(green/yellow/red)+유니코드 프로그레스 바(█░), Orchestrator 유니코드 박스 드로잉(╭╮╰╯│─), 18개 hook description 항해 세계관 통합, spinner/tips/announcements 전면 교체 | ✅ 완료 |
+| **v3.1** | M006 | 글로벌 오염 정리 — ~/.claude/ 잔여물 전체 정리(146MB+ 회수), install.sh/update.sh 서브스킬 플랫 복사 제거, install.js validate() 자기 치유 가드 추가 | ✅ 완료 |
+| **v3.1** | M007 | 프로젝트 전수 검수 — 코드베이스 ~14,500줄 정밀 감사. 59건 발견(High 8, Medium 24, Low 27). AUDIT-001~059 통합 보고서 산출 | ✅ 완료 |
+| **v3.2** | M008 | 전수 수정 — Fail-closed 게이트, HMAC-SHA256 서명 체인, 체인 연산자 차단(VK-08), 파이프라인 완화(trivial/hotfix exit_gate:[]), execFileSync 전환(35+ callers), SQL parameterization, SDK null guards. 21개 테스트 스위트 230/230 PASS | ✅ 완료 |
 
 ---
 
