@@ -14,13 +14,17 @@ description: "⛵ Vela 환경 구축 — 프로젝트에 Vela 샌드박스 엔�
 
 2. **스크립트 배포**
    이 스킬의 `scripts/` 디렉토리에 있는 파일들을 `.vela/`로 복사한다:
-   - `scripts/hooks/*` → `.vela/hooks/`
+   - `scripts/hooks/*` → `.vela/hooks/` (서브디렉토리 포함: `shared/` 내 SDK 모듈 7개)
    - `scripts/cli/*` → `.vela/cli/`
    - `scripts/cache/*` → `.vela/cache/`
-   - `scripts/agents/*` → `.vela/agents/`
+   - `scripts/agents/*` → `.vela/agents/` (서브디렉토리 포함: `pm/`, `researcher/`, `executor/`, `planner/`, `reviewer/`, `conflict-manager/`)
+   - `scripts/guidelines/*` → `.vela/guidelines/`
    - `scripts/install.js` → `.vela/install.js`
    - `scripts/statusline.sh` → `.vela/statusline.sh`
    - `templates/*` → `.vela/templates/`
+   - `references/*` → `.vela/references/`
+   - `skills/*` → `.vela/skills/` (서브스킬: init, start, git-clean)
+   - `test-fixtures/*` → `.vela/test-fixtures/` (분석 보고서 샘플 데이터)
 
 3. **훅 등록**
    ```bash
