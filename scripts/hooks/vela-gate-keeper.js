@@ -76,6 +76,16 @@ async function main() {
 
     // Allow safe read-only bash commands in all modes
     if (SAFE_BASH_READ.test(cmd)) {
+      // AUDIT-004: Block chain operators that could append destructive commands
+      if (/[;&|]/.test(cmd)) {
+        process.stderr.write(
+          '⛵ [Vela] ✦ BLOCKED [VK-08]: Chain operators not allowed in safe read commands.\n' +
+          '  Command: ' + cmd.substring(0, 100) + '\n' +
+          '  Blocked operators: && || ; |\n' +
+          '  Recovery: Run the read command without chaining, or use Claude\'s built-in Read/Grep/Glob tools.\n'
+        );
+        process.exit(2);
+      }
       process.exit(0);
     }
 
