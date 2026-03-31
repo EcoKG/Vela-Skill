@@ -288,12 +288,97 @@ const FILE_MANIFEST = [
   { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
 ];
 
+// Subdirectories managed by Vela — orphan cleanup scans only these.
+// Never touch: config.json (root), persona.md (root), install.js (root),
+// state/, artifacts/, templates/, test-fixtures/, statusline.sh (root)
+const MANAGED_DIRS = ['hooks', 'cli', 'cache', 'agents', 'guidelines', 'references'];
+
+/**
+ * Recursively collect all files under a directory.
+ * Returns paths relative to baseDir (e.g. 'hooks/old-file.js').
+ */
+function collectFiles(dir, baseDir) {
+  const files = [];
+  if (!fs.existsSync(dir)) return files;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectFiles(fullPath, baseDir));
+    } else if (entry.isFile()) {
+      files.push(path.relative(baseDir, fullPath));
+    }
+  }
+  return files;
+}
+
+/**
+ * Find orphan files in managed subdirectories of velaDir.
+ * An orphan is any file inside MANAGED_DIRS that is NOT in FILE_MANIFEST's dst list.
+ * Returns array of relative paths (e.g. 'hooks/vela-pm.md').
+ */
+function findOrphans(velaDir) {
+  const managedDsts = new Set(FILE_MANIFEST.map(f => f.dst));
+  const orphans = [];
+  for (const dir of MANAGED_DIRS) {
+    const dirPath = path.join(velaDir, dir);
+    const files = collectFiles(dirPath, velaDir);
+    for (const file of files) {
+      if (!managedDsts.has(file)) {
+        orphans.push(file);
+      }
+    }
+  }
+  return orphans;
+}
+
+/**
+ * Remove empty directories bottom-up within managed dirs.
+ * Only removes dirs that are completely empty after orphan deletion.
+ */
+function removeEmptyDirs(velaDir) {
+  const removed = [];
+  for (const dir of MANAGED_DIRS) {
+    const dirPath = path.join(velaDir, dir);
+    if (!fs.existsSync(dirPath)) continue;
+    // Walk bottom-up: collect all subdirs, sort by depth descending
+    const subdirs = [];
+    function walkDirs(d) {
+      if (!fs.existsSync(d)) return;
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          const full = path.join(d, entry.name);
+          walkDirs(full);
+          subdirs.push(full);
+        }
+      }
+    }
+    walkDirs(dirPath);
+    // Sort deepest first
+    subdirs.sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+    for (const sd of subdirs) {
+      try {
+        const entries = fs.readdirSync(sd);
+        if (entries.length === 0) {
+          fs.rmdirSync(sd);
+          removed.push(path.relative(velaDir, sd));
+        }
+      } catch (e) { /* permission or race — skip */ }
+    }
+  }
+  return removed;
+}
+
 const command = (process.argv[2] && !process.argv[2].startsWith('-')) ? process.argv[2] : 'install';
 
 switch (command) {
   case 'install': install(); break;
   case 'verify': verify(); break;
   case 'uninstall': uninstall(); break;
+  case 'validate': {
+    const results = validate();
+    console.log(JSON.stringify({ ok: true, command: 'validate', details: results }, null, 2));
+    break;
+  }
   case 'status': status(); break;
   case 'upgrade': upgrade(); break;
   default:
@@ -777,12 +862,35 @@ function upgrade() {
     }
   }
 
+  // ── Orphan cleanup: remove files in managed dirs not in FILE_MANIFEST ──
+  results.orphansRemoved = [];
+  try {
+    const orphans = findOrphans(velaDir);
+    for (const orphan of orphans) {
+      const orphanPath = path.join(velaDir, orphan);
+      try {
+        fs.unlinkSync(orphanPath);
+        results.orphansRemoved.push(orphan);
+      } catch (e) {
+        results.errors.push(`orphan cleanup ${orphan}: ${e.message}`);
+      }
+    }
+    // Clean up empty directories left behind
+    const emptied = removeEmptyDirs(velaDir);
+    if (emptied.length > 0) {
+      results.orphansRemoved.push(...emptied.map(d => `${d}/ (empty dir)`));
+    }
+  } catch (e) {
+    results.errors.push(`orphan cleanup scan: ${e.message}`);
+  }
+
   console.log(JSON.stringify({
     ok: results.errors.length === 0,
     command: 'upgrade',
     updated: results.updated.length,
     added: results.added.length,
     skipped: results.skipped.length,
+    orphansRemoved: results.orphansRemoved.length,
     errors: results.errors,
     details: results
   }, null, 2));
@@ -846,15 +954,24 @@ function validate() {
     }
   }
 
-  // 4. Clean up old/legacy files
-  const legacyFiles = [
-    path.join(velaDir, 'hooks', 'vela-pm.md'),  // old agent name
-  ];
-  for (const lf of legacyFiles) {
-    if (fs.existsSync(lf)) {
-      fs.unlinkSync(lf);
-      results.fixed.push(`Removed legacy file: ${path.basename(lf)}`);
+  // 4. Clean up orphan files in managed directories (manifest-based)
+  try {
+    const orphans = findOrphans(velaDir);
+    for (const orphan of orphans) {
+      const orphanPath = path.join(velaDir, orphan);
+      try {
+        fs.unlinkSync(orphanPath);
+        results.fixed.push(`Removed orphan file: .vela/${orphan}`);
+      } catch (e) {
+        // File may have been removed already — skip
+      }
     }
+    const emptied = removeEmptyDirs(velaDir);
+    for (const dir of emptied) {
+      results.fixed.push(`Removed empty directory: .vela/${dir}`);
+    }
+  } catch (e) {
+    // Orphan scan failure is non-fatal in validate
   }
 
   // 5. Fix settings.local.json — remove old format hooks
