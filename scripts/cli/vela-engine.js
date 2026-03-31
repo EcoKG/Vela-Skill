@@ -26,7 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { generateKey } = require('../hooks/shared/hmac');
+const { generateKey, verifyFile, readKey } = require('../hooks/shared/hmac');
 
 const CWD = process.cwd();
 const VELA_DIR = path.join(CWD, '.vela');
@@ -1186,6 +1186,9 @@ function checkExitGate(stepDef, state) {
   const artifactDir = state._artifactDir;
   const missing = [];
 
+  // K003: readKey once at function entry for HMAC verification
+  const hmacKey = readKey(VELA_DIR);
+
   for (const gate of stepDef.exit_gate) {
     switch (gate) {
       case 'artifact_dir_created':
@@ -1268,6 +1271,8 @@ function checkExitGate(stepDef, state) {
           const reviewPath = path.join(artifactDir, `review-${state.current_step}.md`);
           if (!fs.existsSync(reviewPath)) {
             missing.push(`review_missing:review-${state.current_step}.md`);
+          } else if (hmacKey && !verifyFile(reviewPath, hmacKey)) {
+            missing.push(`review_unsigned:review-${state.current_step}.md`);
           }
         }
         break;
