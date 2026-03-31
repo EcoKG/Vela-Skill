@@ -34,7 +34,8 @@ async function main() {
     for await (const chunk of process.stdin) chunks.push(chunk);
     input = JSON.parse(Buffer.concat(chunks).toString());
   } catch (e) {
-    process.exit(0);
+    process.stderr.write('⛵ [Vela] ✦ BLOCKED: Cannot parse hook input: ' + (e && e.message || 'unknown error') + '\n');
+    process.exit(2);
   }
 
   const { tool_name, tool_input, session_id, cwd } = input;
@@ -231,7 +232,8 @@ async function main() {
             process.exit(2);
           }
         } catch (e) {
-          // Signal file corrupt, allow commit
+          process.stderr.write('⛵ [Vela] ✦ BLOCKED [VG-03]: Cannot read signals file — blocking commit as precaution.\n  Recovery: Delete .vela/tracker-signals.json and retry.\n');
+          process.exit(2);
         }
       }
     }
@@ -377,4 +379,7 @@ function getStepsUntil(state, pipelineDef, targetStepId) {
   return steps.slice(currentIdx, targetIdx + 1).map(s => s.name);
 }
 
-main().catch(() => process.exit(0));
+main().catch((e) => {
+  process.stderr.write('⛵ [Vela] ✦ BLOCKED: Gate Guard unhandled error: ' + (e && e.message || 'unknown') + '\n');
+  process.exit(2);
+});

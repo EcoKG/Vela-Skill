@@ -40,7 +40,8 @@ async function main() {
     for await (const chunk of process.stdin) chunks.push(chunk);
     input = JSON.parse(Buffer.concat(chunks).toString());
   } catch (e) {
-    process.exit(0); // Can't parse input, let it through
+    process.stderr.write('⛵ [Vela] ✦ BLOCKED: Cannot parse hook input: ' + (e && e.message || 'unknown error') + '\n');
+    process.exit(2);
   }
 
   const { tool_name, tool_input, session_id, cwd } = input;
@@ -238,4 +239,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => process.exit(0));
+main().catch((e) => {
+  process.stderr.write('⛵ [Vela] ✦ BLOCKED: Gate Keeper unhandled error: ' + (e && e.message || 'unknown') + '\n');
+  process.exit(2);
+});
