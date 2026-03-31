@@ -26,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const { findActivePipeline, readPipelineDefinition, getCurrentStepDef, readConfig } = require('./shared/pipeline');
 const { CODE_EXTENSIONS, SKIP_PATHS, WRITE_TOOLS, READ_TOOLS } = require('./shared/constants');
+const { verifyJSON, readKey } = require('./shared/hmac');
 
 async function main() {
   let input;
@@ -48,6 +49,9 @@ async function main() {
   }
 
   const state = findActivePipeline(velaDir);
+
+  // K003: Cache HMAC key once at top of main()
+  const hmacKey = readKey(velaDir);
 
   // ─── EXPLORE MODE (no active pipeline) ───
   if (!state) {
@@ -140,6 +144,15 @@ async function main() {
         process.exit(2);
       }
 
+      // config.json — project configuration is protected
+      if (protectedFile === 'config.json') {
+        process.stderr.write(
+          `🌟 [Vela] ✦ BLOCKED [VG-05]: Cannot modify config.json — project configuration is protected.\n` +
+          `  Recovery: Use vela-init to reconfigure: node .vela/cli/vela-init.js`
+        );
+        process.exit(2);
+      }
+
       // ─── GUARD 11: approval/review files — team step only ───
       // These files should only be written during steps with team configuration
       // (research, plan, execute) where Reviewer subagent operates and PM makes approval decisions.
@@ -196,7 +209,14 @@ async function main() {
     // Delegation is signaled by .vela/state/delegation.json existing.
     if (executeReached && currentStep === 'execute') {
       const delegationPath = path.join(velaDir, 'state', 'delegation.json');
-      const isDelegated = fs.existsSync(delegationPath);
+      let isDelegated = false;
+      try {
+        const raw = fs.readFileSync(delegationPath, 'utf8');
+        const delegation = JSON.parse(raw);
+        isDelegated = hmacKey ? verifyJSON(delegation, hmacKey) : false;
+      } catch (_e) {
+        isDelegated = false;
+      }
       if (!isDelegated) {
         process.stderr.write(
           `🌟 [Vela] ✦ BLOCKED [VG-12]: PM direct source modification in execute step.\n` +

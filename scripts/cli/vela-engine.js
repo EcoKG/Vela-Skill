@@ -26,6 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { generateKey } = require('../hooks/shared/hmac');
 
 const CWD = process.cwd();
 const VELA_DIR = path.join(CWD, '.vela');
@@ -158,6 +159,14 @@ function cmdInit() {
   const artifactDir = path.join(ARTIFACTS_DIR, `${dateStr}_${uid}_${slug}`);
 
   fs.mkdirSync(artifactDir, { recursive: true });
+
+  // Generate HMAC signing key if not present
+  const stateDir = path.join(VELA_DIR, 'state');
+  const hmacKeyPath = path.join(stateDir, 'hmac-key');
+  if (!fs.existsSync(hmacKeyPath)) {
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(hmacKeyPath, generateKey(), 'utf8');
+  }
 
   // Auto mode flag
   const autoMode = hasFlag('--auto');
@@ -314,6 +323,10 @@ function cmdTransition() {
   }
 
   writeJSON(state._path, cleanState(state));
+
+  // Clean up delegation.json on step transition (stale delegation must not carry over)
+  const delPath = path.join(VELA_DIR, 'state', 'delegation.json');
+  try { if (fs.existsSync(delPath)) fs.unlinkSync(delPath); } catch (_e) {}
 
   output({
     ok: true,
@@ -678,6 +691,10 @@ function cmdCancel() {
   }
 
   writeJSON(state._path, cleanState(state));
+
+  // Clean up delegation.json on cancel
+  const delPath = path.join(VELA_DIR, 'state', 'delegation.json');
+  try { if (fs.existsSync(delPath)) fs.unlinkSync(delPath); } catch (_e) {}
 
   output({
     ok: true,

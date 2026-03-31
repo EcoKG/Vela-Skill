@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { findActivePipeline, readConfig } = require('./shared/pipeline');
+const { signJSON, readKey } = require('./shared/hmac');
 
 async function main() {
   let input;
@@ -35,11 +36,17 @@ async function main() {
     const stateDir = path.join(velaDir, 'state');
     if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
     const delegationPath = path.join(stateDir, 'delegation.json');
-    fs.writeFileSync(delegationPath, JSON.stringify({
+    const delegationObj = {
       active: true,
       step: state.current_step,
       started_at: Date.now()
-    }, null, 2));
+    };
+    // Sign with HMAC if key exists (pre-HMAC pipelines skip silently)
+    const hmacKey = readKey(velaDir);
+    if (hmacKey) {
+      delegationObj._hmac = signJSON(delegationObj, hmacKey);
+    }
+    fs.writeFileSync(delegationPath, JSON.stringify(delegationObj, null, 2));
   }
 
   process.stdout.write(JSON.stringify({

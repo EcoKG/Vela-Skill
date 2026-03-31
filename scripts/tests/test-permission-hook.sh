@@ -68,9 +68,17 @@ EOF
 
 create_delegation() {
   mkdir -p "$PROJECT/.vela/state"
-  cat > "$PROJECT/.vela/state/delegation.json" <<'DEL'
-{ "agent_id": "worker-1", "task": "implement feature" }
-DEL
+  # Generate HMAC key and sign delegation.json
+  node -e "
+    const hmac = require('$SCRIPT_DIR/../hooks/shared/hmac');
+    const fs = require('fs');
+    const path = require('path');
+    const keyHex = hmac.generateKey();
+    fs.writeFileSync(path.join('$PROJECT', '.vela', 'state', 'hmac-key'), keyHex);
+    const obj = { active: true, step: 'execute', started_at: Date.now() };
+    obj._hmac = hmac.signJSON(obj, keyHex);
+    fs.writeFileSync(path.join('$PROJECT', '.vela', 'state', 'delegation.json'), JSON.stringify(obj, null, 2));
+  "
 }
 
 run_hook() {

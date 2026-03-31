@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { findActivePipeline, readConfig } = require('./shared/pipeline');
 const { WRITE_TOOLS } = require('./shared/constants');
+const { verifyJSON, readKey } = require('./shared/hmac');
 
 async function main() {
   let input;
@@ -39,6 +40,9 @@ async function main() {
   const state = findActivePipeline(velaDir);
   if (!state) process.exit(0);
 
+  // K003: Cache HMAC key once
+  const hmacKey = readKey(velaDir);
+
   // ─── 4-condition AND gate ───
   // 1. Auto mode active
   if (state.auto !== true) process.exit(0);
@@ -46,9 +50,17 @@ async function main() {
   // 2. Current step is execute
   if (state.current_step !== 'execute') process.exit(0);
 
-  // 3. Delegation signal exists (subagent is active)
+  // 3. Delegation signal exists with valid HMAC (subagent is active)
   const delegationPath = path.join(velaDir, 'state', 'delegation.json');
-  if (!fs.existsSync(delegationPath)) process.exit(0);
+  let delegationValid = false;
+  try {
+    const raw = fs.readFileSync(delegationPath, 'utf8');
+    const delegation = JSON.parse(raw);
+    delegationValid = hmacKey ? verifyJSON(delegation, hmacKey) : false;
+  } catch (_e) {
+    delegationValid = false;
+  }
+  if (!delegationValid) process.exit(0);
 
   // 4. Tool is a write tool (Write, Edit, NotebookEdit)
   if (!WRITE_TOOLS.has(input.tool_name)) process.exit(0);

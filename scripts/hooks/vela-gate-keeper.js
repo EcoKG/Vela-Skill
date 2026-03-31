@@ -32,6 +32,7 @@ const {
   BASH_WRITE_PATTERNS,
   SKIP_PATHS
 } = require('./shared/constants');
+const { verifyJSON, readKey } = require('./shared/hmac');
 
 async function main() {
   let input;
@@ -59,6 +60,9 @@ async function main() {
 
   // Cache pipeline state — won't change within a single hook invocation
   const pipelineState = findActivePipeline(velaDir);
+
+  // K003: Cache HMAC key once at top of main()
+  const hmacKey = readKey(velaDir);
 
   // ─── GATE 1: Bash Blocking ───
   // Vela uses its own CLI. Bash is blocked unless it's a Vela CLI command,
@@ -180,7 +184,16 @@ async function main() {
 
         if (isSourceCode && !inSkipPath && WRITE_TOOLS.has(tool_name)) {
           const delegationPath = path.join(velaDir, 'state', 'delegation.json');
-          if (!fs.existsSync(delegationPath)) {
+          let delegationValid = false;
+          try {
+            const raw = fs.readFileSync(delegationPath, 'utf8');
+            const delegation = JSON.parse(raw);
+            // Verify HMAC signature (fail-closed: missing key or invalid sig → blocked)
+            delegationValid = hmacKey ? verifyJSON(delegation, hmacKey) : false;
+          } catch (_e) {
+            delegationValid = false;
+          }
+          if (!delegationValid) {
             process.stderr.write(
               `⛵ [Vela] ✦ BLOCKED [VK-07]: PM은 소스 코드를 직접 수정할 수 없습니다.\n` +
               `  Tool: ${tool_name} | File: ${targetFile}\n` +
@@ -211,6 +224,15 @@ async function main() {
         `⛵ [Vela] ✦ BLOCKED [VK-05]: Cannot write to sensitive file.\n` +
         `  File: ${targetFile}\n` +
         `  Recovery: Use .env.example or .env.template instead of ${SENSITIVE_FILES.join(', ')}`
+      );
+      process.exit(2);
+    }
+
+    // Protect .vela/config.json from modification (regardless of mode)
+    if (targetFile.includes('.vela/') && fileName === 'config.json') {
+      process.stderr.write(
+        `⛵ [Vela] ✦ BLOCKED [VK-05]: Cannot modify config.json — project configuration is protected.\n` +
+        `  Recovery: Use vela-init to reconfigure: node .vela/cli/vela-init.js`
       );
       process.exit(2);
     }
