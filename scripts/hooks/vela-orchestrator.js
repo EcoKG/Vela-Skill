@@ -45,16 +45,16 @@ async function main() {
 
   // ─── Session Health Check (first prompt only) ───
   if (isFirstPrompt) {
-    output.push('✦ Vela Engine v1.2 ✦');
-    output.push(`⛵ Sandbox: ACTIVE | Mode: auto-detect`);
+    output.push('╭─ ⛵ Vela Engine v3.1 ───────────────╮');
+    output.push(`│ Sandbox: ACTIVE | Mode: auto-detect`);
 
     const hooks = ['vela-gate-keeper', 'vela-gate-guard', 'vela-orchestrator', 'vela-tracker'];
     const hookStatus = hooks.map(h => {
       const hookPath = path.join(velaDir, 'hooks', `${h}.js`);
       return `${fs.existsSync(hookPath) ? '✓' : '✗'} ${h.replace('vela-', '')}`;
     });
-    output.push(`🔭 Hooks: ${hookStatus.join(' | ')}`);
-    output.push('✦─────────────────────✦');
+    output.push(`│ 🔭 Hooks: ${hookStatus.join(' | ')}`);
+    output.push('╰───────────────────────────────────╯');
 
     // Create session state + register PM session for GUARD 11
     try {
@@ -86,9 +86,9 @@ async function main() {
     const personaContent = fs.readFileSync(personaPath, 'utf-8').trim();
     if (personaContent) {
       output.push('');
-      output.push('📝 Persona ──────────────────────────');
+      output.push('╭─ 📝 Persona ───────────────────────╮');
       output.push(personaContent);
-      output.push('──────────────────────────────────────');
+      output.push('╰───────────────────────────────────╯');
     }
   }
 
@@ -108,7 +108,7 @@ async function main() {
     }
 
     output.push('');
-    output.push(`🧭 Pipeline ──────────────────────────`);
+    output.push(`╭─ 🧭 Pipeline ──────────────────────╮`);
     output.push(`│ Type: ${state.pipeline_type || 'standard'}`);
     output.push(`│ Step: ${state.current_step} (${stepDef ? stepDef.name : 'unknown'})`);
     output.push(`│ Mode: ${stepDef ? stepDef.mode : 'read'}`);
@@ -130,7 +130,7 @@ async function main() {
     // Show team step info (Agent Teams)
     if (stepDef && stepDef.team) {
       output.push(`│`);
-      output.push(`│ 🌟 Team Step ────────────────────`);
+      output.push(`│ ╭─ 🌟 Team Step ──────────────────╮`);
       output.push(`│ │ Worker: ${stepDef.team.worker_role}`);
       output.push(`│ │ Reviewer: SDK (Haiku→Sonnet)`);
       output.push(`│ │   → node .vela/cli/vela-engine.js review`);
@@ -145,7 +145,7 @@ async function main() {
         const hasApproval = fs.existsSync(approvalPath);
         output.push(`│ │ Approval: ${hasApproval ? 'APPROVED' : 'pending'}`);
       }
-      output.push(`│ └────────────────────────────────────`);
+      output.push(`│ ╰────────────────────────────────╯`);
     }
 
     // Show next allowed actions
@@ -199,12 +199,15 @@ async function main() {
       output.push(`│ ⚠ AUTO SUSPENDED: reject 반복으로 자동 진행이 중단되었다. 사용자에게 알려라.`);
     }
 
-    output.push(`└──────────────────────────────────────`);
+    output.push(`╰───────────────────────────────────╯`);
   } else {
     // No active pipeline — Explore mode
     output.push('');
-    output.push(`⛵ Vela — Explore mode. Reads allowed, writes blocked.`);
-    output.push(`  🧭 To modify code: node .vela/cli/vela-engine.js init "<task>" --scale <small|medium|large>`);
+    output.push(`╭─ ⛵ Vela ── Explore mode ──────────╮`);
+    output.push(`│ Reads allowed, writes blocked.`);
+    output.push(`│ 🧭 To modify code:`);
+    output.push(`│   node .vela/cli/vela-engine.js init "<task>" --scale <small|medium|large>`);
+    output.push(`╰───────────────────────────────────╯`);
   }
 
   if (output.length > 0) {
