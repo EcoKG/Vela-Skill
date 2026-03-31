@@ -119,6 +119,7 @@ function parseScore(text) {
  */
 function writeReviewArtifact(artifactDir, step, content, hmacKey) {
   const filePath = path.join(artifactDir, `review-${step}.md`);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
   if (hmacKey) {
     signFile(filePath, hmacKey);
@@ -270,7 +271,9 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
  *   Success: { ok: true, score, decision: 'approve'|'reject', stage, model, cost, durationMs, escalated? }
  *   Failure: { ok: false, error: string }
  */
-async function sdkReview({ step, artifactDir, cwd }) {
+async function sdkReview(opts) {
+  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  const { step, artifactDir, cwd } = opts;
   const HAIKU_MODEL = 'claude-haiku-4-5-20250929';
   const SONNET_MODEL = 'claude-sonnet-4-5-20250929';
 

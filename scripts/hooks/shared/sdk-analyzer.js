@@ -399,11 +399,12 @@ function normalizeFindingsArray(findings) {
  *   ok is true when at least one perspective succeeded, or perspectives array is empty.
  *   SDK unavailable: { ok: false, error: 'sdk_not_available' }
  */
-async function sdkAnalyze({ perspectives, cwd, model, maxTurns, maxBudgetUsd }) {
+async function sdkAnalyze(opts) {
+  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  const { perspectives, cwd, model, maxTurns, maxBudgetUsd } = opts;
   // ─── Input validation ───
   if (!Array.isArray(perspectives)) {
-    // Empty array is valid — returns empty results
-    return { ok: true, perspectives: [], totalCost: 0, totalDurationMs: 0, model: model || HAIKU_MODEL };
+    return { ok: false, error: 'perspectives must be an array' };
   }
 
   if (perspectives.length === 0) {

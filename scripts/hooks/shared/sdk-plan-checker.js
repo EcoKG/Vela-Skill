@@ -84,6 +84,7 @@ The VERDICT line must appear exactly as shown, on its own line.
  */
 function writePlanCheckArtifact(artifactDir, content) {
   const filePath = path.join(artifactDir, 'plan-check.md');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
@@ -101,7 +102,9 @@ function writePlanCheckArtifact(artifactDir, content) {
  *   plan.md missing: { ok: false, error: 'plan_md_not_found' }
  *   SDK failure: { ok: false, error, details, cost?, durationMs? }
  */
-async function sdkPlanCheck({ artifactDir, cwd }) {
+async function sdkPlanCheck(opts) {
+  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  const { artifactDir, cwd } = opts;
   // ─── Check plan.md exists ───
   const planPath = path.join(artifactDir, 'plan.md');
   if (!fs.existsSync(planPath)) {

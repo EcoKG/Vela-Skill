@@ -123,6 +123,7 @@ Teammate로 소환된 경우, 프롬프트에 **담당 파일**이 명시된다.
  */
 function writeTaskSummaryArtifact(artifactDir, content) {
   const filePath = path.join(artifactDir, 'task-summary.md');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
@@ -143,7 +144,9 @@ function writeTaskSummaryArtifact(artifactDir, content) {
  *   SDK unavailable: { ok: false, error: 'sdk_not_available' }
  *   Failure: { ok: false, error, details, cost?, numTurns?, durationMs? }
  */
-async function sdkExecute({ step, artifactDir, cwd }) {
+async function sdkExecute(opts) {
+  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  const { step, artifactDir, cwd } = opts;
   // ─── Build user prompt ───
   const prompt = [
     `파이프라인 단계 "${step}"의 구현을 수행하라.`,

@@ -145,6 +145,7 @@ const PERSPECTIVES = [
  */
 function writeResearchArtifact(artifactDir, content) {
   const filePath = path.join(artifactDir, 'research.md');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
@@ -162,7 +163,9 @@ function writeResearchArtifact(artifactDir, content) {
  *   { ok, perspectives: [{key, ok, result?, error?, cost, durationMs}], totalCost, totalDurationMs }
  *   ok is true when at least one perspective succeeded.
  */
-async function sdkResearch({ step, artifactDir, cwd }) {
+async function sdkResearch(opts) {
+  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  const { step, artifactDir, cwd } = opts;
   const overallStart = Date.now();
 
   // ─── Build user prompt with step context ───

@@ -58,21 +58,23 @@ const commands = {
   'clean-exec': cmdCleanExec
 };
 
-if (!command || !commands[command]) {
-  output({
-    ok: false,
-    error: `Unknown command: ${command || '(none)'}`,
-    available: Object.keys(commands)
-  });
-  process.exit(1);
-}
-
-const result = commands[command]();
-if (result && typeof result.then === 'function') {
-  result.catch(err => {
-    output({ ok: false, error: err.message });
+if (require.main === module) {
+  if (!command || !commands[command]) {
+    output({
+      ok: false,
+      error: `Unknown command: ${command || '(none)'}`,
+      available: Object.keys(commands)
+    });
     process.exit(1);
-  });
+  }
+
+  const result = commands[command]();
+  if (result && typeof result.then === 'function') {
+    result.catch(err => {
+      output({ ok: false, error: err.message });
+      process.exit(1);
+    });
+  }
 }
 
 // ─── Commands ───
