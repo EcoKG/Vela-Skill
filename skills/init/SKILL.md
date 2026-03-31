@@ -23,8 +23,9 @@ description: "⛵ Vela 환경 구축 — 프로젝트에 Vela 샌드박스 엔�
    - `scripts/statusline.sh` → `.vela/statusline.sh`
    - `templates/*` → `.vela/templates/`
    - `references/*` → `.vela/references/`
-   - `skills/*` → `.vela/skills/` (서브스킬: init, start, git-clean)
    - `test-fixtures/*` → `.vela/test-fixtures/` (분석 보고서 샘플 데이터)
+
+   > ⚠ **주의:** `skills/` 디렉토리는 복사하지 않는다. skills는 스킬 저장소에만 존재하며 `.vela/`나 `~/.claude/skills/`에 복사하면 자동완성 중복이 발생한다.
 
 3. **훅 등록**
    ```bash

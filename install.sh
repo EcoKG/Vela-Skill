@@ -51,18 +51,10 @@ if [ -d "$TMP/references" ]; then
   cp -r "$TMP/references" "$SKILL_DIR/references"
 fi
 
-# Skills (sub-skills: init, start, git-clean → installed as independent skills for autocomplete)
+# Skills (sub-skills are part of the main skill — NOT installed as separate top-level skills)
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
-  # Also install as independent top-level skills for Claude Code autocomplete
-  SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in init start git-clean auto analyze; do
-    if [ -d "$TMP/skills/$sub" ]; then
-      mkdir -p "$SKILLS_ROOT/vela-$sub"
-      cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
-    fi
-  done
 fi
 
 # Test fixtures (sample data for analyze/report)
@@ -167,11 +159,7 @@ if [ -d ".vela" ]; then
   mkdir -p .vela/references
   cp "$SKILL_DIR/references/"*.md .vela/references/ 2>/dev/null
 
-  # Sub-skills
-  if [ -d "$SKILL_DIR/skills" ]; then
-    rm -rf .vela/skills 2>/dev/null
-    cp -r "$SKILL_DIR/skills" .vela/skills
-  fi
+  # Note: skills/ directory is NOT copied to .vela/ — skills live only in the skill repository
 
   # Test fixtures
   if [ -d "$SKILL_DIR/test-fixtures" ]; then

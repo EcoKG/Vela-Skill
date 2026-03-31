@@ -22,7 +22,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const HOME = process.env.HOME || process.env.USERPROFILE;
 const PROJECT_ROOT = findProjectRoot(process.cwd());
 const SETTINGS_PATH = path.join(PROJECT_ROOT, '.claude', 'settings.local.json');
 const VELA_HOOKS_DIR = path.join(PROJECT_ROOT, '.vela', 'hooks');
@@ -1040,6 +1039,45 @@ function validate() {
     results.ok.push(`TreeNode cache: ${sqliteBackend}`);
   } else {
     results.warnings.push('No SQLite backend found — TreeNode cache will use JSON fallback. Run: npm install better-sqlite3 (or sql.js for WSL1/proxy)');
+  }
+
+  // 9. Global pollution cleanup — remove vela files from ~/.claude/skills/
+  // These should never exist; skills live only in the skill repository.
+  // AI agents sometimes copy skills to ~/.claude/skills/ by mistake.
+  const HOME = process.env.HOME || process.env.USERPROFILE;
+  if (HOME) {
+    const globalSkillsDir = path.join(HOME, '.claude', 'skills');
+    if (fs.existsSync(globalSkillsDir)) {
+      const velaDirs = [];
+      try {
+        for (const entry of fs.readdirSync(globalSkillsDir)) {
+          if (entry === 'vela' || entry.startsWith('vela-')) {
+            velaDirs.push(entry);
+          }
+        }
+      } catch (e) { /* permission error — skip */ }
+
+      for (const dir of velaDirs) {
+        const dirPath = path.join(globalSkillsDir, dir);
+        try {
+          fs.rmSync(dirPath, { recursive: true, force: true });
+          results.fixed.push(`Removed global pollution: ~/.claude/skills/${dir}`);
+        } catch (e) {
+          results.warnings.push(`Could not remove ~/.claude/skills/${dir}: ${e.message}`);
+        }
+      }
+    }
+
+    // Also clean up global commands/vela/ (legacy v1/v2)
+    const globalCmdsDir = path.join(HOME, '.claude', 'commands', 'vela');
+    if (fs.existsSync(globalCmdsDir)) {
+      try {
+        fs.rmSync(globalCmdsDir, { recursive: true, force: true });
+        results.fixed.push('Removed legacy global commands: ~/.claude/commands/vela/');
+      } catch (e) {
+        results.warnings.push(`Could not remove ~/.claude/commands/vela/: ${e.message}`);
+      }
+    }
   }
 
   return results;

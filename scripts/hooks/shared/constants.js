@@ -83,11 +83,11 @@ const SECRET_PATTERNS = [
 
 // Bash commands that are safe in read-only mode
 // Includes: basic read utilities, version checks, git read-only, and standard build/test/lint runners
-const SAFE_BASH_READ = /^\s*(ls|cat|head|tail|find|grep|rg|wc|file|stat|tree|pwd|echo|which|node\s+.*--version|python3?\s+--version|git\s+(status|log|diff|branch|show|blame|remote)|(npm|yarn|pnpm)\s+(run\s+)?(test|build|lint|check|typecheck)|npx\s+(jest|vitest|eslint|prettier|tsc)|cargo\s+(test|build|check|clippy|fmt)|go\s+(test|build|vet)|pytest|python3?\s+-m\s+(pytest|unittest)|tsc|make|dotnet\s+(test|build))\b/;
+const SAFE_BASH_READ = /^\s*(ls|cat|head|tail|find|grep|rg|wc|file|stat|tree|pwd|echo|which|node\s+.*--version|python3?\s+--version|git\s+(status|log|diff|branch|show|blame|remote|ls-files|ls-tree|rev-parse|describe|tag|config\s+--get)|(npm|yarn|pnpm)\s+(run\s+)?(test|build|lint|check|typecheck)|npx\s+(jest|vitest|eslint|prettier|tsc)|cargo\s+(test|build|check|clippy|fmt)|go\s+(test|build|vet)|pytest|python3?\s+-m\s+(pytest|unittest)|tsc|make|dotnet\s+(test|build))\b/;
 
 // Bash commands that write files
 const BASH_WRITE_PATTERNS = [
-  />\s*\S/,                          // redirect
+  /(?<!\d)>\s*\S/,                   // redirect to file (but not 2>&1 stderr merge)
   /\|\s*tee\s/,                      // pipe to tee
   /\bcp\s/,                          // copy
   /\bmv\s/,                          // move

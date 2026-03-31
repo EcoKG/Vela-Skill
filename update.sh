@@ -50,17 +50,10 @@ if [ -d "$TMP/references" ]; then
 fi
 
 # Skills
+# Skills (sub-skills are part of the main skill — NOT installed as separate top-level skills)
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
-  # Also install as independent top-level skills for Claude Code autocomplete
-  SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in init start git-clean auto analyze; do
-    if [ -d "$TMP/skills/$sub" ]; then
-      mkdir -p "$SKILLS_ROOT/vela-$sub"
-      cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
-    fi
-  done
 fi
 
 # Plugin metadata
@@ -126,11 +119,7 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     mkdir -p .vela/references
     cp "$TMP/references/"*.md .vela/references/ 2>/dev/null
 
-    # Sub-skills (init, start, git-clean, etc.)
-    if [ -d "$TMP/skills" ]; then
-      rm -rf .vela/skills 2>/dev/null
-      cp -r "$TMP/skills" .vela/skills
-    fi
+    # Note: skills/ directory is NOT copied to .vela/ — skills live only in the skill repository
 
     # Test fixtures
     if [ -d "$TMP/test-fixtures" ]; then
