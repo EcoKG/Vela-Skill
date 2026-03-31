@@ -1,5 +1,5 @@
 ---
-name: git-clean
+name: "vela:git-clean"
 description: "🧹 Git 정리 — 프로젝트의 불필요한 추적 파일, 머지된 브랜치, 캐시를 스캔하고 사용자 확인 후 정리합니다."
 ---
 

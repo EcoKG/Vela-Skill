@@ -1,5 +1,5 @@
 ---
-name: start
+name: "vela:start"
 description: "🧭 Vela 파이프라인 바로 시작 — init이 안 되어 있으면 자동으로 환경 구축 후 파이프라인을 시작합니다. 작업 내용과 규모를 선택하면 즉시 진행됩니다."
 ---
 

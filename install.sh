@@ -51,10 +51,18 @@ if [ -d "$TMP/references" ]; then
   cp -r "$TMP/references" "$SKILL_DIR/references"
 fi
 
-# Skills (sub-skills: init, start, git-clean)
+# Skills (sub-skills: init, start, git-clean → installed as independent skills for autocomplete)
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
+  # Also install as independent top-level skills for Claude Code autocomplete
+  SKILLS_ROOT="$HOME/.claude/skills"
+  for sub in init start git-clean auto analyze; do
+    if [ -d "$TMP/skills/$sub" ]; then
+      mkdir -p "$SKILLS_ROOT/vela-$sub"
+      cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
+    fi
+  done
 fi
 
 # Test fixtures (sample data for analyze/report)

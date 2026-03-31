@@ -1,5 +1,5 @@
 ---
-name: init
+name: "vela:init"
 description: "⛵ Vela 환경 구축 — 프로젝트에 Vela 샌드박스 엔진을 설치합니다. 훅, CLI, 에이전트 파일을 배포하고 파이프라인 시스템을 활성화합니다."
 ---
 
