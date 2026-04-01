@@ -167,15 +167,16 @@ node .vela/cli/vela-engine.js auto
    ```
    .vela/
    ├── config.json              ← Vela 설정
-   ├── hooks/                   ← 훅 스크립트
-   │   ├── vela-gate-keeper.js  ← 수문장 (PreToolUse)
-   │   ├── vela-gate-guard.js   ← 가이드라인 (PreToolUse)
-   │   ├── vela-orchestrator.js ← 상태주입 (UserPromptSubmit)
-   │   ├── vela-tracker.js      ← 추적기 (PostToolUse)
-   │   ├── vela-notification.js ← 데스크톱 알림 (Notification)
-   │   └── shared/
-   │       ├── constants.js
-   │       └── pipeline.js
+   ├── shared/                  ← SDK 공유 모듈
+   │   ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit, 격리)
+   │   ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+   │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
+   │   ├── sdk-researcher.js    ← 3관점 병렬 분석
+   │   ├── sdk-executor.js      ← Sonnet TDD 실행
+   │   ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석
+   │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
+   │   ├── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
+   │   └── pipeline.js          ← 파이프라인 상태 관리, Gate Keeper/Guard 로직
    ├── cli/                     ← 커스텀 CLI 도구
    │   ├── vela-pipeline.js     ← SDK 오케스트레이터 (파이프라인 자동 실행)
    │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진
@@ -190,19 +191,19 @@ node .vela/cli/vela-engine.js auto
 
 3. **스크립트 배포**
    이 스킬의 `scripts/` 디렉토리에 있는 파일들을 `.vela/`로 복사한다:
-   - `scripts/hooks/*` → `.vela/hooks/`
+   - `scripts/shared/*` → `.vela/shared/`
    - `scripts/cli/*` → `.vela/cli/`
    - `scripts/cache/*` → `.vela/cache/`
    - `scripts/install.js` → `.vela/install.js`
    - `templates/*` → `.vela/templates/`
 
-4. **훅 등록**
-   `.vela/install.js`를 실행하여 Claude Code의 `~/.claude/settings.json`에 훅을 등록한다:
+4. **권한 규칙 등록**
+   `.vela/install.js`를 실행하여 프로젝트-로컬 `.claude/settings.local.json`에 권한 규칙을 등록한다:
    ```bash
    node .vela/install.js
    ```
 
-5. **훅 검증**
+5. **설치 검증**
    ```bash
    node .vela/install.js verify
    ```
@@ -455,7 +456,7 @@ Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계�
 | `execute` | Sonnet | TDD 기반 코드 구현 (readwrite 권한) |
 
 각 커맨드는 `runSdkAgent()`를 통해 SDK를 호출한다:
-- `settingSources: []` — SDK 에이전트에 Vela 훅이 로드되지 않음 (훅 격리)
+- `settingSources: []` — SDK 에이전트에 Vela 설정이 로드되지 않음 (재귀 방지)
 - `permissionMode: 'bypassPermissions'` — 엔진 제어 하에 자동 실행
 - 인증은 `process.env.ANTHROPIC_API_KEY` 상속
 
@@ -663,43 +664,41 @@ Research 단계에서 Subagent(Sonnet)가 단독으로 프로젝트 분석을 �
 
 ---
 
-## 훅 목록 (18개)
+## SDK 오케스트레이터 제어 구조
 
-Vela는 Claude Code의 hook event에 18개의 훅을 등록한다.
+Vela는 `@anthropic-ai/claude-agent-sdk`의 `query()` API를 사용하여 파이프라인을 직접 제어한다. SDK 콜백으로 보안 규칙을 인라인 적용하며, 별도 훅 프로세스를 spawn하지 않는다.
 
-| # | Hook ID | Event | 유형 | 설명 |
-|---|---------|-------|------|------|
-| 1 | vela-gate-keeper | PreToolUse | command | 수문장 — 파이프라인 규칙 위반 차단 |
-| 2 | vela-gate-guard | PreToolUse | command | 가이드라인 — 코딩 규칙 안내 |
-| 3 | vela-orchestrator | UserPromptSubmit | command | 상태 주입 — 파이프라인 컨텍스트 주입 |
-| 4 | vela-tracker | PostToolUse | command | 추적기 — 도구 사용 기록 |
-| 5 | vela-stop | Stop | command | 정지 제어 — auto 모드 중단 방지 |
-| 6 | vela-session-start | SessionStart | command | 세션 시작 시 상태 복구 |
-| 7 | vela-compact | PreCompact | command | 컴팩트 전 상태 보존 |
-| 8 | vela-compact | PostCompact | command | 컴팩트 후 상태 복원 |
-| 9 | vela-subagent-start | SubagentStart | command | 서브에이전트 시작 추적 |
-| 10 | vela-task-completed | TaskCompleted | command | 태스크 완료 기록 |
-| 11 | vela-subagent-stop | SubagentStop | command | 서브에이전트 종료 + 산출물 수확 |
-| 12 | vela-permission | PermissionRequest | command | 파일 쓰기 권한 자동 승인 |
-| 13 | vela-failure | PostToolUseFailure | command | 도구 실패 추적 + 연속 실패 경고 |
-| 14 | vela-stop-failure | StopFailure | command | 비정상 종료 시 파이프라인 스냅샷 |
-| 15 | vela-teammate-idle | TeammateIdle | command | 유휴 팀원 알림 |
-| 16 | vela-review-prompt | PostToolUse | prompt | 코드 변경 자동 리뷰 |
-| 17 | vela-test-async | PostToolUse | command | 관련 테스트 비동기 실행 |
-| 18 | vela-notification | Notification | command | 데스크톱 알림 전송 (macOS/Linux) |
+### 오케스트레이터 아키텍처
 
-### if 조건 최적화
+```
+vela-pipeline.js (오케스트레이터)
+  ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
+  ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
+  ├── sdk-reviewer.js (3단계 리뷰)
+  ├── sdk-plan-checker.js (plan 검증)
+  ├── sdk-researcher.js (3관점 분석)
+  ├── sdk-executor.js (코드 구현)
+  └── SDK hooks 콜백 (Gate Keeper/Guard 역할)
+       ├── createBashGuard() — R/W 모드 Bash 차단
+       ├── createSensitiveFileGuard() — 민감 파일 보호
+       ├── createSecretGuard() — 시크릿 패턴 차단
+       └── createProtectedBranchGuard() — 보호 브랜치 차단
+```
 
-`PermissionRequest` 이벤트의 `vela-permission` 훅에는 `if: 'Write(*)|Edit(*)|NotebookEdit(*)'` 조건이 적용된다. Claude Code는 이 조건에 매칭되는 도구 호출에서만 훅 프로세스를 spawn하므로, Bash/Read 등 비-파일수정 도구 사용 시 불필요한 프로세스 생성이 방지된다.
+### SDK 콜백 기반 보안 규칙
 
-### Notification Hook (vela-notification)
+SDK `query()`의 `hooks` 파라미터로 보안 규칙을 인라인 적용한다:
 
-`Notification` 이벤트 수신 시 OS 네이티브 데스크톱 알림을 전송한다:
-- **macOS**: `osascript display notification`
-- **Linux**: `notify-send` (freedesktop.org)
-- **기타 플랫폼**: silent no-op
+| 콜백 | 역할 | 대응하는 규칙 |
+|------|------|--------------|
+| `createBashGuard()` | read 모드에서 쓰기 명령 차단 | Gate Keeper GUARD 1-3 |
+| `createSensitiveFileGuard()` | .env, secrets 등 민감 파일 보호 | Gate Keeper GUARD 4-6 |
+| `createSecretGuard()` | API 키, 토큰 등 시크릿 패턴 차단 | Gate Guard 규칙 |
+| `createProtectedBranchGuard()` | main/master 직접 커밋 방지 | Gate Keeper GUARD 7-9 |
 
-알림 실패는 항상 무시되며 exit code에 영향을 주지 않는다. 자체 완결형 훅으로 pipeline.js나 config 의존성 없음.
+### SDK 미설치 시 폴백
+
+`@anthropic-ai/claude-agent-sdk`가 설치되지 않은 환경에서는 기존 Subagent/Teammate 방식으로 자동 폴백한다. SDK 모듈은 `{ ok: false, error: 'sdk_not_available' }`을 반환하고, 오케스트레이터가 비-SDK 경로로 전환한다.
 
 ---
 
