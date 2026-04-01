@@ -1,4 +1,4 @@
-# ⛵ Vela Engine v3.2 — Sandbox Development System
+# ⛵ Vela Engine v3.3 — Sandbox Development System
 
 **Vela**(돛자리)는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의 파이프라인을 통해서만 진행된다.
@@ -11,10 +11,9 @@ Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의
 AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela는 **"언제, 어떤 순서로, 누구의 검증을 거쳐 할 수 있는가"**를 강제한다.
 
 ### 2. 🌟 이중 방어 (Defense in Depth)
-- **Gate Keeper** + **Gate Guard** — 훅 레벨 이중 차단 (Fail-closed: 예외 발생 시 exit(2)로 도구 차단)
-- **HMAC-SHA256 서명 체인** — delegation.json, review-*.md 위조 방지. 미서명/변조 시 게이트에서 거부
+- **Gate Keeper** + **Gate Guard** — SDK 콜백 레벨 이중 차단 (Fail-closed: 예외 발생 시 도구 차단)
 - **Reviewer** (SDK 3단계: Haiku→Sonnet→Opus) — 비용 효율적 독립 평가
-- **Permission deny** + **Hook exit(2)** — 시스템 + 코드 레벨
+- **Permission deny** — settings.local.json deny 패턴으로 절대 차단
 - **GUARD 0**: 파이프라인 중 TaskCreate 차단
 - **pipeline-state.json + config.json 보호**: 직접 수정 불가
 
@@ -56,8 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | 
 
 Auto 모드에서는:
 - 파이프라인 전 단계 자동 진행 (checkpoint 포함)
-- Stop hook이 파이프라인 미완료 시 세션 종료를 물리적으로 차단
-- PermissionRequest hook이 Write/Edit 권한을 안전한 컨텍스트에서 자동 승인
+- SDK 오케스트레이터가 단계별 Agent를 spawn하여 완전 무인 실행
 - 도구 실패 시 자동 기록, API 에러 시 상태 자동 보존
 
 ### 4. 업데이트
@@ -79,7 +77,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │                    ⛵ VELA SANDBOX                        │
 │                                                           │
 │  ⛵ Gate Keeper   🌟 Gate Guard   🧭 Orchestrator        │
-│  R/W 모드 강제    파이프라인 순서   매 턴 상태 주입         │
+│  R/W 모드 강제    파이프라인 순서   SDK 단계별 Agent spawn  │
 │                                                           │
 │  ⛵ PROMPT OPTIMIZER ────────────────────────────        │
 │  모든 모드에서 최우선 실행. 불충분한 프롬프트 자동 감지     │
@@ -89,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │  init → research → plan → plan-check → checkpoint        │
 │       → branch → execute → verify → commit → finalize    │
 │                                                           │
-│  🔌 SDK ENGINE ──────────────────────────────────        │
+│  🔌 SDK ORCHESTRATOR (vela-pipeline.js) ─────────        │
 │  review:     Haiku→Sonnet→Opus 3단계 리뷰                 │
 │  plan-check: Haiku 구조 검증                               │
 │  research:   Haiku × 3 병렬 분석 (아키텍처/보안/품질)      │
@@ -169,51 +167,33 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 ---
 
-## Hook 시스템 (18개)
+## SDK 오케스트레이터 — vela-pipeline.js
 
-Vela는 Claude Code Hook API를 활용하여 18개 hook으로 개발 행위를 물리적으로 통제한다.
+M010에서 도입된 SDK 오케스트레이터는 `@anthropic-ai/claude-agent-sdk`의 `query()` API를 사용하여 파이프라인 단계별 Agent를 직접 spawn한다. 기존 18개 훅 기반 간접 제어에서, 엔진이 SDK로 에이전트를 직접 spawn하는 직접 제어로 전환되었다.
 
-### Hook 목록
+### 아키텍처
 
-| Hook | 이벤트 | 타입 | 역할 |
-|------|--------|------|------|
-| **Gate Keeper** | PreToolUse | command | R/W 모드 강제, Bash/시크릿 차단 |
-| **Gate Guard** | PreToolUse | command | 파이프라인 순서 강제 (GUARD 0~12) |
-| **Orchestrator** | UserPromptSubmit | command | 매 턴 상태/directive 주입, 에스컬레이션 소비 |
-| **Tracker** | PostToolUse | command | 도구 사용 기록, trace.jsonl |
-| **Stop** | Stop | command | 파이프라인 미완료 시 `decision:block`으로 세션 종료 차단 |
-| **SessionStart** | SessionStart | command | 중단된 파이프라인 자동 재개 |
-| **Compact** (Pre/Post) | PreCompact / PostCompact | command | 컨텍스트 압축 시 상태 보존/복원 |
-| **SubagentStart** | SubagentStart | command | 서브에이전트 위임 설정 (delegation.json) |
-| **SubagentStop** | SubagentStop | command | 서브에이전트 출력 수확, 에스컬레이션 감지 |
-| **TaskCompleted** | TaskCompleted | command | 소통 이력 검증 |
-| **Permission** | PermissionRequest | command | Auto+execute+delegation 시 Write/Edit 자동 승인 |
-| **Failure** | PostToolUseFailure | command | 도구 실패 로깅, 연속 3회 경고 |
-| **StopFailure** | StopFailure | command | API 에러 시 상태 스냅샷 보존 |
-| **TeammateIdle** | TeammateIdle | command | 멈춘 Teammate 감지 알림 |
-| **ReviewPrompt** | PostToolUse | prompt | Write/Edit 후 경량 코드 검사 |
-| **TestAsync** | PostToolUse | async | 백그라운드 테스트 실행 + 결과 systemMessage |
-| **Notification** | Notification | command | 데스크톱 알림 (macOS/Linux) |
+```
+vela-pipeline.js (오케스트레이터)
+  ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
+  ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
+  ├── sdk-reviewer.js (3단계 리뷰)
+  ├── sdk-plan-checker.js (plan 검증)
+  ├── sdk-researcher.js (3관점 분석)
+  ├── sdk-executor.js (코드 구현)
+  └── SDK hooks 콜백 (Gate Keeper/Guard 역할)
+       ├── createBashGuard() — R/W 모드 Bash 차단
+       ├── createSensitiveFileGuard() — 민감 파일 보호
+       ├── createSecretGuard() — 시크릿 패턴 차단
+       └── createProtectedBranchGuard() — 보호 브랜치 차단
+```
 
-### Hook 타입
+### 핵심 설계 결정
 
-| 타입 | 설명 |
-|------|------|
-| **command** | Node.js 스크립트 실행. stdin JSON → stdout JSON + exit code |
-| **prompt** | 인라인 프롬프트. 모델이 직접 검사 수행 |
-| **async** | 비동기 실행. Claude가 기다리지 않고 결과는 다음 턴에 systemMessage로 전달 |
-
-### if 조건 최적화
-
-tool 이벤트 hook에 `if` 필드로 실행 대상을 제한하여 불필요한 hook spawn을 감소시킨다:
-- Permission hook: `if: "Write(*)|Edit(*)|NotebookEdit(*)"` — 파일 수정 도구에만 반응
-- 비-tool 이벤트(Stop, Notification 등)에는 if 조건 적용 불가 (적용 시 hook이 절대 실행되지 않음)
-
----
-
-## SDK 엔진 — Agent SDK 통합
-
-Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계획 검증, 실행을 엔진 CLI에서 직접 수행한다. PM이 Subagent를 소환하는 간접 제어에서, 엔진이 SDK로 에이전트를 직접 spawn하는 직접 제어로 전환한다.
+- **CLI bridge 패턴**: vela-pipeline.js가 vela-engine.js의 상태 전이를 `execFileSync('node', ['vela-engine.js', ...])` 호출로 위임. 상태 머신이 단일 소스로 유지됨.
+- **bypassPermissions 필수**: `permissionMode: 'dontAsk'`도 Read 도구에 퍼미션 프롬프트를 발생시킴. 자동 파이프라인에서는 `bypassPermissions` + `allowDangerouslySkipPermissions: true` 조합만 사용.
+- **settingSources: []**: 모든 SDK query() 호출에 명시적으로 전달. SDK Agent에 Vela 설정이 로드되지 않음 (재귀 방지).
+- **SDK 미설치 폴백**: SDK가 없으면 기존 Subagent/Teammate 방식으로 자동 폴백.
 
 ### SDK 모드 vs 비-SDK 모드
 
@@ -225,12 +205,15 @@ Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계�
 | 실행 | SDK Executor (Sonnet) | PM → Executor Subagent |
 | PM 코드 작성 | 구조적으로 차단 | 프롬프트 규칙으로 차단 |
 | 인증 | Claude Code 세션 인증 상속 | 동일 |
-
-SDK 미설치 시 자동 폴백 — 기존 Subagent/Teammate 방식으로 동작한다.
+| 훅 오버헤드 | 0 (파이프라인 밖) | 동일 |
 
 ### SDK 커맨드
 
 ```bash
+# SDK 오케스트레이터 실행
+node .vela/cli/vela-pipeline.js run "OAuth 인증 추가" --scale large
+
+# 엔진 직접 호출 (SDK 단계별)
 node .vela/cli/vela-engine.js review      # Haiku→Sonnet→Opus 3단계 리뷰
 node .vela/cli/vela-engine.js plan-check   # Haiku plan.md 구조 검증
 node .vela/cli/vela-engine.js research     # 3-관점 병렬 리서치 (Haiku × 3)
@@ -246,19 +229,20 @@ node .vela/cli/vela-analyze.js report --input data.json          # JSON → PDF
 ### SDK 모듈 구조
 
 ```
-scripts/hooks/shared/
+scripts/shared/
 ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit 재시도, hook 격리)
-├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰 + HMAC 서명
+├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
 ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
 ├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
 ├── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
 ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석 (security/bugs/performance/code-quality/architecture)
 ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석 (SDK 불필요)
-└── hmac.js              ← HMAC-SHA256 서명/검증 (delegation.json, review-*.md)
+├── pipeline.js          ← 파이프라인 상태 관리, Gate Keeper/Guard 로직
+└── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
 ```
 
-각 모듈은 동일한 CJS 패턴을 따른다:
-- `settingSources: []` — SDK 에이전트에 Vela 훅이 로드되지 않음 (hook 격리)
+각 SDK 모듈은 동일한 CJS 패턴을 따른다:
+- `settingSources: []` — SDK 에이전트에 Vela 설정이 로드되지 않음 (격리)
 - `permissionMode: 'bypassPermissions'` — 엔진 제어 하에 자동 실행
 - SDK 미설치 시 `{ ok: false, error: 'sdk_not_available' }` 반환 — graceful fallback
 - Rate limit 발생 시 exponential backoff 자동 재시도 (maxRetries: 3)
@@ -366,29 +350,31 @@ Conflict Manager가 최종 병합 + 충돌 해결
 
 Auto 모드(`/vela auto` 또는 `--auto`)는 파이프라인을 완전 무인으로 실행한다.
 
-### 물리적 강제 (Hard Automation)
+### SDK 오케스트레이터 자동화
 
-| 메커니즘 | Hook | 동작 |
-|---------|------|------|
-| **세션 종료 차단** | Stop | 파이프라인 미완료 시 `decision:block` 반환. `stop_hook_active` 가드로 무한루프 방지 |
-| **권한 자동 승인** | Permission | Auto+execute+delegation+WRITE_TOOLS 4조건 AND 게이트로 Write/Edit 자동 승인 |
-| **실패 복구** | Failure | 연속 3회 도구 실패 시 additionalContext 경고. 카운터 자동 리셋 |
-| **상태 보존** | StopFailure | API rate limit/server error 시 파이프라인 상태 스냅샷을 artifact 디렉토리에 보존 |
-| **에스컬레이션** | SubagentStop + Orchestrator | Reviewer 점수 미달 → escalation.json → Opus 재소환 directive |
+| 메커니즘 | 동작 |
+|---------|------|
+| **단계별 Agent spawn** | vela-pipeline.js가 각 파이프라인 단계(research/plan/execute/review)에 맞는 SDK Agent를 spawn. 단계별 도구 화이트리스트와 시스템 프롬프트가 코드로 제어됨 |
+| **권한 제어** | `permissionMode: 'bypassPermissions'` + `disallowedTools`로 단계별 도구 접근 제어. PM/user 단계는 자동 진행 |
+| **실패 복구** | SDK Agent 실패 시 상태 보존 + 에러 기록. Rate limit 시 exponential backoff 재시도 |
+| **에스컬레이션** | 리뷰 점수 미달 → Haiku→Sonnet→Opus 자동 에스컬레이션 |
+| **상태 보존** | API 에러 시 파이프라인 상태 스냅샷을 artifact 디렉토리에 보존 |
 
 ### 자동 품질 검사
 
-| 메커니즘 | Hook | 동작 |
-|---------|------|------|
-| **경량 코드 리뷰** | ReviewPrompt (prompt) | Write/Edit 후 즉석 코드 검사 |
-| **백그라운드 테스트** | TestAsync (async) | 변경 파일의 관련 테스트를 비동기 실행, systemMessage로 결과 보고 |
-| **데스크톱 알림** | Notification | permission_prompt, idle_prompt 등 사용자 주의 필요 이벤트 알림 |
+| 메커니즘 | 동작 |
+|---------|------|
+| **SDK 리뷰** | sdk-reviewer.js가 review 단계에서 3단계 자동 리뷰 수행 |
+| **SDK plan-check** | sdk-plan-checker.js가 plan.md 구조를 자동 검증 |
+| **exit gate** | 엔진이 단계별 필수 산출물(review-*.md, approval-*.json) 존재를 확인 → 없으면 transition 차단 |
 
 ---
 
 ## 방어 시스템
 
-### ⛵ Gate Keeper (PreToolUse)
+### ⛵ Gate Keeper
+
+SDK 오케스트레이터의 PreToolUse 콜백으로 구현. 모든 SDK Agent의 도구 호출을 검사한다.
 
 | 게이트 | 코드 | 규칙 |
 |--------|------|------|
@@ -396,62 +382,49 @@ Auto 모드(`/vela auto` 또는 `--auto`)는 파이프라인을 완전 무인으
 | 모드 강제 | VK-03, VK-04 | 읽기전용에서 Write/Edit 차단 |
 | 민감파일 보호 | VK-05 | .env, credentials.json, config.json 차단 |
 | 시크릿 감지 | VK-06 | 15개 패턴 차단 |
-| PM 속독 + HMAC | VK-07 | PM은 Read/Glob/Grep 허용, Write/Edit 차단. delegation.json HMAC 검증 (미서명/변조 시 exit 2) |
+| PM 속독 | VK-07 | PM은 Read/Glob/Grep 허용, Write/Edit 차단. delegation.json 검증 |
 | 체인 연산자 차단 | VK-08 | SAFE_BASH_READ 명령에서 체인 연산자(&&, \|\|, ;, \|) 차단. `ls && rm -rf /` 방지 |
 
-### 🌟 Gate Guard (PreToolUse)
+### 🌟 Gate Guard
+
+SDK 오케스트레이터가 단계별 도구 화이트리스트와 `disallowedTools`로 파이프라인 순서를 강제한다.
 
 | 가드 | 코드 | 규칙 |
 |------|------|------|
 | GUARD 0 | VG-00 | 파이프라인 중 TaskCreate/TaskUpdate 차단 |
 | GUARD 1 | VG-01 | research.md 없이 plan.md 불가 |
 | GUARD 2 | VG-02 | execute 전 소스코드 수정 불가 + pipeline-state.json 보호 + config.json 쓰기 차단 (VG-05) |
-| GUARD 3 | VG-03 | 빌드/테스트 실패 시 commit 불가. corrupt signals file 시 exit(2) + 복구 안내 |
+| GUARD 3 | VG-03 | 빌드/테스트 실패 시 commit 불가. corrupt signals file 시 복구 안내 |
 | GUARD 5 | VG-05 | pipeline-state.json 직접 수정 불가 |
 | GUARD 7 | VG-07 | execute/commit/finalize에서만 git commit 허용 |
 | GUARD 8 | VG-08 | verify 완료 전 git push 차단 |
 | GUARD 11 | VG-11 | 비-team 단계에서 approval/review 작성 차단 |
-| GUARD 12 | VG-12 | execute 단계 PM 직접 소스 수정 차단 — 위임 강제. delegation.json HMAC 검증 (trivial 면제) |
+| GUARD 12 | VG-12 | execute 단계 PM 직접 소스 수정 차단 — 위임 강제 |
 
 ### 차단 시 자동 복구 (Block Recovery)
 
 ```
-Claude: src/auth.js 수정 시도
+SDK Agent: src/auth.js 수정 시도
   ↓
-Hook: 🌟 [Vela] ✦ BLOCKED [VG-02]: Source code modification before execute step.
-      Recovery: Complete steps first: research → plan → execute
+Guard: 🌟 [Vela] ✦ BLOCKED [VG-02]: Source code modification before execute step.
+       Recovery: Complete steps first: research → plan → execute
   ↓
-Claude: [VG-02] → 복구 테이블 참조 → vela-engine transition 실행
+오케스트레이터: 차단 감지 → 올바른 단계로 전이
 ```
 
 ### Permission Deny (절대 차단)
 
 `rm -rf`, `git push --force`, `git reset --hard`, `git commit --no-verify`, `git clean -f`
 
-### 🔐 HMAC 서명 체인
-
-Vela는 HMAC-SHA256 서명으로 보안 관련 아티팩트의 위조를 방지한다.
-
-| 대상 | 서명 시점 | 검증 시점 | 서명 방식 |
-|------|----------|----------|----------|
-| delegation.json | SubagentStart hook | Gate Keeper (VK-07), Gate Guard (VG-12), Permission hook | JSON canonical form (sorted keys, `_hmac` 필드) |
-| review-*.md | sdk-reviewer.js 작성 후 | vela-engine exit gate | Companion `.hmac` sidecar 파일 |
-| config.json | — | Gate Keeper (VK-05), Gate Guard (VG-05) | 쓰기 자체 차단 (서명 불필요) |
-
-- **키 생성**: `vela-engine init` 시 `.vela/state/hmac-key` 자동 생성
-- **검증 실패 시**: exit(2)로 도구 차단 (fail-closed)
-- **키 없는 환경**: graceful skip (HMAC 도입 전 파이프라인 호환)
-- **정리**: step transition/cancel 시 delegation.json 자동 삭제
+이 규칙들은 settings.local.json의 deny 패턴으로 등록되어 SDK와 무관하게 Claude Code 레벨에서 절대 차단된다.
 
 ### Fail-Closed 보안 모델
 
 Gate Keeper와 Gate Guard의 모든 오류 경로는 fail-closed로 동작한다:
-- Corrupt stdin → exit(2) — 도구 차단
-- 빈 stdin → exit(2) — 도구 차단
-- 미처리 예외 → exit(2) — 도구 차단
-- HMAC 검증 실패 → exit(2) — 도구 차단
+- 잘못된 입력 → 도구 차단
+- 미처리 예외 → 도구 차단
 
-정상 허용만 exit(0)을 반환한다. 오류 발생 시 안전한 방향(차단)으로 동작.
+정상 허용만 통과. 오류 발생 시 안전한 방향(차단)으로 동작.
 
 ---
 
@@ -479,8 +452,6 @@ Gate Keeper와 Gate Guard의 모든 오류 경로는 fail-closed로 동작한다
 ├── review-execute.md, approval-execute.json
 ├── verification.md, report.md, diff.patch, trace.jsonl
 ├── escalation.json (에스컬레이션 발생 시, 일회성)
-├── subagent-{agent_id}.md (서브에이전트 출력 수확)
-├── stop-failure-{timestamp}.json (API 에러 상태 스냅샷)
 ```
 
 ---
@@ -492,30 +463,30 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   ├── SKILL.md                   ← 스킬 진입점
   ├── package.json               ← optionalDependencies: @anthropic-ai/claude-agent-sdk
   ├── scripts/
-  │   ├── hooks/                 ← 18 hooks
-  │   │   └── shared/            ← pipeline.js, constants.js, hmac.js, 6개 SDK 모듈
-  │   │       ├── sdk-runner.js        ← SDK 인프라 (인증/폴백/rate limit/hook 격리)
-  │   │       ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰 + HMAC 서명
-  │   │       ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
-  │   │       ├── sdk-researcher.js    ← 3관점 병렬 분석
-  │   │       ├── sdk-executor.js      ← Sonnet TDD 실행
-  │   │       ├── sdk-analyzer.js      ← 5관점 코드 분석 (security/bugs/perf/quality/arch)
-  │   │       ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
-  │   │       └── hmac.js              ← HMAC-SHA256 서명/검증 (delegation.json, review-*.md)
-  │   ├── cli/                   ← vela-engine, vela-read, vela-write, vela-cost, vela-report, vela-analyze
+  │   ├── shared/                ← SDK 모듈 + 공유 유틸리티
+  │   │   ├── sdk-runner.js        ← SDK 인프라 (인증/폴백/rate limit/격리)
+  │   │   ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+  │   │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
+  │   │   ├── sdk-researcher.js    ← 3관점 병렬 분석
+  │   │   ├── sdk-executor.js      ← Sonnet TDD 실행
+  │   │   ├── sdk-analyzer.js      ← 5관점 코드 분석 (security/bugs/perf/quality/arch)
+  │   │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
+  │   │   ├── pipeline.js          ← 파이프라인 상태 관리
+  │   │   └── constants.js         ← 가드 패턴 상수
+  │   ├── cli/                   ← vela-engine, vela-pipeline, vela-read, vela-write, vela-cost, vela-report, vela-analyze
   │   ├── agents/                ← vela.md, researcher, planner, executor, reviewer, conflict-manager, leader
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
-  │   ├── tests/                 ← 14개 계약 테스트 스위트
-  │   ├── install.js             ← 설치/검증/복구/upgrade
+  │   ├── tests/                 ← 22개 계약 테스트 스위트
+  │   ├── install.js             ← 설치/검증/복구/upgrade/orphan cleanup
   │   └── statusline.sh          ← ⛵ 하단 바
   ├── templates/                 ← pipeline.json, config.json, presets.json
   └── references/                ← interactive-ui.md, gates-and-guards.md, cli-reference.md
 
 your-project/                    ← /vela init 실행 후
-  ├── .vela/                     ← 프로젝트별 설치 (hooks, cli, agents, templates 복사)
+  ├── .vela/                     ← 프로젝트별 설치 (cli, shared, agents, templates 복사)
   ├── .claude/
-  │   ├── settings.local.json    ← 18 hooks + permission + agent + spinner + statusLine
+  │   ├── settings.local.json    ← permission deny + agent + spinner + statusLine
   │   └── agents/vela.md         ← 기본 에이전트
   └── CLAUDE.md                  ← Vela 규칙
 ```
@@ -524,17 +495,23 @@ your-project/                    ← /vela init 실행 후
 
 | 명령 | 설명 |
 |------|------|
-| `node .vela/install.js` | 18개 훅 설치 + 유효성 검증 |
+| `node .vela/install.js` | 권한 설정 + 유효성 검증 |
 | `node .vela/install.js verify` | 설치 검증만 (JSON 출력: `--json`) |
-| `node .vela/install.js upgrade` | 모든 파일을 최신 버전으로 갱신 (config.json 제외) |
-| `node .vela/install.js status` | 현재 훅 상태 확인 |
-| `node .vela/install.js uninstall` | Vela 훅 제거 |
+| `node .vela/install.js upgrade` | FILE_MANIFEST 기반으로 모든 파일을 최신 버전으로 갱신 (config.json 제외) + orphan cleanup |
+| `node .vela/install.js status` | 현재 설치 상태 확인 |
+| `node .vela/install.js uninstall` | Vela 설정 제거 (레거시 훅 정리 포함) |
 
 ---
 
 ## 엔진 명령어
 
 ```bash
+# SDK 오케스트레이터
+vela-pipeline.js run "설명" --scale <small|medium|large|ralph|hotfix>
+vela-pipeline.js status
+vela-pipeline.js cancel
+
+# 상태 머신 (vela-engine.js)
 vela-engine init "설명" --scale <small|medium|large|ralph|hotfix>
 vela-engine init "설명" --scale large --auto   # Auto 모드
 vela-engine state
@@ -549,6 +526,8 @@ vela-engine review                               # SDK 3단계 리뷰 (Haiku→S
 vela-engine plan-check                           # SDK plan.md 구조 검증 (Haiku)
 vela-engine research                             # SDK 3-관점 병렬 리서치 (Haiku × 3)
 vela-engine execute                              # SDK 단일 실행 (Sonnet)
+
+# 유틸리티
 vela-cost                                        # 파이프라인 비용/메트릭
 vela-report [--html output.html]                 # 파이프라인 리포트/대시보드
 vela-analyze deps                                # 의존성 분석 (무료, npm audit/outdated)
@@ -561,11 +540,14 @@ vela-analyze report --input <file> [--output]    # JSON → PDF 변환
 
 ## 테스트
 
-21개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
+22개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
 
 ```bash
 # 전체 SDK 통합 테스트 (81 assertions)
 bash scripts/tests/test-sdk-integration.sh
+
+# SDK 오케스트레이터 E2E (파이프라인 전 단계)
+bash scripts/tests/test-pipeline-e2e.sh
 
 # 분석 보고서 E2E (22 assertions)
 bash scripts/tests/test-analyze-e2e.sh
@@ -576,7 +558,7 @@ bash scripts/tests/test-sdk-analyzer.sh
 # 보안 강화 테스트 (M008)
 bash scripts/tests/test-fail-closed.sh        # 7 assertions — Fail-closed 게이트
 bash scripts/tests/test-chain-operators.sh     # 13 assertions — 체인 연산자 차단
-bash scripts/tests/test-hmac-signing.sh        # 13 assertions — HMAC 서명 체인
+bash scripts/tests/test-hmac-signing.sh        # 13 assertions — 레거시 서명 검증
 bash scripts/tests/test-s03-relaxation.sh      # 21 assertions — 파이프라인 완화
 bash scripts/tests/test-s04-hardening.sh       # 21 assertions — 코드 품질 강화
 
@@ -588,12 +570,12 @@ bash scripts/tests/test-sdk-researcher.sh   # 23 assertions — 3관점 분석
 bash scripts/tests/test-sdk-executor.sh     # 13 assertions — 코드 실행
 bash scripts/tests/test-gate-vk07.sh        # Gate Keeper 규칙
 bash scripts/tests/test-auto-mode.sh        # Auto 모드 (16 assertions)
-bash scripts/tests/test-stop-hook.sh        # Stop hook
-bash scripts/tests/test-subagent-stop.sh    # SubagentStop + 에스컬레이션
-bash scripts/tests/test-permission-hook.sh  # PermissionRequest 자동 승인
-bash scripts/tests/test-failure-hooks.sh    # Failure/StopFailure/TeammateIdle
-bash scripts/tests/test-prompt-async-hooks.sh # ReviewPrompt + TestAsync
-bash scripts/tests/test-notification-hook.sh  # 데스크톱 알림
+bash scripts/tests/test-stop-hook.sh        # 레거시 Stop hook 계약
+bash scripts/tests/test-subagent-stop.sh    # 레거시 SubagentStop 계약
+bash scripts/tests/test-permission-hook.sh  # 레거시 Permission 계약
+bash scripts/tests/test-failure-hooks.sh    # 레거시 Failure/StopFailure/TeammateIdle
+bash scripts/tests/test-prompt-async-hooks.sh # 레거시 ReviewPrompt + TestAsync
+bash scripts/tests/test-notification-hook.sh  # 레거시 데스크톱 알림
 ```
 
 ⚠️ SDK 테스트 스위트들은 공유 mock 디렉토리를 사용하므로 **순차 실행** 필수 (병렬 실행 시 mock collision 발생).
@@ -602,7 +584,7 @@ bash scripts/tests/test-notification-hook.sh  # 데스크톱 알림
 
 ## 커스텀 어조 — persona.md
 
-`.vela/persona.md` 파일에 어조 규칙을 작성하면 Orchestrator가 모든 세션에 자동 주입한다.
+`.vela/persona.md` 파일에 어조 규칙을 작성하면 모든 세션에 자동 주입된다.
 
 - 파이프라인 활성 여부와 무관하게 항상 주입된다
 - 파일이 없거나 비어있으면 아무것도 출력하지 않는다
@@ -625,10 +607,12 @@ bash scripts/tests/test-notification-hook.sh  # 데스크톱 알림
 | v2.5 | M002 | Hook 4→18개, Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification |
 | v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단 |
 | v3.1 | M004 | 분석 보고서, dep-analyzer + sdk-analyzer, vela-analyze CLI, PDF 생성, `/vela analyze` |
-| v3.1 | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션+유니코드 프로그레스 바, Orchestrator 박스 드로잉, 18개 hook description 항해 세계관 통합 |
+| v3.1 | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션+유니코드 프로그레스 바, Orchestrator 박스 드로잉 |
 | v3.1 | M006 | 글로벌 오염 정리 — ~/.claude/ 잔여물 회수, 서브스킬 플랫 복사 제거, install.js 자기 치유 가드 |
 | v3.1 | M007 | 프로젝트 전수 검수 — 코드베이스 ~14,500줄 정밀 감사. AUDIT-001~059 (High 8, Medium 24, Low 27) |
-| v3.2 | M008 | 전수 수정 — Fail-closed 게이트, HMAC-SHA256 서명 체인, 체인 연산자 차단(VK-08), 파이프라인 완화(trivial/hotfix exit_gate:[]), execFileSync 전환(35+ callers), SQL parameterization, SDK null guards. 21개 테스트 스위트 230/230 PASS |
+| v3.2 | M008 | 전수 수정 — Fail-closed 게이트, 체인 연산자 차단(VK-08), 파이프라인 완화(trivial/hotfix exit_gate:[]), execFileSync 전환(35+ callers), SQL parameterization, SDK null guards. 21개 테스트 스위트 230/230 PASS |
+| v3.2 | M009 | 배포 고도화 — FILE_MANIFEST 단일화, orphan cleanup, 버전 일원화, config migration |
+| v3.3 | M010 | **SDK 오케스트레이터 전환** — 18개 훅 → SDK query() 기반 vela-pipeline.js 오케스트레이터. 훅 전면 제거, SDK callbacks로 Gate Keeper/Guard 구현. 파이프라인 밖 훅 오버헤드 0 |
 
 ---
 
