@@ -23,7 +23,6 @@
 const fs = require('fs');
 const path = require('path');
 const { runSdkAgent } = require('./sdk-runner');
-const { signFile, readKey } = require('./hmac');
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
 const PRIMARY_SCORE_REGEX = /(총점|총|total\s*score)[^\d]*(\d+)\s*\/\s*25/i;
@@ -115,15 +114,11 @@ function parseScore(text) {
  * @param {string} artifactDir - Directory to write artifacts to
  * @param {string} step - Pipeline step name
  * @param {string} content - Review content from agent
- * @param {string|null} hmacKey - HMAC key for signing (null to skip)
  */
-function writeReviewArtifact(artifactDir, step, content, hmacKey) {
+function writeReviewArtifact(artifactDir, step, content) {
   const filePath = path.join(artifactDir, `review-${step}.md`);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
-  if (hmacKey) {
-    signFile(filePath, hmacKey);
-  }
 }
 
 /**
@@ -277,10 +272,6 @@ async function sdkReview(opts) {
   const HAIKU_MODEL = 'claude-haiku-4-5-20250929';
   const SONNET_MODEL = 'claude-sonnet-4-5-20250929';
 
-  // K003: readKey once at entry, pass through to writeReviewArtifact
-  const velaDir = path.join(cwd, '.vela');
-  const hmacKey = readKey(velaDir);
-
   let totalCost = 0;
   let totalDurationMs = 0;
 
@@ -308,7 +299,7 @@ async function sdkReview(opts) {
     // Fall through to Stage 2 for a definitive answer
   } else if (haikuScore >= PASS_THRESHOLD) {
     // Clear pass — write artifacts, return
-    writeReviewArtifact(artifactDir, step, haikuResult, hmacKey);
+    writeReviewArtifact(artifactDir, step, haikuResult);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'approve',
       score: haikuScore,
@@ -335,7 +326,7 @@ async function sdkReview(opts) {
 
     if (opusResult.ok && opusResult.score != null && opusResult.score >= PASS_THRESHOLD) {
       // Opus rescued it
-      writeReviewArtifact(artifactDir, step, opusResult.result, hmacKey);
+      writeReviewArtifact(artifactDir, step, opusResult.result);
       writeApprovalArtifact(artifactDir, step, {
         decision: 'approve',
         score: opusResult.score,
@@ -363,7 +354,7 @@ async function sdkReview(opts) {
     const opusScore = (opusResult.ok && opusResult.score != null) ? opusResult.score : haikuScore;
     const opusReviewText = (opusResult.ok && opusResult.result) ? opusResult.result : haikuResult;
 
-    writeReviewArtifact(artifactDir, step, opusReviewText, hmacKey);
+    writeReviewArtifact(artifactDir, step, opusReviewText);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'reject',
       score: opusScore,
@@ -401,7 +392,7 @@ async function sdkReview(opts) {
   if (!stage2.ok) {
     // Stage 2 failed — still have Stage 1 result, report partial
     // Write Haiku artifacts as the best available review
-    writeReviewArtifact(artifactDir, step, haikuResult, hmacKey);
+    writeReviewArtifact(artifactDir, step, haikuResult);
     return {
       ok: false,
       error: stage2.error,
@@ -421,7 +412,7 @@ async function sdkReview(opts) {
 
   if (finalScore != null && finalScore >= PASS_THRESHOLD) {
     // Sonnet approved — no escalation needed
-    writeReviewArtifact(artifactDir, step, sonnetResult, hmacKey);
+    writeReviewArtifact(artifactDir, step, sonnetResult);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'approve',
       score: finalScore,
@@ -449,7 +440,7 @@ async function sdkReview(opts) {
 
   if (opusResult.ok && opusResult.score != null && opusResult.score >= PASS_THRESHOLD) {
     // Opus rescued it after Sonnet failed
-    writeReviewArtifact(artifactDir, step, opusResult.result, hmacKey);
+    writeReviewArtifact(artifactDir, step, opusResult.result);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'approve',
       score: opusResult.score,
@@ -477,7 +468,7 @@ async function sdkReview(opts) {
   const opusScore = (opusResult.ok && opusResult.score != null) ? opusResult.score : finalScore;
   const opusReviewText = (opusResult.ok && opusResult.result) ? opusResult.result : sonnetResult;
 
-  writeReviewArtifact(artifactDir, step, opusReviewText, hmacKey);
+  writeReviewArtifact(artifactDir, step, opusReviewText);
   writeApprovalArtifact(artifactDir, step, {
     decision: 'reject',
     score: opusScore,

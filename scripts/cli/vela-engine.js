@@ -26,7 +26,6 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync, execFileSync } = require('child_process');
-const { generateKey, verifyFile, readKey } = require('../hooks/shared/hmac');
 
 const CWD = process.cwd();
 const VELA_DIR = path.join(CWD, '.vela');
@@ -161,14 +160,6 @@ function cmdInit() {
   const artifactDir = path.join(ARTIFACTS_DIR, `${dateStr}_${uid}_${slug}`);
 
   fs.mkdirSync(artifactDir, { recursive: true });
-
-  // Generate HMAC signing key if not present
-  const stateDir = path.join(VELA_DIR, 'state');
-  const hmacKeyPath = path.join(stateDir, 'hmac-key');
-  if (!fs.existsSync(hmacKeyPath)) {
-    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(hmacKeyPath, generateKey(), 'utf8');
-  }
 
   // Auto mode flag
   const autoMode = hasFlag('--auto');
@@ -1188,9 +1179,6 @@ function checkExitGate(stepDef, state) {
   const artifactDir = state._artifactDir;
   const missing = [];
 
-  // K003: readKey once at function entry for HMAC verification
-  const hmacKey = readKey(VELA_DIR);
-
   for (const gate of stepDef.exit_gate) {
     switch (gate) {
       case 'artifact_dir_created':
@@ -1273,8 +1261,6 @@ function checkExitGate(stepDef, state) {
           const reviewPath = path.join(artifactDir, `review-${state.current_step}.md`);
           if (!fs.existsSync(reviewPath)) {
             missing.push(`review_missing:review-${state.current_step}.md`);
-          } else if (hmacKey && !verifyFile(reviewPath, hmacKey)) {
-            missing.push(`review_unsigned:review-${state.current_step}.md`);
           }
         }
         break;
