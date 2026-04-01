@@ -88,6 +88,7 @@ const FILE_MANIFEST = [
   { src: 'scripts/cli/vela-analyze.js', dst: 'cli/vela-analyze.js' },
   { src: 'scripts/cli/vela-cost.js', dst: 'cli/vela-cost.js' },
   { src: 'scripts/cli/vela-report.js', dst: 'cli/vela-report.js' },
+  { src: 'scripts/cli/vela-pipeline.js', dst: 'cli/vela-pipeline.js' },
   // Cache
   { src: 'scripts/cache/treenode.js', dst: 'cache/treenode.js' },
   // Root-level managed files
@@ -100,6 +101,7 @@ const FILE_MANIFEST = [
   { src: 'scripts/agents/reviewer.md', dst: 'agents/reviewer.md' },
   { src: 'scripts/agents/leader.md', dst: 'agents/leader.md' },
   { src: 'scripts/agents/conflict-manager.md', dst: 'agents/conflict-manager.md' },
+  { src: 'scripts/agents/vela-pm.md', dst: 'agents/vela-pm.md' },
   // Templates
   { src: 'templates/pipeline.json', dst: 'templates/pipeline.json' },
   { src: 'templates/presets.json', dst: 'templates/presets.json' },
@@ -546,6 +548,8 @@ function uninstall() {
     for (const matcher of Object.keys(settings.hooks)) {
       const before = settings.hooks[matcher].length;
       settings.hooks[matcher] = settings.hooks[matcher].filter(entry => {
+        // Remove _velaId prompt hooks (check before nested format — entry may have both)
+        if (entry._velaId && entry._velaId.startsWith(HOOK_PREFIX)) return false;
         // Remove legacy flat format: { command: "...vela...", description: "..." }
         if (entry.command && !entry.hooks && entry.command.includes(HOOK_PREFIX)) return false;
         // Remove new nested format: { matcher, hooks: [{ command: "...vela..." }] }
@@ -833,13 +837,21 @@ function validate() {
       if (settings.hooks) {
         for (const event of Object.keys(settings.hooks)) {
           const before = settings.hooks[event].length;
-          // Remove flat format hooks (legacy)
           settings.hooks[event] = settings.hooks[event].filter(entry => {
-            if (entry.command && !entry.hooks) return false; // legacy flat format
+            // Remove _velaId prompt hooks (check before nested format — entry may have both)
+            if (entry._velaId && entry._velaId.startsWith(HOOK_PREFIX)) return false;
+            // Remove legacy flat format: { command: "...vela...", description: "..." }
+            if (entry.command && !entry.hooks && entry.command.includes(HOOK_PREFIX)) return false;
+            // Remove new nested format: { matcher, hooks: [{ command: "...vela..." }] }
+            if (entry.hooks && Array.isArray(entry.hooks)) {
+              return !entry.hooks.some(h => h.command && h.command.includes(HOOK_PREFIX));
+            }
             return true;
           });
           if (settings.hooks[event].length !== before) fixed = true;
+          if (settings.hooks[event].length === 0) delete settings.hooks[event];
         }
+        if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
       }
 
       // Remove old agent name
