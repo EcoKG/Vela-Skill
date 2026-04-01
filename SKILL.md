@@ -104,14 +104,14 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
 4. **파이프라인 시작**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
    ```
 
 5. **파이프라인 진행**
-   `.vela/agents/vela.md`의 지시사항에 따라 파이프라인 단계를 순서대로 진행한다.
-   - standard: Research=Subagent(Sonnet) + Plan=Subagent(Sonnet) + Execute=Subagent/Teammate(Sonnet) + Reviewer(Subagent)
-   - quick: Subagent 기반 + Reviewer(Subagent)
-   - trivial: PM 직접 수행
+   SDK 오케스트레이터가 파이프라인 단계를 자동 순차 실행한다.
+   - standard: Research→Plan→Execute→Review (SDK query() 기반)
+   - quick: Plan→Execute→Review (SDK query() 기반)
+   - trivial: Execute only (SDK query() 기반)
 
 ---
 
@@ -136,7 +136,7 @@ node .vela/cli/vela-engine.js auto
 
 4. **파이프라인 시작 (auto 플래그 추가)**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs> --auto
+   node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
    ```
 
 5. **자동 진행**
@@ -177,7 +177,8 @@ node .vela/cli/vela-engine.js auto
    │       ├── constants.js
    │       └── pipeline.js
    ├── cli/                     ← 커스텀 CLI 도구
-   │   ├── vela-engine.js       ← 파이프라인 엔진
+   │   ├── vela-pipeline.js     ← SDK 오케스트레이터 (파이프라인 자동 실행)
+   │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진
    │   ├── vela-read.js         ← 읽기 도구
    │   └── vela-write.js        ← 쓰기 도구
    ├── cache/                   ← TreeNode SQLite 캐시
@@ -340,11 +341,18 @@ node .vela/cli/vela-engine.js auto
 
 ### 엔진 명령어
 
-모든 파이프라인 조작은 엔진 CLI를 통해서만 이루어진다:
+파이프라인 실행은 오케스트레이터를 통해 수행한다:
 
 ```bash
-node .vela/cli/vela-engine.js init "작업 설명"     # 파이프라인 시작 (git 상태 체크)
-node .vela/cli/vela-engine.js init "작업" --auto   # auto 모드로 시작 (전 단계 자동 진행)
+node .vela/cli/vela-pipeline.js run "작업 설명" --scale <s|m|l> [--type <type>]   # 파이프라인 실행 (SDK 기반 자동 진행)
+node .vela/cli/vela-pipeline.js status                                              # 파이프라인 상태 조회
+node .vela/cli/vela-pipeline.js cancel                                              # 파이프라인 취소
+```
+
+내부 엔진 CLI (오케스트레이터가 내부적으로 사용하는 저수준 명령어):
+
+```bash
+node .vela/cli/vela-engine.js init "작업 설명"     # 파이프라인 초기화 (git 상태 체크)
 node .vela/cli/vela-engine.js state                 # 현재 상태
 node .vela/cli/vela-engine.js transition            # 다음 단계로 전이
 node .vela/cli/vela-engine.js dispatch --role ROLE  # 에이전트 스펙 조회
