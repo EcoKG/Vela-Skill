@@ -76,7 +76,7 @@ MODULES=(
 for entry in "${MODULES[@]}"; do
   modfile="${entry%%:*}"
   expected_fn="${entry##*:}"
-  modpath="$PROJECT_ROOT/scripts/hooks/shared/$modfile"
+  modpath="$PROJECT_ROOT/scripts/shared/$modfile"
 
   result=$(node -e "
     try {
@@ -104,7 +104,7 @@ echo "── settingSources 참조 검증 ──"
 
 for entry in "${MODULES[@]}"; do
   modfile="${entry%%:*}"
-  modpath="$PROJECT_ROOT/scripts/hooks/shared/$modfile"
+  modpath="$PROJECT_ROOT/scripts/shared/$modfile"
 
   if rg -q 'settingSources' "$modpath" 2>/dev/null; then
     pass "$modfile contains settingSources"

@@ -31,7 +31,7 @@ for entry in "${SDK_MODULES[@]}"; do
   MODULE="${entry%%:*}"
   FUNC="${entry##*:}"
   RESULT=$(node -e "
-    const m = require('$PROJECT_DIR/scripts/hooks/shared/${MODULE}.js');
+    const m = require('$PROJECT_DIR/scripts/shared/${MODULE}.js');
     Promise.resolve(m.${FUNC}(null)).then(r => console.log(JSON.stringify(r)));
   " 2>/dev/null)
   if echo "$RESULT" | grep -q '"ok":false.*"error":"invalid_input"'; then

@@ -7,7 +7,7 @@
 # artifact generation, escalation, fallback, hook isolation.
 #
 # Tests run with a mock SDK module (no real API calls).
-# Mock SDK placed in scripts/hooks/shared/node_modules/ (temporary)
+# Mock SDK placed in scripts/shared/node_modules/ (temporary)
 # so dynamic import() resolves it from sdk-runner.js's location.
 #
 # Test 1:  Module loads without syntax error (node -c)
@@ -31,8 +31,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MODULE="$PROJECT_ROOT/scripts/hooks/shared/sdk-reviewer.js"
-MODULE_DIR="$PROJECT_ROOT/scripts/hooks/shared"
+MODULE="$PROJECT_ROOT/scripts/shared/sdk-reviewer.js"
+MODULE_DIR="$PROJECT_ROOT/scripts/shared"
 MOCK_NM="$MODULE_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
 CAPTURE_FILE=""
 ARTIFACT_DIR=""
@@ -480,7 +480,7 @@ fi
 echo ""
 echo "📋 Broad sweep: no stale Reviewer subagent references in updated files"
 stale=$(rg -n 'Reviewer\s+(subagent|Teammate)|리뷰어.*subagent|subagent.*리뷰어' \
-  "$PROJECT_ROOT/scripts/hooks/vela-orchestrator.js" \
+  "$PROJECT_ROOT/scripts/cli/vela-pipeline.js" \
   "$PROJECT_ROOT/scripts/agents/vela-pm.md" \
   "$PROJECT_ROOT/scripts/agents/pm/pipeline-flow.md" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))

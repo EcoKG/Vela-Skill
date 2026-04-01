@@ -8,7 +8,7 @@
 # JSON extraction, hook isolation.
 #
 # Tests run with a mock SDK module (no real API calls).
-# Mock SDK placed in scripts/hooks/shared/node_modules/ (temporary)
+# Mock SDK placed in scripts/shared/node_modules/ (temporary)
 # so dynamic import() resolves it from sdk-runner.js's location.
 #
 # ⚠ K010: Must NOT run in parallel with test-sdk-researcher.sh,
@@ -31,8 +31,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MODULE="$PROJECT_ROOT/scripts/hooks/shared/sdk-analyzer.js"
-MODULE_DIR="$PROJECT_ROOT/scripts/hooks/shared"
+MODULE="$PROJECT_ROOT/scripts/shared/sdk-analyzer.js"
+MODULE_DIR="$PROJECT_ROOT/scripts/shared"
 MOCK_NM="$MODULE_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
 CAPTURE_FILE=""
 
