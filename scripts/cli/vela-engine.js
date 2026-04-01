@@ -989,7 +989,7 @@ async function cmdReview() {
     return output({ ok: false, error: 'No artifact directory found for active pipeline.' });
   }
 
-  const { sdkReview } = require('../hooks/shared/sdk-reviewer.js');
+  const { sdkReview } = require('../shared/sdk-reviewer.js');
   const result = await sdkReview({
     step: state.current_step,
     artifactDir,
@@ -1024,7 +1024,7 @@ async function cmdPlanCheck() {
     });
   }
 
-  const { sdkPlanCheck } = require('../hooks/shared/sdk-plan-checker.js');
+  const { sdkPlanCheck } = require('../shared/sdk-plan-checker.js');
   const result = await sdkPlanCheck({ artifactDir, cwd: CWD });
 
   output({
@@ -1058,7 +1058,7 @@ async function cmdExecute() {
     return output({ ok: false, error: 'No artifact directory found for active pipeline.' });
   }
 
-  const { sdkExecute } = require('../hooks/shared/sdk-executor.js');
+  const { sdkExecute } = require('../shared/sdk-executor.js');
   const result = await sdkExecute({
     step: state.current_step,
     artifactDir,
@@ -1085,7 +1085,7 @@ async function cmdResearch() {
 
   const step = state.current_step || 'unknown';
 
-  const { sdkResearch } = require('../hooks/shared/sdk-researcher.js');
+  const { sdkResearch } = require('../shared/sdk-researcher.js');
   const result = await sdkResearch({ step, artifactDir, cwd: CWD });
 
   output({

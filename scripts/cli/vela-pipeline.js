@@ -42,10 +42,10 @@ const {
   BASH_WRITE_PATTERNS,
   SENSITIVE_FILES,
   SECRET_PATTERNS
-} = require('../hooks/shared/constants');
+} = require('../shared/constants');
 
 // ─── SDK runner ───
-const { runSdkAgent } = require('../hooks/shared/sdk-runner');
+const { runSdkAgent } = require('../shared/sdk-runner');
 
 // ─── CLI Argument Parsing ───
 const args = process.argv.slice(2);
@@ -644,7 +644,7 @@ function checkLocalGate(stepDef, artifactDir) {
  */
 async function runReviewLoop(stepDef, state, maxRevisions) {
   const artifactDir = state._artifactDir;
-  const { sdkReview } = require('../hooks/shared/sdk-reviewer.js');
+  const { sdkReview } = require('../shared/sdk-reviewer.js');
 
   for (let attempt = 1; attempt <= maxRevisions; attempt++) {
     console.log(`\n  📝 Review attempt ${attempt}/${maxRevisions}...`);
