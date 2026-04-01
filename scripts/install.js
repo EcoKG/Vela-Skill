@@ -1191,17 +1191,19 @@ function validate() {
     results.warnings.push('No SQLite backend found — TreeNode cache will use JSON fallback. Run: npm install better-sqlite3 (or sql.js for WSL1/proxy)');
   }
 
-  // 9. Global pollution cleanup — remove vela files from ~/.claude/skills/
-  // These should never exist; skills live only in the skill repository.
-  // AI agents sometimes copy skills to ~/.claude/skills/ by mistake.
+  // 9. Global pollution cleanup — remove legacy vela files from ~/.claude/
+  // Valid entries: vela/ (main skill), vela-init/ vela-start/ vela-auto/ vela-analyze/ vela-git-clean/ (sub-skills)
+  // Invalid (legacy): commands/vela/ (v1/v2 slash commands), any other vela-* dirs
   const HOME = process.env.HOME || process.env.USERPROFILE;
+  const VALID_SUB_SKILLS = new Set(['vela', 'vela-init', 'vela-start', 'vela-auto', 'vela-analyze', 'vela-git-clean']);
   if (HOME) {
     const globalSkillsDir = path.join(HOME, '.claude', 'skills');
     if (fs.existsSync(globalSkillsDir)) {
       const velaDirs = [];
       try {
         for (const entry of fs.readdirSync(globalSkillsDir)) {
-          if (entry === 'vela' || entry.startsWith('vela-')) {
+          // Only remove vela-* dirs that are NOT valid sub-skills
+          if ((entry === 'vela' || entry.startsWith('vela-')) && !VALID_SUB_SKILLS.has(entry)) {
             velaDirs.push(entry);
           }
         }
