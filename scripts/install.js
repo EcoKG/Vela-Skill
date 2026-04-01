@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * Vela Hook Installer
+ * Vela Installer
  *
- * Registers Vela hooks into the PROJECT-LOCAL .claude/settings.local.json
- * so they only trigger within this Vela-enabled project.
+ * Registers Vela permissions, agent, and UI settings into the
+ * PROJECT-LOCAL .claude/settings.local.json.
  *
  * Why project-local instead of global (~/.claude/settings.json)?
- * - Vela is a sandbox — hooks should not leak outside the project
+ * - Vela is a sandbox — settings should not leak outside the project
  * - No performance overhead on non-Vela projects
  * - Multiple Vela projects can have independent configurations
- * - Deleting the project automatically removes hook registrations
+ * - Deleting the project automatically removes registrations
  *
  * Usage:
- *   node install.js                    — Install hooks
+ *   node install.js                    — Install Vela settings
  *   node install.js verify             — Verify installation
  *   node install.js upgrade            — Update all Vela files to latest version
- *   node install.js uninstall          — Remove all Vela hooks
- *   node install.js status             — Show current hook status
+ *   node install.js uninstall          — Remove all Vela settings
+ *   node install.js status             — Show current status
  */
 
 const fs = require('fs');
@@ -24,7 +24,6 @@ const path = require('path');
 
 const PROJECT_ROOT = findProjectRoot(process.cwd());
 const SETTINGS_PATH = path.join(PROJECT_ROOT, '.claude', 'settings.local.json');
-const VELA_HOOKS_DIR = path.join(PROJECT_ROOT, '.vela', 'hooks');
 
 /**
  * Walk up from cwd to find the project root (where .vela/ lives).
@@ -75,146 +74,13 @@ const VELA_PERMISSIONS = {
   ]
 };
 
-const VELA_HOOKS = [
-  {
-    matcher: 'PreToolUse',
-    hookId: 'vela-gate-keeper',
-    script: 'vela-gate-keeper.js',
-    description: '⚓ 수문장이 입항을 허가합니다...'
-  },
-  {
-    matcher: 'PreToolUse',
-    hookId: 'vela-gate-guard',
-    script: 'vela-gate-guard.js',
-    description: '🧭 항해 규칙을 대조합니다...'
-  },
-  {
-    matcher: 'UserPromptSubmit',
-    hookId: 'vela-orchestrator',
-    script: 'vela-orchestrator.js',
-    description: '✦ 별자리를 읽고 항로를 설정합니다...'
-  },
-  {
-    matcher: 'PostToolUse',
-    hookId: 'vela-tracker',
-    script: 'vela-tracker.js',
-    description: '🔭 항해 일지에 기록합니다...'
-  },
-  {
-    matcher: 'Stop',
-    hookId: 'vela-stop',
-    script: 'vela-stop.js',
-    description: '⚓ 정박 준비를 확인합니다...'
-  },
-  {
-    matcher: 'SessionStart',
-    hookId: 'vela-session-start',
-    script: 'vela-session-start.js',
-    description: '🔭 이전 항해의 흔적을 탐색합니다...'
-  },
-  {
-    matcher: 'PreCompact',
-    hookId: 'vela-compact',
-    script: 'vela-compact.js',
-    description: '✦ 항해 기억을 보존합니다...'
-  },
-  {
-    matcher: 'PostCompact',
-    hookId: 'vela-compact',
-    script: 'vela-compact.js',
-    description: '✦ 항해 기억을 복원합니다...'
-  },
-  {
-    matcher: 'SubagentStart',
-    hookId: 'vela-subagent-start',
-    script: 'vela-subagent-start.js',
-    description: '🌟 선원에게 임무를 전달합니다...'
-  },
-  {
-    matcher: 'TaskCompleted',
-    hookId: 'vela-task-completed',
-    script: 'vela-task-completed.js',
-    description: '🌟 항해 이정표를 확인합니다...'
-  },
-  {
-    matcher: 'SubagentStop',
-    hookId: 'vela-subagent-stop',
-    script: 'vela-subagent-stop.js',
-    description: '🧭 선원의 보고를 수집합니다...'
-  },
-  {
-    matcher: 'PermissionRequest',
-    hookId: 'vela-permission',
-    script: 'vela-permission.js',
-    if: 'Write(*)|Edit(*)|NotebookEdit(*)',
-    description: '⛵ 조타 권한을 확인합니다...'
-  },
-  {
-    matcher: 'PostToolUseFailure',
-    hookId: 'vela-failure',
-    script: 'vela-failure.js',
-    description: '🛟 항해 사고를 기록합니다...'
-  },
-  {
-    matcher: 'StopFailure',
-    hookId: 'vela-stop-failure',
-    script: 'vela-stop-failure.js',
-    description: '🛟 비상 상태를 보존합니다...'
-  },
-  {
-    matcher: 'TeammateIdle',
-    hookId: 'vela-teammate-idle',
-    script: 'vela-teammate-idle.js',
-    description: '🌊 대기 선원의 상태를 점검합니다...'
-  },
-  {
-    matcher: 'PostToolUse',
-    hookId: 'vela-review-prompt',
-    hookType: 'prompt',
-    toolMatcher: 'Edit(*)|Write(*)',
-    prompt: 'If the file is a markdown (.md), JSON (.json), YAML (.yaml/.yml), or config file, respond with {"ok": true}. Only review source code files (.js, .ts, .py, .go, .rs, .java, .sh, etc). For source code: review for bugs, security issues, and style problems. Context: $ARGUMENTS. Respond with JSON: {"ok": true} if acceptable, or {"ok": false, "reason": "brief description"} if there are critical bugs or security vulnerabilities. Ignore style nitpicks. Be concise.',
-    description: '🔭 코드 변경을 검수합니다...'
-  },
-  {
-    matcher: 'PostToolUse',
-    hookId: 'vela-test-async',
-    hookType: 'command',
-    toolMatcher: 'Edit|Write',
-    script: 'vela-test-async.js',
-    async: true,
-    description: '🌊 시험 항해를 실행합니다...'
-  },
-  {
-    matcher: 'Notification',
-    hookId: 'vela-notification',
-    script: 'vela-notification.js',
-    description: '🌟 신호탄을 발사합니다...'
-  }
-];
-
 // ─── File Manifest (single source of truth for managed files) ───
 
 const FILE_MANIFEST = [
-  // Hook files
-  { src: 'scripts/hooks/vela-gate-keeper.js', dst: 'hooks/vela-gate-keeper.js' },
-  { src: 'scripts/hooks/vela-gate-guard.js', dst: 'hooks/vela-gate-guard.js' },
-  { src: 'scripts/hooks/vela-orchestrator.js', dst: 'hooks/vela-orchestrator.js' },
-  { src: 'scripts/hooks/vela-tracker.js', dst: 'hooks/vela-tracker.js' },
-  { src: 'scripts/hooks/vela-stop.js', dst: 'hooks/vela-stop.js' },
-  { src: 'scripts/hooks/vela-session-start.js', dst: 'hooks/vela-session-start.js' },
-  { src: 'scripts/hooks/vela-compact.js', dst: 'hooks/vela-compact.js' },
-  { src: 'scripts/hooks/vela-subagent-start.js', dst: 'hooks/vela-subagent-start.js' },
-  { src: 'scripts/hooks/vela-task-completed.js', dst: 'hooks/vela-task-completed.js' },
-  { src: 'scripts/hooks/vela-subagent-stop.js', dst: 'hooks/vela-subagent-stop.js' },
-  { src: 'scripts/hooks/vela-permission.js', dst: 'hooks/vela-permission.js' },
-  { src: 'scripts/hooks/vela-failure.js', dst: 'hooks/vela-failure.js' },
-  { src: 'scripts/hooks/vela-stop-failure.js', dst: 'hooks/vela-stop-failure.js' },
-  { src: 'scripts/hooks/vela-teammate-idle.js', dst: 'hooks/vela-teammate-idle.js' },
-  { src: 'scripts/hooks/vela-test-async.js', dst: 'hooks/vela-test-async.js' },
-  { src: 'scripts/hooks/vela-notification.js', dst: 'hooks/vela-notification.js' },
-  { src: 'scripts/hooks/shared/constants.js', dst: 'hooks/shared/constants.js' },
-  { src: 'scripts/hooks/shared/pipeline.js', dst: 'hooks/shared/pipeline.js' },
-  { src: 'scripts/hooks/shared/dep-analyzer.js', dst: 'hooks/shared/dep-analyzer.js' },
+  // Shared modules (used by CLI tools)
+  { src: 'scripts/shared/constants.js', dst: 'shared/constants.js' },
+  { src: 'scripts/shared/pipeline.js', dst: 'shared/pipeline.js' },
+  { src: 'scripts/shared/dep-analyzer.js', dst: 'shared/dep-analyzer.js' },
   // CLI tools
   { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
   { src: 'scripts/cli/vela-read.js', dst: 'cli/vela-read.js' },
@@ -278,20 +144,18 @@ const FILE_MANIFEST = [
   { src: 'scripts/guidelines/error-handling.md', dst: 'guidelines/error-handling.md' },
   { src: 'scripts/guidelines/testing-strategy.md', dst: 'guidelines/testing-strategy.md' },
   // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
-  { src: 'scripts/hooks/shared/sdk-runner.js', dst: 'hooks/shared/sdk-runner.js' },
-  { src: 'scripts/hooks/shared/sdk-reviewer.js', dst: 'hooks/shared/sdk-reviewer.js' },
-  { src: 'scripts/hooks/shared/sdk-plan-checker.js', dst: 'hooks/shared/sdk-plan-checker.js' },
-  { src: 'scripts/hooks/shared/sdk-researcher.js', dst: 'hooks/shared/sdk-researcher.js' },
-  { src: 'scripts/hooks/shared/sdk-executor.js', dst: 'hooks/shared/sdk-executor.js' },
-  { src: 'scripts/hooks/shared/sdk-analyzer.js', dst: 'hooks/shared/sdk-analyzer.js' },
-  // Security modules
-  { src: 'scripts/hooks/shared/hmac.js', dst: 'hooks/shared/hmac.js' },
+  { src: 'scripts/shared/sdk-runner.js', dst: 'shared/sdk-runner.js' },
+  { src: 'scripts/shared/sdk-reviewer.js', dst: 'shared/sdk-reviewer.js' },
+  { src: 'scripts/shared/sdk-plan-checker.js', dst: 'shared/sdk-plan-checker.js' },
+  { src: 'scripts/shared/sdk-researcher.js', dst: 'shared/sdk-researcher.js' },
+  { src: 'scripts/shared/sdk-executor.js', dst: 'shared/sdk-executor.js' },
+  { src: 'scripts/shared/sdk-analyzer.js', dst: 'shared/sdk-analyzer.js' },
 ];
 
 // Subdirectories managed by Vela — orphan cleanup scans only these.
 // Never touch: config.json (root), persona.md (root), install.js (root),
 // state/, artifacts/, templates/, test-fixtures/, statusline.sh (root)
-const MANAGED_DIRS = ['hooks', 'cli', 'cache', 'agents', 'guidelines', 'references'];
+const MANAGED_DIRS = ['shared', 'cli', 'cache', 'agents', 'guidelines', 'references'];
 
 /**
  * Recursively collect all files under a directory.
@@ -314,7 +178,7 @@ function collectFiles(dir, baseDir) {
 /**
  * Find orphan files in managed subdirectories of velaDir.
  * An orphan is any file inside MANAGED_DIRS that is NOT in FILE_MANIFEST's dst list.
- * Returns array of relative paths (e.g. 'hooks/vela-pm.md').
+ * Returns array of relative paths (e.g. 'agents/old-file.md').
  */
 function findOrphans(velaDir) {
   const managedDsts = new Set(FILE_MANIFEST.map(f => f.dst));
@@ -473,91 +337,7 @@ function install() {
 
   const settings = readSettings();
 
-  if (!settings.hooks) {
-    settings.hooks = {};
-  }
-
-  const installed = [];
   const errors = [];
-
-  for (const hook of VELA_HOOKS) {
-    const scriptPath = path.join(VELA_HOOKS_DIR, hook.script || '');
-
-    // Verify script exists (skip for prompt-type hooks which have no script)
-    if (hook.hookType !== 'prompt') {
-      if (!fs.existsSync(scriptPath)) {
-        errors.push(`Script not found: ${scriptPath}`);
-        continue;
-      }
-    }
-
-    // Initialize event array if needed
-    if (!settings.hooks[hook.matcher]) {
-      settings.hooks[hook.matcher] = [];
-    }
-
-    // Remove existing Vela hook entry with same ID (both legacy and new format)
-    settings.hooks[hook.matcher] = settings.hooks[hook.matcher].filter(entry => {
-      // Remove legacy flat format
-      if (entry.command && !entry.hooks && entry.command.includes(hook.hookId)) return false;
-      // Remove new nested format
-      if (entry.hooks && Array.isArray(entry.hooks)) {
-        return !entry.hooks.some(h =>
-          (h.command && h.command.includes(hook.hookId)) ||
-          (h.prompt && h.type === 'prompt' && entry._velaId === hook.hookId)
-        );
-      }
-      return true;
-    });
-
-    // Build hookEntry based on hookType
-    let hookEntry;
-    if (hook.hookType === 'prompt') {
-      hookEntry = {
-        type: 'prompt',
-        prompt: hook.prompt,
-        timeout: 30,
-        statusMessage: hook.description
-      };
-    } else {
-      hookEntry = {
-        type: 'command',
-        command: `node "${scriptPath}"`,
-        statusMessage: hook.description
-      };
-    }
-
-    // Add async flag if present
-    if (hook.async) {
-      hookEntry.async = true;
-    }
-
-    // Add model field if present
-    if (hook.model) {
-      hookEntry.model = hook.model;
-    }
-
-    // Add if condition if present (tool events only)
-    if (hook.if) {
-      hookEntry.if = hook.if;
-    }
-
-    // Add the hook in correct Claude Code format:
-    // { matcher: "ToolName", hooks: [{ type: "command"|"prompt", ... }] }
-    const settingsEntry = {
-      matcher: hook.toolMatcher || '',
-      hooks: [hookEntry]
-    };
-
-    // Tag with vela ID for prompt hooks (no command string to match on)
-    if (hook.hookType === 'prompt') {
-      settingsEntry._velaId = hook.hookId;
-    }
-
-    settings.hooks[hook.matcher].push(settingsEntry);
-
-    installed.push(hook.hookId);
-  }
 
   // ─── Register permission rules ───
   if (!settings.permissions) {
@@ -686,12 +466,11 @@ This project uses Vela for development governance.
 `);
   }
 
-  const permissionCount = VELA_PERMISSIONS.deny.length + VELA_PERMISSIONS.allow.length;
 
   // Human-readable output (JSON with --json flag)
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify({
-      ok: errors.length === 0, command: 'install', validation, installed,
+      ok: errors.length === 0, command: 'install', validation,
       agent: 'vela', permissions: { deny: VELA_PERMISSIONS.deny.length, allow: VELA_PERMISSIONS.allow.length },
       errors, settings_path: SETTINGS_PATH
     }, null, 2));
@@ -699,8 +478,6 @@ This project uses Vela for development governance.
     console.log('');
     console.log('✦ Vela Engine — Installation Complete ✦');
     console.log('');
-    console.log(`  ⛵ Hooks: ${installed.length} registered`);
-    installed.forEach(h => console.log(`     ✓ ${h}`));
     console.log(`  🌟 Permissions: ${VELA_PERMISSIONS.deny.length} deny + ${VELA_PERMISSIONS.allow.length} allow`);
     console.log(`  🧭 Agent: vela`);
     console.log(`  🔭 StatusLine: active`);
@@ -730,50 +507,32 @@ This project uses Vela for development governance.
 function verify() {
   const settings = readSettings();
   const results = [];
+  const velaDir = path.join(PROJECT_ROOT, '.vela');
+  const skillBase = path.resolve(__dirname, '..');
 
-  for (const hook of VELA_HOOKS) {
-    const scriptPath = path.join(VELA_HOOKS_DIR, hook.script || '');
-
-    // For prompt hooks, no script file to check
-    const scriptExists = hook.hookType === 'prompt' ? true : fs.existsSync(scriptPath);
-
-    const matcherHooks = settings.hooks?.[hook.matcher] || [];
-    let registered;
-
-    if (hook.hookType === 'prompt') {
-      // Prompt hooks: check for type:'prompt' entry with matching _velaId or prompt content
-      registered = matcherHooks.some(entry =>
-        entry.hooks && Array.isArray(entry.hooks) &&
-        entry.hooks.some(h => h.type === 'prompt' && h.prompt) &&
-        (entry._velaId === hook.hookId || (entry.hooks.some(h => h.prompt === hook.prompt)))
-      );
-    } else {
-      // Command hooks: check for command string containing hookId
-      registered = matcherHooks.some(entry =>
-        entry.hooks && Array.isArray(entry.hooks) &&
-        entry.hooks.some(h => h.command && h.command.includes(hook.hookId))
-      );
-    }
-
-    results.push({
-      id: hook.hookId,
-      matcher: hook.matcher,
-      hookType: hook.hookType || 'command',
-      script_exists: scriptExists,
-      registered: registered,
-      status: scriptExists && registered ? 'OK' : 'MISSING'
-    });
+  // Verify FILE_MANIFEST files exist at destination
+  let missingFiles = 0;
+  for (const f of FILE_MANIFEST) {
+    const dstPath = path.join(velaDir, f.dst);
+    const exists = fs.existsSync(dstPath);
+    if (!exists) missingFiles++;
+    results.push({ file: f.dst, exists, status: exists ? 'OK' : 'MISSING' });
   }
 
-  const allOk = results.every(r => r.status === 'OK');
+  // Verify permissions are registered
+  const denyOk = VELA_PERMISSIONS.deny.every(r => (settings.permissions?.deny || []).includes(r));
+  const allowOk = VELA_PERMISSIONS.allow.every(r => (settings.permissions?.allow || []).includes(r));
+
+  const allOk = missingFiles === 0 && denyOk && allowOk;
 
   console.log(JSON.stringify({
     ok: allOk,
     command: 'verify',
-    hooks: results,
+    files: results,
+    permissions: { deny: denyOk, allow: allowOk },
     message: allOk
-      ? 'All Vela hooks verified successfully.'
-      : 'Some hooks are missing or not registered.'
+      ? 'All Vela files and permissions verified successfully.'
+      : `Verification issues: ${missingFiles} missing files, deny=${denyOk}, allow=${allowOk}`
   }, null, 2));
 }
 
@@ -983,7 +742,7 @@ function validate() {
 
   // 1. Required directories
   const requiredDirs = [
-    'hooks', 'hooks/shared', 'cli', 'cache', 'templates',
+    'shared', 'cli', 'cache', 'templates',
     'state', 'artifacts', 'agents', 'references', 'guidelines',
     'agents/pm', 'agents/researcher', 'agents/executor',
     'agents/planner', 'agents/reviewer', 'agents/conflict-manager'
