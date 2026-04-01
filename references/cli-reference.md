@@ -19,6 +19,18 @@ node .vela/cli/vela-engine.js research                           # SDK 3-관점 
 node .vela/cli/vela-engine.js execute                            # SDK 단일 실행 (Sonnet)
 ```
 
+## vela-pipeline (SDK 오케스트레이터)
+
+```bash
+node .vela/cli/vela-pipeline.js run "<요청>" --scale <small|medium|large> [--type TYPE]  # SDK 파이프라인 실행
+node .vela/cli/vela-pipeline.js status                                                    # 파이프라인 상태 조회
+node .vela/cli/vela-pipeline.js cancel                                                    # 활성 파이프라인 취소
+```
+
+- `--scale`: small(trivial) / medium(quick) / large(standard)
+- `--type`: 파이프라인 타입 (기본: scale에 따라 자동 결정)
+- vela-engine.js의 상태 머신을 CLI bridge로 재사용하여 단계 전이를 위임한다.
+
 ## vela-analyze (분석 보고서)
 
 ```bash
