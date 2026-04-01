@@ -36,7 +36,7 @@ cp "$TMP/SKILL.md" "$SKILL_DIR/"
 cp "$TMP/README.md" "$SKILL_DIR/" 2>/dev/null
 cp "$TMP/package.json" "$SKILL_DIR/" 2>/dev/null
 
-# Scripts (hooks, cli, agents, cache, guidelines, tests, shared, install)
+# Scripts (cli, agents, cache, guidelines, tests, shared, install)
 if [ -d "$TMP/scripts" ]; then
   rm -rf "$SKILL_DIR/scripts" 2>/dev/null
   cp -r "$TMP/scripts" "$SKILL_DIR/scripts"
@@ -129,10 +129,9 @@ fi
 sync_local_project() {
   local SRC="$1"
 
-  # Hooks
-  cp "$SRC/scripts/hooks/"*.js .vela/hooks/ 2>/dev/null
-  mkdir -p .vela/hooks/shared
-  cp "$SRC/scripts/hooks/shared/"*.js .vela/hooks/shared/ 2>/dev/null
+  # Shared modules
+  mkdir -p .vela/shared
+  cp "$SRC/scripts/shared/"*.js .vela/shared/ 2>/dev/null
 
   # CLI
   mkdir -p .vela/cli
@@ -184,7 +183,7 @@ sync_local_project() {
     cp "$SRC/scripts/agents/vela.md" .claude/agents/ 2>/dev/null
   fi
 
-  # Re-run install to update settings.local.json with new hooks
+  # Re-run install to update settings.local.json
   if [ -f ".vela/install.js" ]; then
     node .vela/install.js 2>/dev/null | tail -1
   fi
@@ -203,18 +202,12 @@ fi
 rm -rf "$TMP" 2>/dev/null
 
 # ─── Verify ───
-HOOK_COUNT=0
-if [ -d "$SKILL_DIR/scripts/hooks" ]; then
-  HOOK_COUNT=$(ls "$SKILL_DIR/scripts/hooks/"*.js 2>/dev/null | wc -l | tr -d ' ')
-fi
-
 echo ""
 echo "✦───────────────────────────────────────✦"
 echo "  ⛵ Vela Engine v${VELA_VERSION} installed successfully!"
 echo "✦───────────────────────────────────────✦"
 echo ""
 echo "  📂 Location: $SKILL_DIR"
-echo "  🔧 Hooks: ${HOOK_COUNT} scripts"
 echo "  💾 SQLite: ${SQLITE_BACKEND:-not checked}"
 echo "  🌟 Agent Teams: enabled"
 echo ""

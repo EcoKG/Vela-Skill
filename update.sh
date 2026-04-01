@@ -16,10 +16,9 @@ LOCAL_FLAG="$1"
 sync_local_project() {
   local SRC="$1"
 
-  # Hooks
-  cp "$SRC/scripts/hooks/"*.js .vela/hooks/ 2>/dev/null
-  mkdir -p .vela/hooks/shared
-  cp "$SRC/scripts/hooks/shared/"*.js .vela/hooks/shared/ 2>/dev/null
+  # Shared modules
+  mkdir -p .vela/shared
+  cp "$SRC/scripts/shared/"*.js .vela/shared/ 2>/dev/null
 
   # CLI
   mkdir -p .vela/cli
@@ -71,7 +70,7 @@ sync_local_project() {
     cp "$SRC/scripts/agents/vela.md" .claude/agents/ 2>/dev/null
   fi
 
-  # Re-run install to update settings.local.json with new hooks
+  # Re-run install to update settings.local.json
   if [ -f ".vela/install.js" ]; then
     node .vela/install.js 2>/dev/null | tail -1
   fi
@@ -99,7 +98,7 @@ cp "$TMP/SKILL.md" "$SKILL_DIR/"
 cp "$TMP/README.md" "$SKILL_DIR/" 2>/dev/null
 cp "$TMP/package.json" "$SKILL_DIR/" 2>/dev/null
 
-# Scripts (full replace to catch new hooks/files)
+# Scripts (full replace to catch new files)
 if [ -d "$TMP/scripts" ]; then
   rm -rf "$SKILL_DIR/scripts" 2>/dev/null
   cp -r "$TMP/scripts" "$SKILL_DIR/scripts"
@@ -137,8 +136,6 @@ if [ -d "$TMP/.claude-plugin" ]; then
   cp -r "$TMP/.claude-plugin" "$SKILL_DIR/.claude-plugin"
 fi
 
-HOOK_COUNT=$(ls "$SKILL_DIR/scripts/hooks/"*.js 2>/dev/null | wc -l | tr -d ' ')
-
 # Update npm dependencies
 if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
   (cd "$SKILL_DIR" && npm install --no-audit --no-fund 2>/dev/null) || {
@@ -146,7 +143,7 @@ if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
   }
 fi
 
-echo "  ✦ Global skill updated: $SKILL_DIR ($HOOK_COUNT hooks)"
+echo "  ✦ Global skill updated: $SKILL_DIR"
 
 # ─── Local project update (--local) ───
 if [ "$LOCAL_FLAG" = "--local" ]; then

@@ -58,14 +58,14 @@ echo ""
 echo "=== Test 1: Orphan files deleted on upgrade ==="
 
 # Plant orphan files in managed directories
-mkdir -p "$VELA_DIR/hooks" "$VELA_DIR/agents/old-agent" "$VELA_DIR/cli" "$VELA_DIR/references"
-echo "obsolete" > "$VELA_DIR/hooks/obsolete-hook.js"
+mkdir -p "$VELA_DIR/shared" "$VELA_DIR/agents/old-agent" "$VELA_DIR/cli" "$VELA_DIR/references"
+echo "obsolete" > "$VELA_DIR/shared/obsolete-module.js"
 echo "old agent" > "$VELA_DIR/agents/old-agent/agent.md"
 echo "old cli" > "$VELA_DIR/cli/old-command.js"
 echo "old ref" > "$VELA_DIR/references/old-ref.md"
 
 # Verify orphans exist
-[ -f "$VELA_DIR/hooks/obsolete-hook.js" ] && pass "Orphan hooks/obsolete-hook.js planted" || fail "Failed to plant orphan"
+[ -f "$VELA_DIR/shared/obsolete-module.js" ] && pass "Orphan shared/obsolete-module.js planted" || fail "Failed to plant orphan"
 [ -f "$VELA_DIR/agents/old-agent/agent.md" ] && pass "Orphan agents/old-agent/agent.md planted" || fail "Failed to plant orphan"
 
 # Run upgrade
@@ -73,7 +73,7 @@ cd "$TMPDIR_TEST"
 UPGRADE_OUT=$(node "$INSTALL_JS" upgrade 2>/dev/null || true)
 
 # Verify orphans are deleted
-[ ! -f "$VELA_DIR/hooks/obsolete-hook.js" ] && pass "hooks/obsolete-hook.js removed" || fail "hooks/obsolete-hook.js still exists"
+[ ! -f "$VELA_DIR/shared/obsolete-module.js" ] && pass "shared/obsolete-module.js removed" || fail "shared/obsolete-module.js still exists"
 [ ! -f "$VELA_DIR/agents/old-agent/agent.md" ] && pass "agents/old-agent/agent.md removed" || fail "agents/old-agent/agent.md still exists"
 [ ! -f "$VELA_DIR/cli/old-command.js" ] && pass "cli/old-command.js removed" || fail "cli/old-command.js still exists"
 [ ! -f "$VELA_DIR/references/old-ref.md" ] && pass "references/old-ref.md removed" || fail "references/old-ref.md still exists"
@@ -115,7 +115,7 @@ echo ""
 echo "=== Test 4: orphansRemoved in upgrade JSON output ==="
 
 # Plant another orphan to get non-zero count
-echo "orphan" > "$VELA_DIR/hooks/will-be-removed.js"
+echo "orphan" > "$VELA_DIR/shared/will-be-removed.js"
 
 cd "$TMPDIR_TEST"
 UPGRADE_OUT=$(node "$INSTALL_JS" upgrade 2>/dev/null || true)
@@ -140,15 +140,15 @@ HAS_ORPHANS=$(echo "$UPGRADE_OUT" | node -e "
 echo ""
 echo "=== Test 5: validate() removes orphans (manifest-based) ==="
 
-# Plant a legacy file that was previously hardcoded (hooks/vela-pm.md)
-echo "legacy" > "$VELA_DIR/hooks/vela-pm.md"
+# Plant a legacy file in a managed directory
+echo "legacy" > "$VELA_DIR/shared/legacy-module.js"
 # Also plant a new orphan
 echo "another orphan" > "$VELA_DIR/cli/phantom.js"
 
 cd "$TMPDIR_TEST"
 VALIDATE_OUT=$(node "$INSTALL_JS" validate 2>/dev/null || true)
 
-[ ! -f "$VELA_DIR/hooks/vela-pm.md" ] && pass "validate() removed hooks/vela-pm.md via manifest" || fail "validate() did not remove hooks/vela-pm.md"
+[ ! -f "$VELA_DIR/shared/legacy-module.js" ] && pass "validate() removed shared/legacy-module.js via manifest" || fail "validate() did not remove shared/legacy-module.js"
 [ ! -f "$VELA_DIR/cli/phantom.js" ] && pass "validate() removed cli/phantom.js via manifest" || fail "validate() did not remove cli/phantom.js"
 
 # --- Test 6: validate() refreshes stale files ---
@@ -167,7 +167,7 @@ STALE_FILE=$(node -e "
 
 # Simpler approach: find a managed file that exists and overwrite its content
 STALE_TARGET=""
-for candidate in hooks/vela-gate-keeper.js hooks/vela-orchestrator.js cli/vela-engine.js; do
+for candidate in shared/constants.js shared/pipeline.js cli/vela-engine.js; do
   if [ -f "$VELA_DIR/$candidate" ]; then
     STALE_TARGET="$candidate"
     break
