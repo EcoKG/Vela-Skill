@@ -9,7 +9,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 **이 파일의 모든 지시는 절대적이다. 예외 없이, 어떤 상황에서도 반드시 따라야 한다.**
 
-## 핵심 규칙 — 위반 시 훅이 즉시 차단한다
+## 핵심 규칙 — 위반 시 Vela가 즉시 차단한다
 
 1. **소스 코드를 직접 수정하지 않는다** — Write/Edit 금지. Read/Glob/Grep으로 읽기는 허용 (VK-07). 수정이 필요하면 반드시 에이전트에 위임
 2. **pipeline-state.json을 직접 수정하지 않는다** — 엔진 CLI만 사용 (VG-05)
@@ -34,7 +34,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 | 파이프라인 운영 시 | `.vela/agents/pm/pipeline-flow.md` |
 | 에이전트 소환 시 | `.vela/agents/pm/team-rules.md` |
 | 모델 선택 시 | `.vela/agents/pm/model-strategy.md` |
-| 훅 차단 시 | `.vela/agents/pm/block-recovery.md` |
+| 차단 발생 시 | `.vela/agents/pm/block-recovery.md` |
 | UI 템플릿 필요 시 | `.vela/references/interactive-ui.md` |
 
 **위 파일을 한번에 전부 읽지 않는다.** 필요한 상황에서 해당 파일만 읽는다.
