@@ -472,7 +472,7 @@ PM이 Worker 소환 (Teammate 또는 Subagent)
   → PM이 approve/reject 판단
 ```
 
-SDK 설치 여부는 `install.sh` 실행 시 자동 감지되며, 실패 시 경고만 출력하고 설치를 중단하지 않는다.
+SDK 설치 여부는 sdk-runner.js 실행 시 자동 감지되며, 미설치 시 `{ ok: false, error: 'sdk_not_available' }`을 반환하고 기존 Subagent/Teammate 방식으로 폴백한다.
 
 #### 에이전트 지시사항 (`.vela/agents/`)
 

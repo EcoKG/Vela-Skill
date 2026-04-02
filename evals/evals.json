@@ -16,7 +16,7 @@
         },
         {
           "name": "hooks-deployed",
-          "description": "4개 훅 파일이 .vela/hooks/에 배포되었는가",
+          "description": "핵심 훅 파일(vela-gate-keeper.js)이 .vela/hooks/에 배포되었는가",
           "type": "file_exists",
           "check": ".vela/hooks/vela-gate-keeper.js"
         },
