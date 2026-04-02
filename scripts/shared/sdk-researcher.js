@@ -27,9 +27,10 @@
 const fs = require('fs');
 const path = require('path');
 const { runSdkAgent } = require('./sdk-runner');
+const { MODEL_VERSIONS } = require('./constants');
 
 // ─── Constants ───
-const HAIKU_MODEL = 'claude-haiku-4-5-20250929';
+const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const MAX_TURNS = 5;
 const MAX_BUDGET_USD = 0.05;
 

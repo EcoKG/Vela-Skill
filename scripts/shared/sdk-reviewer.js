@@ -23,6 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const { runSdkAgent } = require('./sdk-runner');
+const { MODEL_VERSIONS } = require('./constants');
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
 const PRIMARY_SCORE_REGEX = /(총점|총|total\s*score)[^\d]*(\d+)\s*\/\s*25/i;
@@ -32,7 +33,7 @@ const PASS_THRESHOLD = 20;
 const FAIL_THRESHOLD = 15;
 
 // ─── Stage 3: Opus escalation model + budget ───
-const OPUS_MODEL = 'claude-opus-4-20250514';
+const OPUS_MODEL = MODEL_VERSIONS.OPUS;
 const OPUS_BUDGET = 0.50;
 
 // ─── Inlined reviewer system prompt ───
@@ -269,8 +270,8 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
 async function sdkReview(opts) {
   if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
   const { step, artifactDir, cwd } = opts;
-  const HAIKU_MODEL = 'claude-haiku-4-5-20250929';
-  const SONNET_MODEL = 'claude-sonnet-4-5-20250929';
+  const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
+  const SONNET_MODEL = MODEL_VERSIONS.SONNET;
 
   let totalCost = 0;
   let totalDurationMs = 0;

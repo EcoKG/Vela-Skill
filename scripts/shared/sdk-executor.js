@@ -23,9 +23,10 @@
 const fs = require('fs');
 const path = require('path');
 const { runSdkAgent } = require('./sdk-runner');
+const { MODEL_VERSIONS } = require('./constants');
 
 // ─── Constants ───
-const SONNET_MODEL = 'claude-sonnet-4-6-20250514';
+const SONNET_MODEL = MODEL_VERSIONS.SONNET_NEW;
 const MAX_TURNS = 25;
 const MAX_BUDGET_USD = 1.00;
 

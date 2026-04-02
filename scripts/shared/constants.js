@@ -102,7 +102,15 @@ const BASH_WRITE_PATTERNS = [
   /\bpip\s+(install|uninstall)/
 ];
 
+const MODEL_VERSIONS = {
+  HAIKU: 'claude-haiku-4-5-20250929',
+  SONNET: 'claude-sonnet-4-5-20250929',
+  SONNET_NEW: 'claude-sonnet-4-6-20250514',
+  OPUS: 'claude-opus-4-20250514',
+};
+
 module.exports = {
+  MODEL_VERSIONS,
   CODE_EXTENSIONS,
   SKIP_PATHS,
   SENSITIVE_FILES,
