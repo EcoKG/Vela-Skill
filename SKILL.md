@@ -176,6 +176,7 @@ node .vela/cli/vela-engine.js auto
    │   ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석
    │   ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리
    │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
+   │   ├── change-surface.js    ← 참조 무결성 검증 (diff 기반)
    │   └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
    ├── cli/                     ← 커스텀 CLI 도구
    │   ├── vela-analyze.js      ← 분석 보고서 CLI (deps/run/full/report)
