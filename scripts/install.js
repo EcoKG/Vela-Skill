@@ -79,12 +79,9 @@ const VELA_PERMISSIONS = {
 const FILE_MANIFEST = [
   // Shared modules (used by CLI tools)
   { src: 'scripts/shared/constants.js', dst: 'shared/constants.js' },
-  { src: 'scripts/shared/pipeline.js', dst: 'shared/pipeline.js' },
   { src: 'scripts/shared/dep-analyzer.js', dst: 'shared/dep-analyzer.js' },
   // CLI tools
   { src: 'scripts/cli/vela-engine.js', dst: 'cli/vela-engine.js' },
-  { src: 'scripts/cli/vela-read.js', dst: 'cli/vela-read.js' },
-  { src: 'scripts/cli/vela-write.js', dst: 'cli/vela-write.js' },
   { src: 'scripts/cli/vela-analyze.js', dst: 'cli/vela-analyze.js' },
   { src: 'scripts/cli/vela-cost.js', dst: 'cli/vela-cost.js' },
   { src: 'scripts/cli/vela-report.js', dst: 'cli/vela-report.js' },

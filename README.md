@@ -471,9 +471,8 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   │   ├── sdk-executor.js      ← Sonnet TDD 실행
   │   │   ├── sdk-analyzer.js      ← 5관점 코드 분석 (security/bugs/perf/quality/arch)
   │   │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
-  │   │   ├── pipeline.js          ← 파이프라인 상태 관리
   │   │   └── constants.js         ← 가드 패턴 상수
-  │   ├── cli/                   ← vela-engine, vela-pipeline, vela-read, vela-write, vela-cost, vela-report, vela-analyze
+  │   ├── cli/                   ← vela-engine, vela-pipeline, vela-cost, vela-report, vela-analyze
   │   ├── agents/                ← vela.md, researcher, planner, executor, reviewer, conflict-manager, leader
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy

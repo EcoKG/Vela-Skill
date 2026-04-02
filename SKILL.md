@@ -175,13 +175,10 @@ node .vela/cli/vela-engine.js auto
    │   ├── sdk-executor.js      ← Sonnet TDD 실행
    │   ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석
    │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
-   │   ├── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
-   │   └── pipeline.js          ← 파이프라인 상태 관리, Gate Keeper/Guard 로직
+   │   └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
    ├── cli/                     ← 커스텀 CLI 도구
    │   ├── vela-pipeline.js     ← SDK 오케스트레이터 (파이프라인 자동 실행)
-   │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진
-   │   ├── vela-read.js         ← 읽기 도구
-   │   └── vela-write.js        ← 쓰기 도구
+   │   └── vela-engine.js       ← 파이프라인 상태 머신 엔진
    ├── cache/                   ← TreeNode SQLite 캐시
    │   └── treenode.js          ← 캐시 관리자
    ├── templates/

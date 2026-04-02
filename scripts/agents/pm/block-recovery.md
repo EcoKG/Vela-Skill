@@ -6,7 +6,7 @@ Vela가 `BLOCKED [코드]` 메시지를 반환하면, 아래 테이블에 따라
 
 | 코드 | 사유 | 복구 |
 |------|------|------|
-| VK-01 | Bash 쓰기 (읽기 모드) | Read/Glob/Grep 또는 .vela/cli/vela-read.js |
+| VK-01 | Bash 쓰기 (읽기 모드) | Read/Glob/Grep |
 | VK-02 | Bash 제한 | Claude Code 내장 도구. git/gh는 파이프라인 활성 시 허용 |
 | VK-03 | pipeline-state.json 직접 수정 | `vela-engine transition` |
 | VK-04 | 읽기 모드에서 쓰기 | `vela-engine transition` → 쓰기 가능 단계 |

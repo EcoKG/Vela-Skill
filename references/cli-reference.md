@@ -43,26 +43,6 @@ node .vela/cli/vela-analyze.js full --items <list> [--model haiku|sonnet] [--out
 # items: deps, security, bugs, performance, code-quality, architecture
 ```
 
-## vela-read (읽기)
-
-```bash
-node .vela/cli/vela-read.js <파일경로>                    # 파일 읽기
-node .vela/cli/vela-read.js <파일경로> --lines 50          # 처음 50줄
-node .vela/cli/vela-read.js --glob "**/*.ts"               # 패턴 검색
-node .vela/cli/vela-read.js --grep "패턴" --ext js,ts      # 내용 검색
-node .vela/cli/vela-read.js --tree --depth 3               # 디렉토리 구조
-node .vela/cli/vela-read.js --cached                       # 캐시된 경로 조회
-```
-
-## vela-write (쓰기)
-
-```bash
-node .vela/cli/vela-write.js <파일경로> --content "내용"   # 파일 작성
-node .vela/cli/vela-write.js <파일경로> --stdin            # stdin으로 내용 전달
-node .vela/cli/vela-write.js <파일경로> --edit --old "원본" --new "수정"
-node .vela/cli/vela-write.js --mkdir <디렉토리>            # 디렉토리 생성
-```
-
 ## TreeNode 캐시
 
 ```bash
