@@ -32,6 +32,38 @@ const FALLBACK_SCORE_REGEX = /\b(\d+)\s*\/\s*25\b/;
 const PASS_THRESHOLD = 20;
 const FAIL_THRESHOLD = 15;
 
+// ─── Structured output schema (K011 pattern — module-local) ───
+const REVIEWER_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    scores: {
+      type: 'object',
+      properties: {
+        layer_separation: { type: 'number' },
+        ddd_patterns: { type: 'number' },
+        solid_principles: { type: 'number' },
+        test_strategy: { type: 'number' },
+        specification_completeness: { type: 'number' },
+      },
+      required: ['layer_separation', 'ddd_patterns', 'solid_principles', 'test_strategy', 'specification_completeness'],
+    },
+    total: { type: 'number' },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
+          description: { type: 'string' },
+        },
+        required: ['severity', 'description'],
+      },
+    },
+    review_text: { type: 'string' },
+  },
+  required: ['scores', 'total', 'review_text'],
+};
+
 // ─── Stage 3: Opus escalation model + budget ───
 const OPUS_MODEL = MODEL_VERSIONS.OPUS;
 const OPUS_BUDGET = 0.50;
@@ -196,6 +228,7 @@ async function runReviewStage(opts) {
     systemPrompt: REVIEWER_SYSTEM_PROMPT,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
+    outputFormat: { type: 'json', schema: REVIEWER_OUTPUT_SCHEMA },
     // settingSources: [] is set by runSdkAgent internally (D014)
   };
 
@@ -214,12 +247,17 @@ async function runReviewStage(opts) {
     };
   }
 
+  // ─── Dual extraction: structuredOutput.total first → parseScore() fallback ───
   const resultText = agentResult.result || '';
-  const score = parseScore(resultText);
+  const structuredOutput = agentResult.structuredOutput || null;
+  const score = (structuredOutput != null && structuredOutput.total != null)
+    ? structuredOutput.total
+    : parseScore(resultText);
 
   return {
     ok: true,
     result: resultText,
+    structuredOutput,
     score,
     cost: agentResult.cost || 0,
     model: agentResult.model || opts.model,
@@ -308,7 +346,7 @@ async function sdkReview(opts) {
     // Fall through to Stage 2 for a definitive answer
   } else if (haikuScore >= PASS_THRESHOLD) {
     // Clear pass — write artifacts, return
-    writeReviewArtifact(artifactDir, step, haikuResult);
+    writeReviewArtifact(artifactDir, step, stage1.structuredOutput?.review_text || haikuResult);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'approve',
       score: haikuScore,
@@ -335,7 +373,7 @@ async function sdkReview(opts) {
 
     if (opusResult.ok && opusResult.score != null && opusResult.score >= PASS_THRESHOLD) {
       // Opus rescued it
-      writeReviewArtifact(artifactDir, step, opusResult.result);
+      writeReviewArtifact(artifactDir, step, opusResult.structuredOutput?.review_text || opusResult.result);
       writeApprovalArtifact(artifactDir, step, {
         decision: 'approve',
         score: opusResult.score,
@@ -361,7 +399,9 @@ async function sdkReview(opts) {
 
     // Opus also failed (or errored) — reject with escalated flag
     const opusScore = (opusResult.ok && opusResult.score != null) ? opusResult.score : haikuScore;
-    const opusReviewText = (opusResult.ok && opusResult.result) ? opusResult.result : haikuResult;
+    const opusReviewText = (opusResult.ok && opusResult.structuredOutput?.review_text)
+      ? opusResult.structuredOutput.review_text
+      : (opusResult.ok && opusResult.result) ? opusResult.result : haikuResult;
 
     writeReviewArtifact(artifactDir, step, opusReviewText);
     writeApprovalArtifact(artifactDir, step, {
@@ -402,7 +442,7 @@ async function sdkReview(opts) {
   if (!stage2.ok) {
     // Stage 2 failed — still have Stage 1 result, report partial
     // Write Haiku artifacts as the best available review
-    writeReviewArtifact(artifactDir, step, haikuResult);
+    writeReviewArtifact(artifactDir, step, stage1.structuredOutput?.review_text || haikuResult);
     return {
       ok: false,
       error: stage2.error,
@@ -422,7 +462,7 @@ async function sdkReview(opts) {
 
   if (finalScore != null && finalScore >= PASS_THRESHOLD) {
     // Sonnet approved — no escalation needed
-    writeReviewArtifact(artifactDir, step, sonnetResult);
+    writeReviewArtifact(artifactDir, step, stage2.structuredOutput?.review_text || sonnetResult);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'approve',
       score: finalScore,
@@ -450,7 +490,7 @@ async function sdkReview(opts) {
 
   if (opusResult.ok && opusResult.score != null && opusResult.score >= PASS_THRESHOLD) {
     // Opus rescued it after Sonnet failed
-    writeReviewArtifact(artifactDir, step, opusResult.result);
+    writeReviewArtifact(artifactDir, step, opusResult.structuredOutput?.review_text || opusResult.result);
     writeApprovalArtifact(artifactDir, step, {
       decision: 'approve',
       score: opusResult.score,
@@ -476,7 +516,9 @@ async function sdkReview(opts) {
 
   // Opus also failed — final reject with escalated flag
   const opusScore = (opusResult.ok && opusResult.score != null) ? opusResult.score : finalScore;
-  const opusReviewText = (opusResult.ok && opusResult.result) ? opusResult.result : sonnetResult;
+  const opusReviewText = (opusResult.ok && opusResult.structuredOutput?.review_text)
+    ? opusResult.structuredOutput.review_text
+    : (opusResult.ok && opusResult.result) ? opusResult.result : sonnetResult;
 
   writeReviewArtifact(artifactDir, step, opusReviewText);
   writeApprovalArtifact(artifactDir, step, {

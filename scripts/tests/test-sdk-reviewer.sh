@@ -24,6 +24,9 @@
 # Test 12: __opus_also_fail__ → Haiku fail (10) → Opus fail (8) → reject + escalated:true + escalation.json
 # Test 13: __borderline_opus__ → Haiku borderline (17) → Sonnet fail (14) → Opus pass (21) → approve + escalated:true
 # Test 14: Escalation.json has auto_escalated:true when Opus fails
+# Test 15: structured_output.total takes priority over parseScore() regex
+# Test 16: structured_output absent → falls back to regex parseScore()
+# Test 17: structured_output.review_text used for review artifact when present
 # K001:    settingSources present in sdk-reviewer.js source
 # Broad:   No stale Reviewer subagent references in updated files
 # ──────────────────────────────────────────────────────────────
@@ -124,8 +127,21 @@ function query(args) {
     yield { type: 'system', subtype: 'init', session_id: 'mock-reviewer-session' };
 
     let scoreText = '';
+    let structuredOutput = undefined;
 
-    if (prompt.includes('__opus_pass__')) {
+    if (prompt.includes('__structured_25__')) {
+      // Structured output path: return structured_output with total + review_text
+      scoreText = 'Mock review — structured output test (text has no ## Total).';
+      structuredOutput = {
+        scores: { layer_separation: 5, ddd_patterns: 5, solid_principles: 5, test_strategy: 5, specification_completeness: 5 },
+        total: 25,
+        issues: [],
+        review_text: 'Structured review: all dimensions excellent via JSON schema.'
+      };
+    } else if (prompt.includes('__no_structured__')) {
+      // No structured output — falls back to regex
+      scoreText = 'Regex fallback review.\n\n## Total: 23/25';
+    } else if (prompt.includes('__opus_pass__')) {
       if (isOpus) {
         scoreText = 'Opus escalation review \u2014 rescued.\n\n## Total: 22/25';
       } else {
@@ -163,7 +179,7 @@ function query(args) {
       scoreText = 'Default review.\n\n## Total: 20/25';
     }
 
-    yield {
+    const resultPayload = {
       type: 'result',
       subtype: 'success',
       result: scoreText,
@@ -173,6 +189,10 @@ function query(args) {
       num_turns: 3,
       duration_ms: 500
     };
+    if (structuredOutput !== undefined) {
+      resultPayload.structured_output = structuredOutput;
+    }
+    yield resultPayload;
   })();
 }
 
@@ -228,8 +248,18 @@ assert_eq "sdkReview is a function" "PASS" "$result"
 # ── Test 3: SDK unavailable fallback ──
 echo ""
 echo "📋 Test 3: SDK unavailable → ok:false, no artifacts"
-# Ensure no mock is installed for this test
+# Install a broken mock that has no query() export — simulates SDK unavailable.
+# (Real SDK at project root intercepts import(), so removing mock is insufficient.)
 teardown_mock_sdk 2>/dev/null || true
+mkdir -p "$MOCK_NM"
+cat > "$MOCK_NM/package.json" <<'BPKG'
+{ "name": "@anthropic-ai/claude-agent-sdk", "version": "0.0.0-broken", "main": "index.js", "exports": { ".": "./index.js" } }
+BPKG
+cat > "$MOCK_NM/index.js" <<'BROKEN'
+'use strict';
+// Broken mock: query() not exported — triggers sdk_not_available in sdk-runner.js
+module.exports = {};
+BROKEN
 result=$(node -e "
   Object.keys(require.cache).forEach(k => {
     if (k.includes('sdk-runner') || k.includes('sdk-reviewer') || k.includes('claude-agent-sdk')) delete require.cache[k];
@@ -241,6 +271,7 @@ result=$(node -e "
     console.log(JSON.stringify({ crashed: true, error: e.message }));
   });
 " 2>/dev/null)
+rm -rf "$MODULE_DIR/node_modules" 2>/dev/null || true
 assert_contains "ok is false" '"ok":false' "$result"
 assert_contains "error is sdk_not_available" '"error":"sdk_not_available"' "$result"
 
@@ -461,6 +492,61 @@ result=$(run_reviewer_test "
   }).catch(e => console.log('ERROR:' + e.message));
 ")
 assert_eq "escalation.json auto_escalated:true, score, threshold" "PASS" "$result"
+
+# ── Clean artifacts for structured output tests ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 15: structured_output.total takes priority over parseScore() regex ──
+echo ""
+echo "📋 Test 15: structured_output.total takes priority over parseScore() regex"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  sdkReview({ step: '__structured_25__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    // structured_output provides total=25; text has NO ## Total line, so regex would return null
+    // If score is 25, it came from structuredOutput.total, not parseScore()
+    const ok = r.ok === true && r.score === 25 && r.decision === 'approve' && r.stage === 'haiku';
+    console.log(ok ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "structured_output.total used for score (25)" "PASS" "$result"
+
+# ── Clean artifacts ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 16: structured_output absent → falls back to regex parseScore() ──
+echo ""
+echo "📋 Test 16: structured_output absent → regex parseScore() fallback"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  sdkReview({ step: '__no_structured__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    // No structured_output in mock response; regex finds ## Total: 23/25
+    const ok = r.ok === true && r.score === 23 && r.decision === 'approve' && r.stage === 'haiku';
+    console.log(ok ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "regex fallback score (23)" "PASS" "$result"
+
+# ── Test 17: structured_output.review_text used for review artifact ──
+echo ""
+echo "📋 Test 17: structured_output.review_text used for review artifact when present"
+result=$(node -e "
+  const content = require('fs').readFileSync('$ARTIFACT_DIR/../' + require('path').basename('$ARTIFACT_DIR') + '/../' + 'x', 'utf8');
+" 2>/dev/null || true)
+# Re-run structured_25 to generate artifact, then check its content
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  const path = require('path');
+  sdkReview({ step: '__structured_25__', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const reviewPath = path.join('$ARTIFACT_DIR', 'review-__structured_25__.md');
+    const content = fs.readFileSync(reviewPath, 'utf8');
+    // review_text from structuredOutput should be used, not the result text
+    const ok = content.includes('Structured review: all dimensions excellent via JSON schema.');
+    console.log(ok ? 'PASS' : 'FAIL:content=' + content.substring(0, 100));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "review artifact uses structured review_text" "PASS" "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""
