@@ -185,6 +185,7 @@ async function sdkResearch(opts) {
       systemPrompt: prompt,
       maxTurns: MAX_TURNS,
       maxBudgetUsd: MAX_BUDGET_USD,
+      effort: 'low',
     });
   });
 

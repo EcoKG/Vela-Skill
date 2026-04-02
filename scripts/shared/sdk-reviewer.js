@@ -189,7 +189,7 @@ function buildReviewPrompt(step, priorReview) {
 async function runReviewStage(opts) {
   const prompt = buildReviewPrompt(opts.step, opts.priorReview);
 
-  const agentResult = await runSdkAgent({
+  const agentOpts = {
     prompt,
     model: opts.model,
     cwd: opts.cwd,
@@ -197,7 +197,12 @@ async function runReviewStage(opts) {
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
     // settingSources: [] is set by runSdkAgent internally (D014)
-  });
+  };
+
+  if (opts.effort != null) agentOpts.effort = opts.effort;
+  if (opts.thinking != null) agentOpts.thinking = opts.thinking;
+
+  const agentResult = await runSdkAgent(agentOpts);
 
   if (!agentResult.ok) {
     return {
@@ -239,7 +244,9 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
     cwd,
     maxTurns: 10,
     maxBudgetUsd: OPUS_BUDGET,
-    priorReview
+    priorReview,
+    effort: 'high',
+    thinking: { type: 'adaptive' },
   });
 }
 
@@ -283,7 +290,8 @@ async function sdkReview(opts) {
     cwd,
     maxTurns: 5,
     maxBudgetUsd: 0.05,
-    priorReview: null
+    priorReview: null,
+    effort: 'medium',
   });
 
   if (!stage1.ok) {
@@ -387,7 +395,8 @@ async function sdkReview(opts) {
     cwd,
     maxTurns: 8,
     maxBudgetUsd: 0.15,
-    priorReview: haikuResult
+    priorReview: haikuResult,
+    effort: 'high',
   });
 
   if (!stage2.ok) {

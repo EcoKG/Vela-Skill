@@ -178,6 +178,7 @@ async function sdkExecute(opts) {
     maxTurns: MAX_TURNS,
     maxBudgetUsd: MAX_BUDGET_USD,
     permissionMode: 'bypassPermissions',
+    effort: 'high',
   });
 
   // ─── SDK unavailable — return without writing artifacts ───

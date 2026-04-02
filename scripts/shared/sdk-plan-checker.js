@@ -122,6 +122,7 @@ async function sdkPlanCheck(opts) {
     systemPrompt: PLAN_CHECK_SYSTEM_PROMPT,
     maxTurns: MAX_TURNS,
     maxBudgetUsd: MAX_BUDGET_USD,
+    effort: 'low',
   });
 
   // ─── Handle SDK failure — still write artifact ───

@@ -448,6 +448,7 @@ async function sdkAnalyze(opts) {
       systemPrompt: perspective.systemPrompt,
       maxTurns: selectedMaxTurns,
       maxBudgetUsd: selectedMaxBudget,
+      effort: 'medium',
       // settingSources: [] is set inside runSdkAgent (D014 — hook isolation)
     });
   });

@@ -368,6 +368,13 @@ const MODEL_MAP = {
   reviewer: MODEL_VERSIONS.SONNET_NEW,     // Sonnet for initial review
 };
 
+const EFFORT_MAP = {
+  researcher: 'low',
+  planner: 'high',
+  executor: 'high',
+  reviewer: 'high',
+};
+
 const BUDGET_MAP = {
   researcher: 0.30,
   planner: 0.50,
@@ -557,6 +564,7 @@ async function runStep(stepDef, state) {
     allowedTools: modeOptions.tools,
     disallowedTools: modeOptions.disallowedTools,
     hooks,
+    effort: EFFORT_MAP[actor] || 'medium',
   });
 
   const durationMs = Date.now() - startMs;
