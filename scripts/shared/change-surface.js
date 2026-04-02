@@ -558,10 +558,13 @@ function searchImpact(surfaceResult, changedFiles, options = {}) {
     if (!token || !token.trim()) continue;
 
     // Run rg with fixed-string search
+    // Note: --glob args must come BEFORE -- (end-of-options separator)
+    // Explicit '.' path forces filesystem search — without it, rg may
+    // detect a pipe on stdin (from execSync) and read stdin instead.
     let rgOutput;
     try {
       rgOutput = execSync(
-        `rg --fixed-strings --line-number --no-heading -- ${shellEscape(token)} ${excludeArgs}`,
+        `rg --fixed-strings --line-number --no-heading ${excludeArgs} -- ${shellEscape(token)} .`,
         { cwd, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] }
       );
     } catch (err) {
