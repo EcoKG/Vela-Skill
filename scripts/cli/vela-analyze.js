@@ -369,7 +369,7 @@ async function main() {
   switch (subcommand) {
     case "deps": {
       const { analyzeDeps } = require(
-        path.join(__dirname, "..", "hooks", "shared", "dep-analyzer.js"),
+        path.join(__dirname, "..", "shared", "dep-analyzer.js"),
       );
       const result = analyzeDeps({ cwd: process.cwd() });
       console.log(JSON.stringify(result, null, 2));
@@ -451,7 +451,7 @@ async function main() {
       }
 
       const { sdkAnalyze } = require(
-        path.join(__dirname, "..", "hooks", "shared", "sdk-analyzer.js"),
+        path.join(__dirname, "..", "shared", "sdk-analyzer.js"),
       );
       const result = await sdkAnalyze({
         perspectives: requested,
@@ -522,7 +522,7 @@ async function main() {
       if (wantDeps) {
         try {
           const { analyzeDeps } = require(
-            path.join(__dirname, "..", "hooks", "shared", "dep-analyzer.js"),
+            path.join(__dirname, "..", "shared", "dep-analyzer.js"),
           );
           const depResult = analyzeDeps({ cwd: process.cwd() });
           combinedData.deps = depResult;
@@ -541,7 +541,7 @@ async function main() {
       if (sdkPerspectives.length > 0) {
         try {
           const { sdkAnalyze } = require(
-            path.join(__dirname, "..", "hooks", "shared", "sdk-analyzer.js"),
+            path.join(__dirname, "..", "shared", "sdk-analyzer.js"),
           );
           const sdkResult = await sdkAnalyze({
             perspectives: sdkPerspectives,
