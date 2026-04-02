@@ -35,6 +35,28 @@ const SONNET_MODEL = MODEL_VERSIONS.SONNET;
 const MAX_TURNS = 5;
 const MAX_BUDGET_USD = 0.05;
 
+// ─── Structured output schema (K011 pattern — module-local) ───
+const ANALYZER_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          severity: { type: 'string', enum: ['critical', 'high', 'moderate', 'low', 'info'] },
+          file: { type: 'string' },
+          line: { type: 'number' },
+          description: { type: 'string' },
+          suggestion: { type: 'string' },
+        },
+      },
+    },
+  },
+  required: ['findings'],
+};
+
 // ─── Finding schema reference (inlined in each prompt) ───
 const FINDING_SCHEMA = `{
   "findings": [
@@ -449,6 +471,7 @@ async function sdkAnalyze(opts) {
       maxTurns: selectedMaxTurns,
       maxBudgetUsd: selectedMaxBudget,
       effort: 'medium',
+      outputFormat: { type: 'json', schema: ANALYZER_OUTPUT_SCHEMA },
       // settingSources: [] is set inside runSdkAgent (D014 — hook isolation)
     });
   });
@@ -501,9 +524,14 @@ async function sdkAnalyze(opts) {
       };
     }
 
-    // Agent succeeded — extract findings from response
+    // Agent succeeded — extract findings: structuredOutput first → extractFindings fallback
     hasAnyOk = true;
-    const extracted = extractFindings(agentResult.result || '');
+    let extracted;
+    if (agentResult.structuredOutput && Array.isArray(agentResult.structuredOutput.findings)) {
+      extracted = { findings: normalizeFindingsArray(agentResult.structuredOutput.findings) };
+    } else {
+      extracted = extractFindings(agentResult.result || '');
+    }
 
     return {
       perspective: key,

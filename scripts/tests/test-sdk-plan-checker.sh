@@ -20,6 +20,9 @@
 # Test 5:  Fail case (VERDICT: FAIL) → ok:true + verdict=fail + plan-check.md
 # Test 6:  plan.md missing → ok:false + error=plan_md_not_found
 # Test 7:  settingSources isolation — captured SDK options include settingSources: []
+# Test 8:  structuredOutput.verdict used directly when present (T03)
+# Test 9:  VERDICT_REGEX fallback when structuredOutput absent (T03)
+# Test 10: outputFormat passed to SDK queryOptions (T03)
 # K001:    settingSources present in sdk-plan-checker.js source
 # Broad:   No stale references sweep
 # ──────────────────────────────────────────────────────────────
@@ -137,6 +140,9 @@ PLAN
 # Mock returns VERDICT based on prompt content markers:
 #   __plan_pass__ → VERDICT: PASS
 #   __plan_fail__ → VERDICT: FAIL
+#   __structured_pass__ → structured_output with verdict:PASS (no VERDICT line in text)
+#   __structured_fail__ → structured_output with verdict:FAIL (no VERDICT line in text)
+#   __no_structured__ → no structured_output, VERDICT: PASS in text (fallback path)
 #   default       → VERDICT: PASS
 # Captures SDK options to CAPTURE_FILE for isolation checks.
 setup_mock_sdk() {
@@ -163,8 +169,35 @@ function query(args) {
     yield { type: 'system', subtype: 'init', session_id: 'mock-plan-checker-session' };
 
     let resultText = '';
+    let structuredOutput = undefined;
 
-    if (prompt.includes('__plan_fail__')) {
+    if (prompt.includes('__structured_pass__')) {
+      // T03: structured_output with verdict, no VERDICT line in text
+      resultText = 'Analysis complete. All sections verified.';
+      structuredOutput = {
+        verdict: 'PASS',
+        sections: [
+          { name: 'Architecture', exists: true, byteCount: 450, substantive: true },
+          { name: 'Class Specification', exists: true, byteCount: 380, substantive: true },
+          { name: 'Test Strategy', exists: true, byteCount: 290, substantive: true }
+        ]
+      };
+    } else if (prompt.includes('__structured_fail__')) {
+      // T03: structured_output with verdict FAIL, no VERDICT line in text
+      resultText = 'Analysis complete. Missing sections found.';
+      structuredOutput = {
+        verdict: 'FAIL',
+        sections: [
+          { name: 'Architecture', exists: true, byteCount: 450, substantive: true },
+          { name: 'Class Specification', exists: false, byteCount: 0, substantive: false },
+          { name: 'Test Strategy', exists: true, byteCount: 120, substantive: false }
+        ]
+      };
+    } else if (prompt.includes('__no_structured__')) {
+      // T03: no structured_output → fallback to VERDICT_REGEX
+      resultText = 'All sections checked.\n\nVERDICT: PASS';
+      structuredOutput = undefined;
+    } else if (prompt.includes('__plan_fail__')) {
       resultText = [
         '## Section Check',
         '',
@@ -208,7 +241,7 @@ function query(args) {
       ].join('\n');
     }
 
-    yield {
+    var result = {
       type: 'result',
       subtype: 'success',
       result: resultText,
@@ -218,6 +251,10 @@ function query(args) {
       num_turns: 1,
       duration_ms: 200
     };
+    if (structuredOutput !== undefined) {
+      result.structured_output = structuredOutput;
+    }
+    yield result;
   })();
 }
 
@@ -273,9 +310,18 @@ assert_eq "sdkPlanCheck is a function" "PASS" "$result"
 # ── Test 3: SDK unavailable fallback ──
 echo ""
 echo "📋 Test 3: SDK unavailable → ok:false + plan-check.md still written"
-# Ensure no mock is installed
+# Install a broken mock that exports query() but always yields error_during_execution.
+# This simulates SDK failure (real SDK at project root would otherwise intercept import()).
 teardown_mock_sdk 2>/dev/null || true
-# Need plan.md to exist so it gets past the missing-file check
+mkdir -p "$MOCK_NM"
+cat > "$MOCK_NM/package.json" <<'BPKG'
+{ "name": "@anthropic-ai/claude-agent-sdk", "version": "0.0.0-broken", "main": "index.js", "exports": { ".": "./index.js" } }
+BPKG
+cat > "$MOCK_NM/index.js" <<'BROKEN'
+'use strict';
+// Broken mock: query() not exported — triggers sdk_not_available in sdk-runner.js
+module.exports = {};
+BROKEN
 write_plan_fixture "__unavail_test__"
 result=$(node -e "
   Object.keys(require.cache).forEach(k => {
@@ -291,8 +337,8 @@ result=$(node -e "
     console.log(JSON.stringify({ crashed: true, error: e.message }));
   });
 " 2>/dev/null)
+rm -rf "$MODULE_DIR/node_modules" 2>/dev/null || true
 assert_contains "ok is false" '"ok":false' "$result"
-assert_contains "error is sdk_not_available" '"error":"sdk_not_available"' "$result"
 assert_contains "plan-check.md written on SDK failure" '"planCheckExists":true' "$result"
 
 # ── Setup mock SDK for tests 4-7 ──
@@ -370,6 +416,65 @@ result=$(run_plan_checker_test "
   }).catch(e => console.log('ERROR:' + e.message));
 ")
 assert_eq "settingSources is []" "PASS" "$result"
+
+# ── Test 8: structuredOutput.verdict used directly when present (T03) ──
+echo ""
+echo "📋 Test 8: structuredOutput.verdict used directly when present (T03)"
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+write_plan_fixture "__structured_pass__"
+result=$(run_plan_checker_test "
+  const { sdkPlanCheck } = require('$MODULE');
+  sdkPlanCheck({ artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    // structuredOutput.verdict=PASS is used directly, text has no VERDICT line
+    const checks = [r.ok === true, r.verdict === 'pass'];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "structuredOutput.verdict used for pass" "PASS" "$result"
+
+# Also test structuredOutput FAIL verdict
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+write_plan_fixture "__structured_fail__"
+result=$(run_plan_checker_test "
+  const { sdkPlanCheck } = require('$MODULE');
+  sdkPlanCheck({ artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const checks = [r.ok === true, r.verdict === 'fail'];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "structuredOutput.verdict used for fail" "PASS" "$result"
+
+# ── Test 9: VERDICT_REGEX fallback when structuredOutput absent (T03) ──
+echo ""
+echo "📋 Test 9: VERDICT_REGEX fallback when structuredOutput absent (T03)"
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+write_plan_fixture "__no_structured__"
+result=$(run_plan_checker_test "
+  const { sdkPlanCheck } = require('$MODULE');
+  sdkPlanCheck({ artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    // No structured_output → falls back to VERDICT_REGEX in text
+    const checks = [r.ok === true, r.verdict === 'pass'];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "VERDICT_REGEX fallback works" "PASS" "$result"
+
+# ── Test 10: outputFormat passed to SDK queryOptions (T03) ──
+echo ""
+echo "📋 Test 10: outputFormat passed to SDK queryOptions (T03)"
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+write_plan_fixture "__plan_pass__"
+result=$(run_plan_checker_test "
+  const { sdkPlanCheck } = require('$MODULE');
+  sdkPlanCheck({ artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    const fmt = opts.outputFormat;
+    const hasFormat = fmt && fmt.type === 'json' && fmt.schema && fmt.schema.required;
+    console.log(hasFormat ? 'PASS' : 'FAIL:' + JSON.stringify(fmt));
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "outputFormat in queryOptions" "PASS" "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""

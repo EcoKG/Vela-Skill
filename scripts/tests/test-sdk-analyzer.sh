@@ -25,6 +25,9 @@
 # Test 9:  settingSources isolation — captured SDK options include settingSources: []
 # Test 10: Perspective markers — rg finds 5 markers in source
 # Test 11: JSON extraction — mock returns embedded json block, findings extracted
+# Test 12: structuredOutput.findings used directly when present (T03)
+# Test 13: extractFindings fallback when structuredOutput absent (T03)
+# Test 14: outputFormat passed to SDK queryOptions (T03)
 # K001:    settingSources present in sdk-analyzer.js source
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -84,6 +87,9 @@ assert_contains() {
 # JSON extraction: SDK_JSON_FINDINGS=1 triggers response with embedded
 # ```json block containing a findings array (for extractFindings test).
 #
+# Structured output: SDK_STRUCTURED_FINDINGS=1 triggers structured_output
+# field with findings array (for T03 dual extraction test).
+#
 # Captures SDK options via appendFileSync (K012 — parallel-safe)
 # to CAPTURE_FILE for isolation checks.
 setup_mock_sdk() {
@@ -127,6 +133,9 @@ function query(args) {
   // JSON extraction test mode
   const jsonFindings = process.env.SDK_JSON_FINDINGS === '1';
 
+  // Structured output test mode (T03)
+  const structuredFindings = process.env.SDK_STRUCTURED_FINDINGS === '1';
+
   return (async function*() {
     yield { type: 'system', subtype: 'init', session_id: 'mock-analyzer-' + perspective };
 
@@ -140,6 +149,28 @@ function query(args) {
         session_id: 'mock-analyzer-' + perspective,
         num_turns: 1,
         duration_ms: 50
+      };
+    } else if (structuredFindings) {
+      // T03: Return findings in structured_output field (no JSON in text)
+      yield {
+        type: 'result',
+        subtype: 'success',
+        result: 'Analysis complete for ' + perspective + '. See structured output.',
+        structured_output: {
+          findings: [{
+            name: 'Structured finding from ' + perspective,
+            severity: 'moderate',
+            file: 'src/structured.js',
+            line: 20,
+            description: 'Structured issue in ' + perspective,
+            suggestion: 'Fix via structured output'
+          }]
+        },
+        total_cost_usd: 0.002,
+        model: options.model || 'mock-haiku',
+        session_id: 'mock-analyzer-' + perspective,
+        num_turns: 2,
+        duration_ms: 100
       };
     } else if (jsonFindings) {
       // Return a response with embedded ```json block for extraction test
@@ -193,16 +224,18 @@ cleanup_all() {
 }
 
 # Run node with cache clearing, capture file env, and optional fail controls.
-# Usage: run_analyzer_test "js_code" [FAIL_PERSPECTIVES] [FAIL_ALL] [JSON_FINDINGS]
+# Usage: run_analyzer_test "js_code" [FAIL_PERSPECTIVES] [FAIL_ALL] [JSON_FINDINGS] [STRUCTURED_FINDINGS]
 run_analyzer_test() {
   local js_code="$1"
   local fail_perspectives="${2:-}"
   local fail_all="${3:-0}"
   local json_findings="${4:-0}"
+  local structured_findings="${5:-0}"
   SDK_CAPTURE_FILE="$CAPTURE_FILE" \
   SDK_FAIL_PERSPECTIVES="$fail_perspectives" \
   SDK_FAIL_ALL="$fail_all" \
   SDK_JSON_FINDINGS="$json_findings" \
+  SDK_STRUCTURED_FINDINGS="$structured_findings" \
   node -e "
     Object.keys(require.cache).forEach(k => {
       if (k.includes('sdk-runner') || k.includes('sdk-analyzer') || k.includes('claude-agent-sdk')) delete require.cache[k];
@@ -407,6 +440,61 @@ assert_contains "security has 1 finding" '"secFindings":1' "$result"
 assert_contains "bugs has 1 finding" '"bugsFindings":1' "$result"
 assert_contains "security finding name" 'Test finding from security' "$result"
 assert_contains "bugs finding name" 'Test finding from bugs' "$result"
+
+# ── Test 12: structuredOutput.findings used directly when present (T03) ──
+echo ""
+echo "📋 Test 12: structuredOutput.findings used directly when present (T03)"
+> "$CAPTURE_FILE"
+result=$(run_analyzer_test "
+  const { sdkAnalyze } = require('$MODULE');
+  sdkAnalyze({ perspectives: ['security', 'bugs'], cwd: '/tmp' }).then(r => {
+    const secResult = r.perspectives.find(p => p.perspective === 'security');
+    const bugsResult = r.perspectives.find(p => p.perspective === 'bugs');
+    const secFindings = secResult ? secResult.findings.length : -1;
+    const bugsFindings = bugsResult ? bugsResult.findings.length : -1;
+    const secName = secResult && secResult.findings[0] ? secResult.findings[0].name : '';
+    const bugsName = bugsResult && bugsResult.findings[0] ? bugsResult.findings[0].name : '';
+    console.log(JSON.stringify({ ok: r.ok, secFindings, bugsFindings, secName, bugsName }));
+  }).catch(e => console.log(JSON.stringify({ crashed: true, error: e.message })));
+" "" "0" "0" "1")
+assert_contains "ok is true" '"ok":true' "$result"
+assert_contains "security has 1 finding" '"secFindings":1' "$result"
+assert_contains "bugs has 1 finding" '"bugsFindings":1' "$result"
+assert_contains "security structured finding" 'Structured finding from security' "$result"
+assert_contains "bugs structured finding" 'Structured finding from bugs' "$result"
+
+# ── Test 13: extractFindings fallback when structuredOutput absent (T03) ──
+echo ""
+echo "📋 Test 13: extractFindings fallback when structuredOutput absent (T03)"
+> "$CAPTURE_FILE"
+result=$(run_analyzer_test "
+  const { sdkAnalyze } = require('$MODULE');
+  sdkAnalyze({ perspectives: ['security'], cwd: '/tmp' }).then(r => {
+    const secResult = r.perspectives.find(p => p.perspective === 'security');
+    // Normal mode: no structured_output, bare JSON with empty findings → extractFindings path
+    const findings = secResult ? secResult.findings.length : -1;
+    console.log(JSON.stringify({ ok: r.ok, findings }));
+  }).catch(e => console.log(JSON.stringify({ crashed: true, error: e.message })));
+" "" "0" "0" "0")
+assert_contains "ok is true" '"ok":true' "$result"
+assert_contains "extractFindings fallback returns 0 findings" '"findings":0' "$result"
+
+# ── Test 14: outputFormat passed to SDK queryOptions (T03) ──
+echo ""
+echo "📋 Test 14: outputFormat passed to SDK queryOptions (T03)"
+> "$CAPTURE_FILE"
+result=$(run_analyzer_test "
+  const { sdkAnalyze } = require('$MODULE');
+  sdkAnalyze({ perspectives: ['security'], cwd: '/tmp' }).then(r => {
+    const fs = require('fs');
+    const lines = fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8').trim().split('\n');
+    const entry = JSON.parse(lines[0]);
+    const fmt = entry.options && entry.options.outputFormat;
+    const hasFormat = fmt && fmt.type === 'json' && fmt.schema && fmt.schema.required && fmt.schema.required[0] === 'findings';
+    console.log(JSON.stringify({ ok: r.ok, hasFormat }));
+  }).catch(e => console.log(JSON.stringify({ crashed: true, error: e.message })));
+")
+assert_contains "outputFormat passed to SDK" '"hasFormat":true' "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""

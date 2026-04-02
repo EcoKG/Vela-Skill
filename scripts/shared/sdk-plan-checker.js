@@ -32,6 +32,27 @@ const MAX_BUDGET_USD = 0.03;
 
 const VERDICT_REGEX = /VERDICT:\s*(PASS|FAIL)/i;
 
+// ─── Structured output schema (K011 pattern — module-local) ───
+const PLAN_CHECK_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['PASS', 'FAIL'] },
+    sections: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          exists: { type: 'boolean' },
+          byteCount: { type: 'number' },
+          substantive: { type: 'boolean' },
+        },
+      },
+    },
+  },
+  required: ['verdict', 'sections'],
+};
+
 // ─── Self-contained system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.
 // The entire verification context must be in the system prompt.
@@ -75,6 +96,18 @@ Then output your final verdict on its own line:
 \`VERDICT: FAIL\` — one or more sections missing, too short, or containing only placeholder text
 
 The VERDICT line must appear exactly as shown, on its own line.
+
+## JSON Output (Preferred)
+
+If the system supports structured JSON output, respond with this JSON schema:
+{
+  "verdict": "PASS" or "FAIL",
+  "sections": [
+    { "name": "Architecture", "exists": true/false, "byteCount": number, "substantive": true/false },
+    { "name": "Class Specification", "exists": true/false, "byteCount": number, "substantive": true/false },
+    { "name": "Test Strategy", "exists": true/false, "byteCount": number, "substantive": true/false }
+  ]
+}
 `;
 
 /**
@@ -123,6 +156,7 @@ async function sdkPlanCheck(opts) {
     maxTurns: MAX_TURNS,
     maxBudgetUsd: MAX_BUDGET_USD,
     effort: 'low',
+    outputFormat: { type: 'json', schema: PLAN_CHECK_OUTPUT_SCHEMA },
   });
 
   // ─── Handle SDK failure — still write artifact ───
@@ -148,10 +182,15 @@ async function sdkPlanCheck(opts) {
     };
   }
 
-  // ─── Parse verdict from result ───
+  // ─── Parse verdict: structuredOutput first → VERDICT_REGEX fallback ───
   const resultText = agentResult.result || '';
-  const verdictMatch = resultText.match(VERDICT_REGEX);
-  const verdict = verdictMatch ? verdictMatch[1].toLowerCase() : 'fail';
+  let verdict;
+  if (agentResult.structuredOutput && agentResult.structuredOutput.verdict) {
+    verdict = agentResult.structuredOutput.verdict.toLowerCase();
+  } else {
+    const verdictMatch = resultText.match(VERDICT_REGEX);
+    verdict = verdictMatch ? verdictMatch[1].toLowerCase() : 'fail';
+  }
 
   // ─── Write plan-check.md ───
   const checkContent = [
