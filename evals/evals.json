@@ -5,7 +5,7 @@
       "id": 0,
       "name": "vela-init",
       "prompt": "/vela:vela-init 을 실행해서 현재 프로젝트에 Vela 환경을 구축해줘. 언어는 Node.js로 해줘.",
-      "expected_output": ".vela/ 디렉토리에 hooks, cli, cache, templates가 생성되고 hooks가 settings.json에 등록됨",
+      "expected_output": ".vela/ 디렉토리에 cli, shared, cache, templates, agents가 생성됨",
       "files": [],
       "assertions": [
         {
@@ -15,10 +15,10 @@
           "check": ".vela/config.json"
         },
         {
-          "name": "hooks-deployed",
-          "description": "핵심 훅 파일(vela-gate-keeper.js)이 .vela/hooks/에 배포되었는가",
+          "name": "shared-deployed",
+          "description": "핵심 공유 모듈(constants.js)이 .vela/shared/에 배포되었는가",
           "type": "file_exists",
-          "check": ".vela/hooks/vela-gate-keeper.js"
+          "check": ".vela/shared/constants.js"
         },
         {
           "name": "cli-deployed",
