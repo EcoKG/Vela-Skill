@@ -74,9 +74,13 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  * @param {Object} [opts.thinking] - Thinking configuration (e.g. { type: 'enabled', budget_tokens: N }).
  * @param {string} [opts.fallbackModel] - Fallback model identifier if primary model fails.
  * @param {Object} [opts.hooks] - SDK hooks object for lifecycle callbacks.
+ * @param {boolean} [opts.enableFileCheckpointing] - Enable file checkpointing for state persistence.
+ * @param {Object} [opts.extraArgs] - Additional arguments passed through to SDK query options.
+ * @param {Object} [opts.mcpServers] - MCP server configurations for custom tools.
  *
  * @returns {Promise<Object>} Normalized result object:
- *   Success: { ok: true, result, structuredOutput, cost, model, sessionId, numTurns, durationMs }
+ *   Success: { ok: true, result, structuredOutput, checkpoints, cost, model, sessionId, numTurns, durationMs }
+ *     checkpoints: string[] — UUIDs captured from user messages during iteration (empty if none)
  *   SDK error result: { ok: false, error: subtype, details, cost, numTurns, durationMs, retriesAttempted? }
  *     Known error subtypes: 'error_max_turns', 'error_during_execution', 'error_max_structured_output_retries'
  *   SDK unavailable: { ok: false, error: 'sdk_not_available', details: errorMessage }
@@ -137,6 +141,11 @@ async function runSdkAgent(opts) {
   if (opts.fallbackModel != null) queryOptions.fallbackModel = opts.fallbackModel;
   if (opts.hooks != null) queryOptions.hooks = opts.hooks;
 
+  // Checkpointing / custom tools / extra args (S08)
+  if (opts.enableFileCheckpointing != null) queryOptions.enableFileCheckpointing = opts.enableFileCheckpointing;
+  if (opts.extraArgs != null) queryOptions.extraArgs = opts.extraArgs;
+  if (opts.mcpServers != null) queryOptions.mcpServers = opts.mcpServers;
+
   // --- Rate limit retry parameters ---
   const maxRetries = opts.maxRetries != null ? opts.maxRetries : 3;
   const retryDelayMs = opts.retryDelayMs != null ? opts.retryDelayMs : 2000;
@@ -154,8 +163,14 @@ async function runSdkAgent(opts) {
       let sessionId = null;
       let sawRateLimit = false;
       let resetsAt = null;
+      const checkpoints = [];
 
       for await (const message of generator) {
+        // Capture checkpoint UUIDs from user messages
+        if (message.type === 'user' && message.uuid) {
+          checkpoints.push(message.uuid);
+        }
+
         // Capture session ID from init message
         if (message.type === 'system' && message.subtype === 'init' && message.session_id) {
           sessionId = message.session_id;
@@ -196,6 +211,7 @@ async function runSdkAgent(opts) {
           ok: true,
           result: resultMessage.result,
           structuredOutput: resultMessage.structured_output || null,
+          checkpoints,
           cost: totalCost,
           model: resultMessage.model || opts.model || null,
           sessionId: resultMessage.session_id || sessionId,

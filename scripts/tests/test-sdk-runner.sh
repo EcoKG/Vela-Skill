@@ -171,6 +171,20 @@ function query(args) {
         num_turns: 10,
         duration_ms: 5000
       };
+    } else if (prompt.includes('__checkpoint_test__')) {
+      // Emit user messages with UUIDs before the result
+      yield { type: 'user', uuid: 'ckpt-001' };
+      yield { type: 'user', uuid: 'ckpt-002' };
+      yield {
+        type: 'result',
+        subtype: 'success',
+        result: 'Checkpoint test completed',
+        total_cost_usd: 0.001,
+        model: 'mock-model-v1',
+        session_id: 'mock-session-001',
+        num_turns: 4,
+        duration_ms: 1200
+      };
     } else {
       yield {
         type: 'result',
@@ -504,6 +518,83 @@ else
   echo "  ❌ FAIL: settingSources NOT found in source"
   FAIL=$((FAIL + 1))
 fi
+
+# ── Test 18: enableFileCheckpointing passthrough to queryOptions ──
+echo ""
+echo "📋 Test 18: enableFileCheckpointing passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: 'ckpt test', enableFileCheckpointing: true }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    console.log(opts.enableFileCheckpointing === true ? 'PASS' : 'FAIL:' + opts.enableFileCheckpointing);
+  });
+")
+assert_eq "enableFileCheckpointing in queryOptions" "PASS" "$result"
+
+# ── Test 19: extraArgs passthrough to queryOptions ──
+echo ""
+echo "📋 Test 19: extraArgs passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  const extra = { foo: 'bar', count: 3 };
+  runSdkAgent({ prompt: 'extra test', extraArgs: extra }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    const match = JSON.stringify(opts.extraArgs) === JSON.stringify(extra);
+    console.log(match ? 'PASS' : 'FAIL:' + JSON.stringify(opts.extraArgs));
+  });
+")
+assert_eq "extraArgs in queryOptions" "PASS" "$result"
+
+# ── Test 20: mcpServers passthrough to queryOptions ──
+echo ""
+echo "📋 Test 20: mcpServers passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  const servers = { 'vela-tools': { command: 'node', args: ['server.js'] } };
+  runSdkAgent({ prompt: 'mcp test', mcpServers: servers }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    const match = JSON.stringify(opts.mcpServers) === JSON.stringify(servers);
+    console.log(match ? 'PASS' : 'FAIL:' + JSON.stringify(opts.mcpServers));
+  });
+")
+assert_eq "mcpServers in queryOptions" "PASS" "$result"
+
+# ── Test 21: checkpoint UUID capture from user messages ──
+echo ""
+echo "📋 Test 21: checkpoint UUID capture from user messages"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__checkpoint_test__' }).then(r => {
+    const checks = [
+      r.ok === true,
+      Array.isArray(r.checkpoints),
+      r.checkpoints.length === 2,
+      r.checkpoints[0] === 'ckpt-001',
+      r.checkpoints[1] === 'ckpt-002'
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r.checkpoints));
+  });
+")
+assert_eq "checkpoint UUIDs captured" "PASS" "$result"
+
+# ── Test 22: checkpoints array empty when no user messages ──
+echo ""
+echo "📋 Test 22: checkpoints array empty when no user messages"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: 'no checkpoints test' }).then(r => {
+    const checks = [
+      r.ok === true,
+      Array.isArray(r.checkpoints),
+      r.checkpoints.length === 0
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:checkpoints=' + JSON.stringify(r.checkpoints));
+  });
+")
+assert_eq "checkpoints empty array" "PASS" "$result"
 
 # ── Results ──
 echo ""
