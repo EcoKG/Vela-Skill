@@ -149,6 +149,18 @@ function query(args) {
         num_turns: 1,
         duration_ms: 200
       };
+    } else if (prompt.includes('__structured_output_test__')) {
+      yield {
+        type: 'result',
+        subtype: 'success',
+        result: 'Structured output test',
+        structured_output: { answer: 42, valid: true },
+        total_cost_usd: 0.002,
+        model: 'mock-model-v1',
+        session_id: 'mock-session-001',
+        num_turns: 2,
+        duration_ms: 800
+      };
     } else if (prompt.includes('__error_test__')) {
       yield {
         type: 'result',
@@ -394,6 +406,80 @@ result=$(node -e "
   console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + checks.map((c,i) => i + ':' + c).join(','));
 " 2>/dev/null)
 assert_eq "computeRetryDelay backoff" "PASS" "$result"
+
+# ── Test 13: outputFormat passthrough to queryOptions ──
+echo ""
+echo "📋 Test 13: outputFormat passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  const schema = { type: 'object', properties: { answer: { type: 'number' } } };
+  runSdkAgent({ prompt: 'fmt test', outputFormat: schema }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    const match = JSON.stringify(opts.outputFormat) === JSON.stringify(schema);
+    console.log(match ? 'PASS' : 'FAIL:' + JSON.stringify(opts.outputFormat));
+  });
+")
+assert_eq "outputFormat in queryOptions" "PASS" "$result"
+
+# ── Test 14: effort passthrough to queryOptions ──
+echo ""
+echo "📋 Test 14: effort passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: 'effort test', effort: 'low' }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    console.log(opts.effort === 'low' ? 'PASS' : 'FAIL:' + opts.effort);
+  });
+")
+assert_eq "effort in queryOptions" "PASS" "$result"
+
+# ── Test 15: thinking passthrough to queryOptions ──
+echo ""
+echo "📋 Test 15: thinking passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  const thinkCfg = { type: 'enabled', budget_tokens: 5000 };
+  runSdkAgent({ prompt: 'think test', thinking: thinkCfg }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    const match = JSON.stringify(opts.thinking) === JSON.stringify(thinkCfg);
+    console.log(match ? 'PASS' : 'FAIL:' + JSON.stringify(opts.thinking));
+  });
+")
+assert_eq "thinking in queryOptions" "PASS" "$result"
+
+# ── Test 16: hooks passthrough to queryOptions ──
+echo ""
+echo "📋 Test 16: hooks passed through to queryOptions"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  const hooks = { onMessage: 'placeholder' };
+  runSdkAgent({ prompt: 'hooks test', hooks: hooks }).then(r => {
+    const captured = JSON.parse(require('fs').readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const opts = captured.options || {};
+    console.log(opts.hooks && opts.hooks.onMessage === 'placeholder' ? 'PASS' : 'FAIL:' + JSON.stringify(opts.hooks));
+  });
+")
+assert_eq "hooks in queryOptions" "PASS" "$result"
+
+# ── Test 17: structuredOutput in success result ──
+echo ""
+echo "📋 Test 17: structuredOutput populated from structured_output in result"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__structured_output_test__' }).then(r => {
+    const checks = [
+      r.ok === true,
+      r.structuredOutput != null,
+      r.structuredOutput.answer === 42,
+      r.structuredOutput.valid === true
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  });
+")
+assert_eq "structuredOutput in result" "PASS" "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""

@@ -69,10 +69,16 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  * @param {AbortController} [opts.abortController] - Optional abort controller.
  * @param {number} [opts.maxRetries=3] - Maximum retry attempts on rate limit errors.
  * @param {number} [opts.retryDelayMs=2000] - Base delay for exponential backoff (ms).
+ * @param {Object} [opts.outputFormat] - JSON schema for structured output (SDK outputFormat).
+ * @param {string} [opts.effort] - Effort level ('low'|'medium'|'high') for cost/speed tradeoff.
+ * @param {Object} [opts.thinking] - Thinking configuration (e.g. { type: 'enabled', budget_tokens: N }).
+ * @param {string} [opts.fallbackModel] - Fallback model identifier if primary model fails.
+ * @param {Object} [opts.hooks] - SDK hooks object for lifecycle callbacks.
  *
  * @returns {Promise<Object>} Normalized result object:
- *   Success: { ok: true, result, cost, model, sessionId, numTurns, durationMs }
+ *   Success: { ok: true, result, structuredOutput, cost, model, sessionId, numTurns, durationMs }
  *   SDK error result: { ok: false, error: subtype, details, cost, numTurns, durationMs, retriesAttempted? }
+ *     Known error subtypes: 'error_max_turns', 'error_during_execution', 'error_max_structured_output_retries'
  *   SDK unavailable: { ok: false, error: 'sdk_not_available', details: errorMessage }
  *   Unexpected error: { ok: false, error: 'unexpected_error', details: errorMessage }
  */
@@ -123,6 +129,13 @@ async function runSdkAgent(opts) {
   if (opts.maxBudgetUsd != null) queryOptions.maxBudgetUsd = opts.maxBudgetUsd;
   if (opts.systemPrompt != null) queryOptions.systemPrompt = opts.systemPrompt;
   if (opts.abortController) queryOptions.abortController = opts.abortController;
+
+  // Structured output / effort / thinking options (S07)
+  if (opts.outputFormat != null) queryOptions.outputFormat = opts.outputFormat;
+  if (opts.effort != null) queryOptions.effort = opts.effort;
+  if (opts.thinking != null) queryOptions.thinking = opts.thinking;
+  if (opts.fallbackModel != null) queryOptions.fallbackModel = opts.fallbackModel;
+  if (opts.hooks != null) queryOptions.hooks = opts.hooks;
 
   // --- Rate limit retry parameters ---
   const maxRetries = opts.maxRetries != null ? opts.maxRetries : 3;
@@ -182,6 +195,7 @@ async function runSdkAgent(opts) {
         return {
           ok: true,
           result: resultMessage.result,
+          structuredOutput: resultMessage.structured_output || null,
           cost: totalCost,
           model: resultMessage.model || opts.model || null,
           sessionId: resultMessage.session_id || sessionId,
