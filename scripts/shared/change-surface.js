@@ -1,14 +1,16 @@
 /**
- * Vela Change Surface Analysis — Phase 1-2
+ * Vela Change Surface Analysis
  *
  * Detects tokens that disappeared from a diff and could break
  * cross-file references (exports, constants, headings, config keys, etc.).
  *
- * Phase 1: parseDiff(baselineSha)   — parse `git diff --unified=0` into structured data
- * Phase 2: extractSurface(diff)     — extract Change Surface tokens from removed/added lines
- * Phase 3-4: (implemented in T02)   — searchImpact + verdict
+ * Phase 1: parseDiff(baselineSha)              — parse `git diff --unified=0` into structured data
+ * Phase 2: extractSurface(diff)                — extract Change Surface tokens from removed/added lines
+ * Phase 3: searchImpact(surface, changed, opt) — ripgrep search for token refs outside diff
+ * Phase 4: verdict(impactResult)               — pass/fail with formatted report
+ *        + analyze(baselineSha, opt)            — all 4 phases in one call
  *
- * Exports: parseDiff, extractSurface, TOKEN_EXTRACTORS
+ * Exports: parseDiff, extractSurface, searchImpact, verdict, analyze, TOKEN_EXTRACTORS
  *
  * Design decisions:
  * - Never throws — returns { files: {}, error } on git failure
@@ -16,6 +18,9 @@
  * - Binary files auto-skipped
  * - file_path tokens generated for D (deleted) and R (renamed) files
  * - likely_replacement estimated when exactly one new token of the same type appears
+ * - rg unavailable → graceful skip with warning, verdict = pass
+ * - Word boundary filter prevents partial matches (e.g. READ ≠ READONLY)
+ * - References inside comments/code blocks get severity "warn" (don't fail the check)
  */
 
 "use strict";
@@ -26,6 +31,26 @@ const path = require("path");
 // ─── Constants ───
 
 const MIN_TOKEN_LENGTH = 3;
+
+/** Default glob patterns to exclude from impact search */
+const DEFAULT_EXCLUDE_PATHS = [
+  "node_modules",
+  ".git",
+  ".gsd",
+  ".vela/artifacts",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+];
+
+/** Patterns indicating a line is a comment or inside a code block (severity → warn) */
+const COMMENT_PATTERNS = [
+  /^\s*\/\//, // JS single-line comment
+  /^\s*#/,    // Shell/YAML/Python comment
+  /^\s*\*/,   // JSDoc / block comment continuation
+  /^\s*<!--/, // HTML comment
+  /```/,      // Markdown code fence
+];
 
 // ─── Helpers ───
 
@@ -452,6 +477,261 @@ function addFilePathTokens(surface, oldPath, newPath) {
   }
 }
 
+// ─── Phase 3: Impact Search ───
+
+/**
+ * Check whether ripgrep (rg) is available on the system.
+ * @returns {boolean}
+ */
+function isRgAvailable() {
+  try {
+    execSync("rg --version", { stdio: "pipe", encoding: "utf-8" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determine whether a matching line is likely a comment or code block.
+ * @param {string} lineContent
+ * @returns {boolean}
+ */
+function isCommentOrCodeBlock(lineContent) {
+  return COMMENT_PATTERNS.some((pat) => pat.test(lineContent));
+}
+
+/**
+ * Check word boundary — ensure the token appears as a whole word, not as a
+ * substring of a larger identifier (e.g. "READ" inside "READONLY").
+ * @param {string} lineContent - Full line text
+ * @param {string} token - Token to check
+ * @returns {boolean} true if the token matches as a whole word
+ */
+function isWholeWordMatch(lineContent, token) {
+  // For file paths and markdown links, exact substring is sufficient
+  if (token.includes("/") || token.includes(".")) return true;
+  // For identifiers, check word boundaries
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(?<![\\w])${escaped}(?![\\w])`);
+  return re.test(lineContent);
+}
+
+/**
+ * Search for references to Change Surface tokens outside the changed files.
+ *
+ * @param {{ surface: Array }} surfaceResult - Output of extractSurface()
+ * @param {string[]} changedFiles - Files from the diff (excluded from search)
+ * @param {{ cwd?: string, excludePaths?: string[] }} [options]
+ * @returns {{ impacts: { token: string, type: string, source_file: string, likely_replacement: string|null, refs: { file: string, line: number, content: string, severity: string, in_diff: boolean }[] }[], rg_available: boolean, warning?: string }}
+ */
+function searchImpact(surfaceResult, changedFiles, options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const excludePaths = options.excludePaths || DEFAULT_EXCLUDE_PATHS;
+
+  // Check rg availability
+  if (!isRgAvailable()) {
+    return {
+      impacts: [],
+      rg_available: false,
+      warning: "ripgrep (rg) not found — impact search skipped. Install rg for full analysis.",
+    };
+  }
+
+  const { surface } = surfaceResult;
+  if (!surface || surface.length === 0) {
+    return { impacts: [], rg_available: true };
+  }
+
+  const changedSet = new Set(changedFiles);
+  const impacts = [];
+
+  // Build exclude args once
+  const excludeArgs = excludePaths
+    .map((p) => `--glob '!${p}'`)
+    .join(" ");
+
+  for (const entry of surface) {
+    const { token, type, source_file, likely_replacement } = entry;
+
+    // Skip empty or whitespace-only tokens
+    if (!token || !token.trim()) continue;
+
+    // Run rg with fixed-string search
+    let rgOutput;
+    try {
+      rgOutput = execSync(
+        `rg --fixed-strings --line-number --no-heading -- ${shellEscape(token)} ${excludeArgs}`,
+        { cwd, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] }
+      );
+    } catch (err) {
+      // rg exits 1 when no matches found — that's fine
+      if (err.status === 1) continue;
+      // rg exits 2 on error — skip this token
+      continue;
+    }
+
+    if (!rgOutput || !rgOutput.trim()) continue;
+
+    const refs = [];
+    const lines = rgOutput.trim().split("\n");
+
+    for (const rgLine of lines) {
+      // rg format: file:line:content
+      const colonIdx1 = rgLine.indexOf(":");
+      if (colonIdx1 === -1) continue;
+      const colonIdx2 = rgLine.indexOf(":", colonIdx1 + 1);
+      if (colonIdx2 === -1) continue;
+
+      const file = rgLine.slice(0, colonIdx1);
+      const lineNum = parseInt(rgLine.slice(colonIdx1 + 1, colonIdx2), 10);
+      const content = rgLine.slice(colonIdx2 + 1);
+
+      // Skip matches in changed files (those are already in the diff)
+      const inDiff = changedSet.has(file);
+
+      // Apply word boundary filter
+      if (!isWholeWordMatch(content, token)) continue;
+
+      // Determine severity
+      const severity = isCommentOrCodeBlock(content) ? "warn" : "error";
+
+      refs.push({ file, line: lineNum, content: content.trim(), severity, in_diff: inDiff });
+    }
+
+    if (refs.length > 0) {
+      impacts.push({
+        token,
+        type,
+        source_file,
+        likely_replacement,
+        refs,
+      });
+    }
+  }
+
+  return { impacts, rg_available: true };
+}
+
+/**
+ * Escape a string for safe shell argument usage.
+ * @param {string} str
+ * @returns {string}
+ */
+function shellEscape(str) {
+  return "'" + str.replace(/'/g, "'\\''") + "'";
+}
+
+// ─── Phase 4: Verdict ───
+
+/**
+ * Determine pass/fail based on impact search results.
+ *
+ * FAIL when any impact ref has severity=error AND in_diff=false.
+ * Severity=warn refs (comments/code blocks) don't fail.
+ *
+ * @param {{ impacts: Array, rg_available: boolean, warning?: string }} impactResult
+ * @returns {{ pass: boolean, errorCount: number, warnCount: number, report: string }}
+ */
+function verdict(impactResult) {
+  // If rg was not available, pass with warning
+  if (!impactResult.rg_available) {
+    return {
+      pass: true,
+      errorCount: 0,
+      warnCount: 0,
+      report: `⚠️  ${impactResult.warning || "Impact search skipped."}`,
+    };
+  }
+
+  const { impacts } = impactResult;
+
+  let errorCount = 0;
+  let warnCount = 0;
+  const reportLines = [];
+
+  for (const impact of impacts) {
+    const externalErrors = impact.refs.filter((r) => r.severity === "error" && !r.in_diff);
+    const externalWarns = impact.refs.filter((r) => r.severity === "warn" && !r.in_diff);
+
+    errorCount += externalErrors.length;
+    warnCount += externalWarns.length;
+
+    if (externalErrors.length > 0 || externalWarns.length > 0) {
+      const repl = impact.likely_replacement
+        ? ` (likely replacement: ${impact.likely_replacement})`
+        : "";
+      reportLines.push(`\n  [${impact.type}] ${impact.token}${repl}`);
+      reportLines.push(`    Source: ${impact.source_file}`);
+
+      for (const ref of externalErrors) {
+        reportLines.push(`    ❌ ${ref.file}:${ref.line}  ${ref.content}`);
+      }
+      for (const ref of externalWarns) {
+        reportLines.push(`    ⚠️  ${ref.file}:${ref.line}  ${ref.content}  (comment/code block)`);
+      }
+    }
+  }
+
+  const pass = errorCount === 0;
+
+  let report;
+  if (pass && warnCount === 0) {
+    report = "✅ No broken cross-file references detected.";
+  } else if (pass && warnCount > 0) {
+    report =
+      `✅ Pass (${warnCount} warning(s) in comments/code blocks)\n` +
+      reportLines.join("\n");
+  } else {
+    report =
+      `❌ FAIL: ${errorCount} broken reference(s) found` +
+      (warnCount > 0 ? `, ${warnCount} warning(s)` : "") +
+      "\n" +
+      reportLines.join("\n");
+  }
+
+  return { pass, errorCount, warnCount, report };
+}
+
+// ─── Convenience: Full Analysis ───
+
+/**
+ * Run all 4 phases in sequence: diff → surface → impact → verdict.
+ *
+ * @param {string} baselineSha - Git ref to diff against
+ * @param {{ cwd?: string, excludePaths?: string[] }} [options]
+ * @returns {{ diff: Object, surface: Object, impact: Object, verdict: Object }}
+ */
+function analyze(baselineSha, options = {}) {
+  // Phase 1: Parse diff
+  const diff = parseDiff(baselineSha, options);
+  if (diff.error) {
+    return {
+      diff,
+      surface: { surface: [] },
+      impact: { impacts: [], rg_available: false, warning: diff.error },
+      verdict: { pass: false, errorCount: 0, warnCount: 0, report: `Error: ${diff.error}` },
+    };
+  }
+
+  // Phase 2: Extract surface
+  const surfaceResult = extractSurface(diff);
+
+  // Phase 3: Search impact
+  const changedFiles = Object.keys(diff.files);
+  const impactResult = searchImpact(surfaceResult, changedFiles, options);
+
+  // Phase 4: Verdict
+  const verdictResult = verdict(impactResult);
+
+  return {
+    diff,
+    surface: surfaceResult,
+    impact: impactResult,
+    verdict: verdictResult,
+  };
+}
+
 // ─── CLI Entry Point ───
 
 function main() {
@@ -462,32 +742,22 @@ function main() {
     process.exit(1);
   }
 
-  const diff = parseDiff(sha);
-  if (diff.error) {
-    console.error(`Error: ${diff.error}`);
-    process.exit(1);
+  const result = analyze(sha);
+
+  // Print report
+  console.log(result.verdict.report);
+
+  // Print surface details when tokens exist
+  if (result.surface.surface.length > 0 && result.verdict.pass) {
+    console.log(`\n🔍 Change Surface: ${result.surface.surface.length} token(s) scanned, all references intact.`);
   }
 
-  const { surface } = extractSurface(diff);
-
-  if (surface.length === 0) {
-    console.log("✅ No Change Surface tokens detected (no cross-file impact).");
-  } else {
-    console.log(`🔍 Change Surface: ${surface.length} token(s) detected\n`);
-    for (const entry of surface) {
-      const loc = entry.removed_at_line
-        ? `${entry.source_file}:${entry.removed_at_line}`
-        : entry.source_file;
-      const repl = entry.likely_replacement
-        ? ` → ${entry.likely_replacement}`
-        : "";
-      console.log(`  [${entry.type}] ${entry.token}  (${loc}${repl})`);
-    }
-  }
+  // Exit code: 0 = pass, 1 = fail
+  process.exit(result.verdict.pass ? 0 : 1);
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = { parseDiff, extractSurface, TOKEN_EXTRACTORS };
+module.exports = { parseDiff, extractSurface, searchImpact, verdict, analyze, TOKEN_EXTRACTORS };
