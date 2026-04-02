@@ -18,17 +18,17 @@
  * - artifactDir and .vela/state/ assumed to exist (engine creates them)
  */
 
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
-const { runSdkAgent } = require('./sdk-runner');
-const { MODEL_VERSIONS } = require('./constants');
+const fs = require("fs");
+const path = require("path");
+const { runSdkAgent } = require("./sdk-runner");
+const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const SONNET_MODEL = MODEL_VERSIONS.SONNET_NEW;
 const MAX_TURNS = 25;
-const MAX_BUDGET_USD = 1.00;
+const MAX_BUDGET_USD = 1.0;
 
 // ─── Inlined executor system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.
@@ -123,9 +123,9 @@ Teammate로 소환된 경우, 프롬프트에 **담당 파일**이 명시된다.
  * @param {string} content - Summary content from agent
  */
 function writeTaskSummaryArtifact(artifactDir, content) {
-  const filePath = path.join(artifactDir, 'task-summary.md');
+  const filePath = path.join(artifactDir, "task-summary.md");
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf8');
+  fs.writeFileSync(filePath, content, "utf8");
 }
 
 /**
@@ -146,28 +146,29 @@ function writeTaskSummaryArtifact(artifactDir, content) {
  *   Failure: { ok: false, error, details, cost?, numTurns?, durationMs? }
  */
 async function sdkExecute(opts) {
-  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  if (!opts || typeof opts !== "object" || Array.isArray(opts))
+    return { ok: false, error: "invalid_input" };
   const { step, artifactDir, cwd } = opts;
   // ─── Build user prompt ───
   const prompt = [
     `파이프라인 단계 "${step}"의 구현을 수행하라.`,
-    '',
-    '## 지시사항',
-    '',
+    "",
+    "## 지시사항",
+    "",
     `1. 먼저 아티팩트 디렉토리의 plan.md를 읽어라: ${artifactDir}/plan.md`,
-    '2. plan.md의 Class Specification에 따라 TDD 순서로 구현하라:',
-    '   - Phase 1 (Red): Test Strategy에 따라 테스트 작성 → 실행하여 실패 확인',
-    '   - Phase 2 (Green): 테스트 통과하는 구현 작성 → 실행하여 통과 확인',
-    '   - Phase 3 (Refactor): 코드 정리 → 테스트 재실행하여 통과 유지 확인',
-    '3. Class Specification을 정확히 따르라. 명세를 벗어나지 않는다.',
+    "2. plan.md의 Class Specification에 따라 TDD 순서로 구현하라:",
+    "   - Phase 1 (Red): Test Strategy에 따라 테스트 작성 → 실행하여 실패 확인",
+    "   - Phase 2 (Green): 테스트 통과하는 구현 작성 → 실행하여 통과 확인",
+    "   - Phase 3 (Refactor): 코드 정리 → 테스트 재실행하여 통과 유지 확인",
+    "3. Class Specification을 정확히 따르라. 명세를 벗어나지 않는다.",
     `4. .vela/ 내부는 아티팩트 디렉토리(${artifactDir})만 쓰기 가능하다.`,
     `5. 완료 후 ${artifactDir}/task-summary.md를 작성하라.`,
-    '',
-    '## 중요',
-    '- plan.md가 설계도이다. 임의로 구조를 변경하지 않는다.',
-    '- 테스트를 반드시 실행하여 결과를 확인한다.',
-    '- task-summary.md에 구현 파일 목록, 테스트 결과, 변경사항을 기록한다.',
-  ].join('\n');
+    "",
+    "## 중요",
+    "- plan.md가 설계도이다. 임의로 구조를 변경하지 않는다.",
+    "- 테스트를 반드시 실행하여 결과를 확인한다.",
+    "- task-summary.md에 구현 파일 목록, 테스트 결과, 변경사항을 기록한다.",
+  ].join("\n");
 
   // ─── Call Sonnet via SDK ───
   const agentResult = await runSdkAgent({
@@ -177,13 +178,13 @@ async function sdkExecute(opts) {
     systemPrompt: EXECUTOR_SYSTEM_PROMPT,
     maxTurns: MAX_TURNS,
     maxBudgetUsd: MAX_BUDGET_USD,
-    permissionMode: 'bypassPermissions',
-    effort: 'high',
+    permissionMode: "bypassPermissions",
+    effort: "high",
   });
 
   // ─── SDK unavailable — return without writing artifacts ───
-  if (agentResult.error === 'sdk_not_available') {
-    return { ok: false, error: 'sdk_not_available' };
+  if (agentResult.error === "sdk_not_available") {
+    return { ok: false, error: "sdk_not_available" };
   }
 
   // ─── SDK error — return error details ───
@@ -199,24 +200,24 @@ async function sdkExecute(opts) {
   }
 
   // ─── Success — write task-summary.md if agent didn't already ───
-  const summaryPath = path.join(artifactDir, 'task-summary.md');
+  const summaryPath = path.join(artifactDir, "task-summary.md");
   if (!fs.existsSync(summaryPath)) {
     // Agent should have written it, but as a safety net,
     // write the result text as the summary
     const fallbackContent = [
-      '# Task Summary',
-      '',
+      "# Task Summary",
+      "",
       `- **Step:** ${step}`,
       `- **Model:** ${agentResult.model || SONNET_MODEL}`,
       `- **Cost:** $${(agentResult.cost || 0).toFixed(4)}`,
-      `- **Turns:** ${agentResult.numTurns || 'N/A'}`,
+      `- **Turns:** ${agentResult.numTurns || "N/A"}`,
       `- **Duration:** ${agentResult.durationMs || 0}ms`,
       `- **Timestamp:** ${new Date().toISOString()}`,
-      '',
-      '---',
-      '',
-      agentResult.result || '(no result text)',
-    ].join('\n');
+      "",
+      "---",
+      "",
+      agentResult.result || "(no result text)",
+    ].join("\n");
 
     writeTaskSummaryArtifact(artifactDir, fallbackContent);
   }
@@ -224,7 +225,7 @@ async function sdkExecute(opts) {
   return {
     ok: true,
     step,
-    artifact: 'task-summary.md',
+    artifact: "task-summary.md",
     cost: agentResult.cost || 0,
     model: agentResult.model || SONNET_MODEL,
     numTurns: agentResult.numTurns,

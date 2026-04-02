@@ -18,12 +18,12 @@
  * - artifactDir and .vela/state/ assumed to exist (engine creates them)
  */
 
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
-const { runSdkAgent } = require('./sdk-runner');
-const { MODEL_VERSIONS } = require('./constants');
+const fs = require("fs");
+const path = require("path");
+const { runSdkAgent } = require("./sdk-runner");
+const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
 const PRIMARY_SCORE_REGEX = /(총점|총|total\s*score)[^\d]*(\d+)\s*\/\s*25/i;
@@ -34,39 +34,48 @@ const FAIL_THRESHOLD = 15;
 
 // ─── Structured output schema (K011 pattern — module-local) ───
 const REVIEWER_OUTPUT_SCHEMA = {
-  type: 'object',
+  type: "object",
   properties: {
     scores: {
-      type: 'object',
+      type: "object",
       properties: {
-        layer_separation: { type: 'number' },
-        ddd_patterns: { type: 'number' },
-        solid_principles: { type: 'number' },
-        test_strategy: { type: 'number' },
-        specification_completeness: { type: 'number' },
+        layer_separation: { type: "number" },
+        ddd_patterns: { type: "number" },
+        solid_principles: { type: "number" },
+        test_strategy: { type: "number" },
+        specification_completeness: { type: "number" },
       },
-      required: ['layer_separation', 'ddd_patterns', 'solid_principles', 'test_strategy', 'specification_completeness'],
+      required: [
+        "layer_separation",
+        "ddd_patterns",
+        "solid_principles",
+        "test_strategy",
+        "specification_completeness",
+      ],
     },
-    total: { type: 'number' },
+    total: { type: "number" },
     issues: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
-          description: { type: 'string' },
+          severity: {
+            type: "string",
+            enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          },
+          description: { type: "string" },
         },
-        required: ['severity', 'description'],
+        required: ["severity", "description"],
       },
     },
-    review_text: { type: 'string' },
+    review_text: { type: "string" },
   },
-  required: ['scores', 'total', 'review_text'],
+  required: ["scores", "total", "review_text"],
 };
 
 // ─── Stage 3: Opus escalation model + budget ───
 const OPUS_MODEL = MODEL_VERSIONS.OPUS;
-const OPUS_BUDGET = 0.50;
+const OPUS_BUDGET = 0.5;
 
 // ─── Inlined reviewer system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.
@@ -131,7 +140,7 @@ const REVIEWER_SYSTEM_PROMPT = `# Reviewer Agent
  * @returns {number|null}
  */
 function parseScore(text) {
-  if (!text || typeof text !== 'string') return null;
+  if (!text || typeof text !== "string") return null;
 
   const primaryMatch = text.match(PRIMARY_SCORE_REGEX);
   if (primaryMatch) return parseInt(primaryMatch[2], 10);
@@ -151,7 +160,7 @@ function parseScore(text) {
 function writeReviewArtifact(artifactDir, step, content) {
   const filePath = path.join(artifactDir, `review-${step}.md`);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf8');
+  fs.writeFileSync(filePath, content, "utf8");
 }
 
 /**
@@ -162,7 +171,7 @@ function writeReviewArtifact(artifactDir, step, content) {
  */
 function writeApprovalArtifact(artifactDir, step, approval) {
   const filePath = path.join(artifactDir, `approval-${step}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(approval, null, 2), 'utf8');
+  fs.writeFileSync(filePath, JSON.stringify(approval, null, 2), "utf8");
 }
 
 /**
@@ -173,16 +182,24 @@ function writeApprovalArtifact(artifactDir, step, approval) {
  */
 function writeEscalation(cwd, score, extra) {
   try {
-    const stateDir = path.join(cwd, '.vela', 'state');
+    const stateDir = path.join(cwd, ".vela", "state");
     if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
-    const escalationPath = path.join(stateDir, 'escalation.json');
-    fs.writeFileSync(escalationPath, JSON.stringify({
-      reason: 'reviewer_score_below_threshold',
-      score,
-      threshold: FAIL_THRESHOLD,
-      timestamp: new Date().toISOString(),
-      ...(extra || {})
-    }, null, 2), 'utf8');
+    const escalationPath = path.join(stateDir, "escalation.json");
+    fs.writeFileSync(
+      escalationPath,
+      JSON.stringify(
+        {
+          reason: "reviewer_score_below_threshold",
+          score,
+          threshold: FAIL_THRESHOLD,
+          timestamp: new Date().toISOString(),
+          ...(extra || {}),
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
   } catch (e) {
     // Escalation is supplementary — never crash the review result
   }
@@ -228,7 +245,7 @@ async function runReviewStage(opts) {
     systemPrompt: REVIEWER_SYSTEM_PROMPT,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
-    outputFormat: { type: 'json', schema: REVIEWER_OUTPUT_SCHEMA },
+    outputFormat: { type: "json", schema: REVIEWER_OUTPUT_SCHEMA },
     // settingSources: [] is set by runSdkAgent internally (D014)
   };
 
@@ -243,16 +260,17 @@ async function runReviewStage(opts) {
       error: agentResult.error,
       details: agentResult.details,
       cost: agentResult.cost || 0,
-      durationMs: agentResult.durationMs || 0
+      durationMs: agentResult.durationMs || 0,
     };
   }
 
   // ─── Dual extraction: structuredOutput.total first → parseScore() fallback ───
-  const resultText = agentResult.result || '';
+  const resultText = agentResult.result || "";
   const structuredOutput = agentResult.structuredOutput || null;
-  const score = (structuredOutput != null && structuredOutput.total != null)
-    ? structuredOutput.total
-    : parseScore(resultText);
+  const score =
+    structuredOutput != null && structuredOutput.total != null
+      ? structuredOutput.total
+      : parseScore(resultText);
 
   return {
     ok: true,
@@ -261,7 +279,7 @@ async function runReviewStage(opts) {
     score,
     cost: agentResult.cost || 0,
     model: agentResult.model || opts.model,
-    durationMs: agentResult.durationMs || 0
+    durationMs: agentResult.durationMs || 0,
   };
 }
 
@@ -283,8 +301,8 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
     maxTurns: 10,
     maxBudgetUsd: OPUS_BUDGET,
     priorReview,
-    effort: 'high',
-    thinking: { type: 'adaptive' },
+    effort: "high",
+    thinking: { type: "adaptive" },
   });
 }
 
@@ -313,7 +331,8 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
  *   Failure: { ok: false, error: string }
  */
 async function sdkReview(opts) {
-  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  if (!opts || typeof opts !== "object" || Array.isArray(opts))
+    return { ok: false, error: "invalid_input" };
   const { step, artifactDir, cwd } = opts;
   const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
   const SONNET_MODEL = MODEL_VERSIONS.SONNET;
@@ -329,7 +348,7 @@ async function sdkReview(opts) {
     maxTurns: 5,
     maxBudgetUsd: 0.05,
     priorReview: null,
-    effort: 'medium',
+    effort: "medium",
   });
 
   if (!stage1.ok) {
@@ -346,85 +365,105 @@ async function sdkReview(opts) {
     // Fall through to Stage 2 for a definitive answer
   } else if (haikuScore >= PASS_THRESHOLD) {
     // Clear pass — write artifacts, return
-    writeReviewArtifact(artifactDir, step, stage1.structuredOutput?.review_text || haikuResult);
+    writeReviewArtifact(
+      artifactDir,
+      step,
+      stage1.structuredOutput?.review_text || haikuResult,
+    );
     writeApprovalArtifact(artifactDir, step, {
-      decision: 'approve',
+      decision: "approve",
       score: haikuScore,
       threshold: PASS_THRESHOLD,
-      stage: 'haiku',
+      stage: "haiku",
       model: stage1.model,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     return {
       ok: true,
       score: haikuScore,
-      decision: 'approve',
-      stage: 'haiku',
+      decision: "approve",
+      stage: "haiku",
       model: stage1.model,
       cost: totalCost,
-      durationMs: totalDurationMs
+      durationMs: totalDurationMs,
     };
   } else if (haikuScore < FAIL_THRESHOLD) {
     // ─── Stage 3: Opus escalation from clear Haiku fail ───
-    const opusResult = await runOpusEscalation({ step, cwd, priorReview: haikuResult });
+    const opusResult = await runOpusEscalation({
+      step,
+      cwd,
+      priorReview: haikuResult,
+    });
     totalCost += opusResult.cost || 0;
     totalDurationMs += opusResult.durationMs || 0;
 
-    if (opusResult.ok && opusResult.score != null && opusResult.score >= PASS_THRESHOLD) {
+    if (
+      opusResult.ok &&
+      opusResult.score != null &&
+      opusResult.score >= PASS_THRESHOLD
+    ) {
       // Opus rescued it
-      writeReviewArtifact(artifactDir, step, opusResult.structuredOutput?.review_text || opusResult.result);
+      writeReviewArtifact(
+        artifactDir,
+        step,
+        opusResult.structuredOutput?.review_text || opusResult.result,
+      );
       writeApprovalArtifact(artifactDir, step, {
-        decision: 'approve',
+        decision: "approve",
         score: opusResult.score,
         threshold: PASS_THRESHOLD,
-        stage: 'opus',
+        stage: "opus",
         model: opusResult.model,
         escalated: true,
-        escalation_model: 'opus',
-        timestamp: new Date().toISOString()
+        escalation_model: "opus",
+        timestamp: new Date().toISOString(),
       });
 
       return {
         ok: true,
         score: opusResult.score,
-        decision: 'approve',
-        stage: 'opus',
+        decision: "approve",
+        stage: "opus",
         model: opusResult.model,
         cost: totalCost,
         durationMs: totalDurationMs,
-        escalated: true
+        escalated: true,
       };
     }
 
     // Opus also failed (or errored) — reject with escalated flag
-    const opusScore = (opusResult.ok && opusResult.score != null) ? opusResult.score : haikuScore;
-    const opusReviewText = (opusResult.ok && opusResult.structuredOutput?.review_text)
-      ? opusResult.structuredOutput.review_text
-      : (opusResult.ok && opusResult.result) ? opusResult.result : haikuResult;
+    const opusScore =
+      opusResult.ok && opusResult.score != null ? opusResult.score : haikuScore;
+    const opusReviewText =
+      opusResult.ok && opusResult.structuredOutput?.review_text
+        ? opusResult.structuredOutput.review_text
+        : opusResult.ok && opusResult.result
+          ? opusResult.result
+          : haikuResult;
 
     writeReviewArtifact(artifactDir, step, opusReviewText);
     writeApprovalArtifact(artifactDir, step, {
-      decision: 'reject',
+      decision: "reject",
       score: opusScore,
       threshold: PASS_THRESHOLD,
-      stage: 'opus',
+      stage: "opus",
       model: opusResult.ok ? opusResult.model : OPUS_MODEL,
       escalated: true,
-      escalation_model: 'opus',
-      timestamp: new Date().toISOString()
+      escalation_model: "opus",
+      timestamp: new Date().toISOString(),
     });
     writeEscalation(cwd, opusScore, { auto_escalated: true });
 
     return {
       ok: true,
       score: opusScore,
-      decision: 'reject',
-      stage: 'opus',
+      decision: "reject",
+      stage: "opus",
       model: opusResult.ok ? opusResult.model : OPUS_MODEL,
       cost: totalCost,
       durationMs: totalDurationMs,
-      escalated: true
+      escalated: true,
     };
   }
 
@@ -436,19 +475,23 @@ async function sdkReview(opts) {
     maxTurns: 8,
     maxBudgetUsd: 0.15,
     priorReview: haikuResult,
-    effort: 'high',
+    effort: "high",
   });
 
   if (!stage2.ok) {
     // Stage 2 failed — still have Stage 1 result, report partial
     // Write Haiku artifacts as the best available review
-    writeReviewArtifact(artifactDir, step, stage1.structuredOutput?.review_text || haikuResult);
+    writeReviewArtifact(
+      artifactDir,
+      step,
+      stage1.structuredOutput?.review_text || haikuResult,
+    );
     return {
       ok: false,
       error: stage2.error,
       details: `Stage 2 (Sonnet) failed: ${stage2.details || stage2.error}. Haiku score was ${haikuScore}.`,
       cost: totalCost + (stage2.cost || 0),
-      durationMs: totalDurationMs + (stage2.durationMs || 0)
+      durationMs: totalDurationMs + (stage2.durationMs || 0),
     };
   }
 
@@ -462,86 +505,106 @@ async function sdkReview(opts) {
 
   if (finalScore != null && finalScore >= PASS_THRESHOLD) {
     // Sonnet approved — no escalation needed
-    writeReviewArtifact(artifactDir, step, stage2.structuredOutput?.review_text || sonnetResult);
+    writeReviewArtifact(
+      artifactDir,
+      step,
+      stage2.structuredOutput?.review_text || sonnetResult,
+    );
     writeApprovalArtifact(artifactDir, step, {
-      decision: 'approve',
+      decision: "approve",
       score: finalScore,
       threshold: PASS_THRESHOLD,
-      stage: 'sonnet',
+      stage: "sonnet",
       model: stage2.model,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     return {
       ok: true,
       score: finalScore,
-      decision: 'approve',
-      stage: 'sonnet',
+      decision: "approve",
+      stage: "sonnet",
       model: stage2.model,
       cost: totalCost,
-      durationMs: totalDurationMs
+      durationMs: totalDurationMs,
     };
   }
 
   // ─── Stage 3: Opus escalation from Sonnet fail ───
-  const opusResult = await runOpusEscalation({ step, cwd, priorReview: sonnetResult });
+  const opusResult = await runOpusEscalation({
+    step,
+    cwd,
+    priorReview: sonnetResult,
+  });
   totalCost += opusResult.cost || 0;
   totalDurationMs += opusResult.durationMs || 0;
 
-  if (opusResult.ok && opusResult.score != null && opusResult.score >= PASS_THRESHOLD) {
+  if (
+    opusResult.ok &&
+    opusResult.score != null &&
+    opusResult.score >= PASS_THRESHOLD
+  ) {
     // Opus rescued it after Sonnet failed
-    writeReviewArtifact(artifactDir, step, opusResult.structuredOutput?.review_text || opusResult.result);
+    writeReviewArtifact(
+      artifactDir,
+      step,
+      opusResult.structuredOutput?.review_text || opusResult.result,
+    );
     writeApprovalArtifact(artifactDir, step, {
-      decision: 'approve',
+      decision: "approve",
       score: opusResult.score,
       threshold: PASS_THRESHOLD,
-      stage: 'opus',
+      stage: "opus",
       model: opusResult.model,
       escalated: true,
-      escalation_model: 'opus',
-      timestamp: new Date().toISOString()
+      escalation_model: "opus",
+      timestamp: new Date().toISOString(),
     });
 
     return {
       ok: true,
       score: opusResult.score,
-      decision: 'approve',
-      stage: 'opus',
+      decision: "approve",
+      stage: "opus",
       model: opusResult.model,
       cost: totalCost,
       durationMs: totalDurationMs,
-      escalated: true
+      escalated: true,
     };
   }
 
   // Opus also failed — final reject with escalated flag
-  const opusScore = (opusResult.ok && opusResult.score != null) ? opusResult.score : finalScore;
-  const opusReviewText = (opusResult.ok && opusResult.structuredOutput?.review_text)
-    ? opusResult.structuredOutput.review_text
-    : (opusResult.ok && opusResult.result) ? opusResult.result : sonnetResult;
+  const opusScore =
+    opusResult.ok && opusResult.score != null ? opusResult.score : finalScore;
+  const opusReviewText =
+    opusResult.ok && opusResult.structuredOutput?.review_text
+      ? opusResult.structuredOutput.review_text
+      : opusResult.ok && opusResult.result
+        ? opusResult.result
+        : sonnetResult;
 
   writeReviewArtifact(artifactDir, step, opusReviewText);
   writeApprovalArtifact(artifactDir, step, {
-    decision: 'reject',
+    decision: "reject",
     score: opusScore,
     threshold: PASS_THRESHOLD,
-    stage: 'opus',
+    stage: "opus",
     model: opusResult.ok ? opusResult.model : OPUS_MODEL,
     escalated: true,
-    escalation_model: 'opus',
-    timestamp: new Date().toISOString()
+    escalation_model: "opus",
+    timestamp: new Date().toISOString(),
   });
   writeEscalation(cwd, opusScore, { auto_escalated: true });
 
   return {
     ok: true,
     score: opusScore,
-    decision: 'reject',
-    stage: 'opus',
+    decision: "reject",
+    stage: "opus",
     model: opusResult.ok ? opusResult.model : OPUS_MODEL,
     cost: totalCost,
     durationMs: totalDurationMs,
-    escalated: true
+    escalated: true,
   };
 }
 

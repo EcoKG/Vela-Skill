@@ -10,7 +10,7 @@
  * - Entire invocation wrapped in try/catch — SDK errors never crash the caller
  */
 
-'use strict';
+"use strict";
 
 /**
  * Dynamically import the Claude Agent SDK.
@@ -19,7 +19,7 @@
  */
 async function loadSdk() {
   try {
-    const sdk = await import('@anthropic-ai/claude-agent-sdk');
+    const sdk = await import("@anthropic-ai/claude-agent-sdk");
     return sdk;
   } catch (err) {
     return { _error: err };
@@ -87,8 +87,12 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  *   Unexpected error: { ok: false, error: 'unexpected_error', details: errorMessage }
  */
 async function runSdkAgent(opts) {
-  if (!opts || typeof opts.prompt !== 'string' || opts.prompt.length === 0) {
-    return { ok: false, error: 'invalid_input', details: 'prompt is required and must be a non-empty string' };
+  if (!opts || typeof opts.prompt !== "string" || opts.prompt.length === 0) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      details: "prompt is required and must be a non-empty string",
+    };
   }
 
   // --- Load SDK dynamically ---
@@ -97,16 +101,16 @@ async function runSdkAgent(opts) {
   if (sdk._error) {
     return {
       ok: false,
-      error: 'sdk_not_available',
-      details: sdk._error.message || String(sdk._error)
+      error: "sdk_not_available",
+      details: sdk._error.message || String(sdk._error),
     };
   }
 
-  if (typeof sdk.query !== 'function') {
+  if (typeof sdk.query !== "function") {
     return {
       ok: false,
-      error: 'sdk_not_available',
-      details: 'SDK loaded but query() function not found'
+      error: "sdk_not_available",
+      details: "SDK loaded but query() function not found",
     };
   }
 
@@ -117,7 +121,7 @@ async function runSdkAgent(opts) {
     settingSources: [],
 
     // SDK agents run under engine control, not interactive
-    permissionMode: opts.permissionMode || 'bypassPermissions',
+    permissionMode: opts.permissionMode || "bypassPermissions",
     allowDangerouslySkipPermissions: true,
 
     // Ephemeral by default
@@ -138,11 +142,13 @@ async function runSdkAgent(opts) {
   if (opts.outputFormat != null) queryOptions.outputFormat = opts.outputFormat;
   if (opts.effort != null) queryOptions.effort = opts.effort;
   if (opts.thinking != null) queryOptions.thinking = opts.thinking;
-  if (opts.fallbackModel != null) queryOptions.fallbackModel = opts.fallbackModel;
+  if (opts.fallbackModel != null)
+    queryOptions.fallbackModel = opts.fallbackModel;
   if (opts.hooks != null) queryOptions.hooks = opts.hooks;
 
   // Checkpointing / custom tools / extra args (S08)
-  if (opts.enableFileCheckpointing != null) queryOptions.enableFileCheckpointing = opts.enableFileCheckpointing;
+  if (opts.enableFileCheckpointing != null)
+    queryOptions.enableFileCheckpointing = opts.enableFileCheckpointing;
   if (opts.extraArgs != null) queryOptions.extraArgs = opts.extraArgs;
   if (opts.mcpServers != null) queryOptions.mcpServers = opts.mcpServers;
 
@@ -157,7 +163,10 @@ async function runSdkAgent(opts) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startMs = Date.now();
-      const generator = sdk.query({ prompt: opts.prompt, options: queryOptions });
+      const generator = sdk.query({
+        prompt: opts.prompt,
+        options: queryOptions,
+      });
 
       let resultMessage = null;
       let sessionId = null;
@@ -167,23 +176,30 @@ async function runSdkAgent(opts) {
 
       for await (const message of generator) {
         // Capture checkpoint UUIDs from user messages
-        if (message.type === 'user' && message.uuid) {
+        if (message.type === "user" && message.uuid) {
           checkpoints.push(message.uuid);
         }
 
         // Capture session ID from init message
-        if (message.type === 'system' && message.subtype === 'init' && message.session_id) {
+        if (
+          message.type === "system" &&
+          message.subtype === "init" &&
+          message.session_id
+        ) {
           sessionId = message.session_id;
         }
 
         // Detect rate limit events during execution
-        if (message.type === 'rate_limit_event' || (message.type === 'system' && message.subtype === 'rate_limit_event')) {
+        if (
+          message.type === "rate_limit_event" ||
+          (message.type === "system" && message.subtype === "rate_limit_event")
+        ) {
           sawRateLimit = true;
           if (message.resets_at) resetsAt = message.resets_at;
         }
 
         // Capture the final result message
-        if (message.type === 'result') {
+        if (message.type === "result") {
           resultMessage = message;
         }
       }
@@ -193,10 +209,12 @@ async function runSdkAgent(opts) {
       if (!resultMessage) {
         return {
           ok: false,
-          error: 'no_result',
-          details: 'SDK query completed without producing a result message',
+          error: "no_result",
+          details: "SDK query completed without producing a result message",
           durationMs: elapsedMs,
-          ...(retriesAttempted > 0 ? { retriesAttempted, cost: totalCost } : {})
+          ...(retriesAttempted > 0
+            ? { retriesAttempted, cost: totalCost }
+            : {}),
         };
       }
 
@@ -206,7 +224,7 @@ async function runSdkAgent(opts) {
       }
 
       // --- Normalize result ---
-      if (resultMessage.subtype === 'success') {
+      if (resultMessage.subtype === "success") {
         return {
           ok: true,
           result: resultMessage.result,
@@ -217,7 +235,7 @@ async function runSdkAgent(opts) {
           sessionId: resultMessage.session_id || sessionId,
           numTurns: resultMessage.num_turns,
           durationMs: resultMessage.duration_ms || elapsedMs,
-          ...(retriesAttempted > 0 ? { retriesAttempted } : {})
+          ...(retriesAttempted > 0 ? { retriesAttempted } : {}),
         };
       }
 
@@ -226,36 +244,35 @@ async function runSdkAgent(opts) {
       // retry with exponential backoff (unless we've exhausted retries).
       if (
         sawRateLimit &&
-        resultMessage.subtype === 'error_during_execution' &&
+        resultMessage.subtype === "error_during_execution" &&
         attempt < maxRetries
       ) {
         retriesAttempted = attempt + 1;
         const delay = computeRetryDelay(attempt, retryDelayMs, resetsAt);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue; // retry
       }
 
       // Error subtypes: 'error_max_turns', 'error_during_execution', etc.
       const errorDetails = Array.isArray(resultMessage.errors)
-        ? resultMessage.errors.join(', ')
-        : resultMessage.result || 'Unknown error';
+        ? resultMessage.errors.join(", ")
+        : resultMessage.result || "Unknown error";
 
       return {
         ok: false,
-        error: resultMessage.subtype || 'unknown_error',
+        error: resultMessage.subtype || "unknown_error",
         details: errorDetails,
         cost: totalCost,
         numTurns: resultMessage.num_turns,
         durationMs: resultMessage.duration_ms || elapsedMs,
-        ...(retriesAttempted > 0 ? { retriesAttempted } : {})
+        ...(retriesAttempted > 0 ? { retriesAttempted } : {}),
       };
-
     } catch (err) {
       return {
         ok: false,
-        error: 'unexpected_error',
+        error: "unexpected_error",
         details: err.message || String(err),
-        ...(retriesAttempted > 0 ? { retriesAttempted, cost: totalCost } : {})
+        ...(retriesAttempted > 0 ? { retriesAttempted, cost: totalCost } : {}),
       };
     }
   }

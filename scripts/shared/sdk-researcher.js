@@ -22,12 +22,12 @@
  * - Hypothesis prefix prepended to each perspective prompt for structured reasoning
  */
 
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
-const { runSdkAgent } = require('./sdk-runner');
-const { MODEL_VERSIONS } = require('./constants');
+const fs = require("fs");
+const path = require("path");
+const { runSdkAgent } = require("./sdk-runner");
+const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
@@ -133,9 +133,9 @@ quality-researcher로 소환된 경우 이 가이드를 **반드시** 따른다.
 
 // ─── Perspectives array for iteration ───
 const PERSPECTIVES = [
-  { key: 'architecture', prompt: ARCHITECTURE_SYSTEM_PROMPT },
-  { key: 'security', prompt: SECURITY_SYSTEM_PROMPT },
-  { key: 'quality', prompt: QUALITY_SYSTEM_PROMPT },
+  { key: "architecture", prompt: ARCHITECTURE_SYSTEM_PROMPT },
+  { key: "security", prompt: SECURITY_SYSTEM_PROMPT },
+  { key: "quality", prompt: QUALITY_SYSTEM_PROMPT },
 ];
 
 /**
@@ -145,9 +145,9 @@ const PERSPECTIVES = [
  * @param {string} content - Research result content
  */
 function writeResearchArtifact(artifactDir, content) {
-  const filePath = path.join(artifactDir, 'research.md');
+  const filePath = path.join(artifactDir, "research.md");
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf8');
+  fs.writeFileSync(filePath, content, "utf8");
 }
 
 /**
@@ -165,14 +165,15 @@ function writeResearchArtifact(artifactDir, content) {
  *   ok is true when at least one perspective succeeded.
  */
 async function sdkResearch(opts) {
-  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  if (!opts || typeof opts !== "object" || Array.isArray(opts))
+    return { ok: false, error: "invalid_input" };
   const { step, artifactDir, cwd } = opts;
   const overallStart = Date.now();
 
   // ─── Build user prompt with step context ───
   const stepContext = step
-    ? `현재 단계: ${step.name || step}\n설명: ${step.description || ''}\n\n`
-    : '';
+    ? `현재 단계: ${step.name || step}\n설명: ${step.description || ""}\n\n`
+    : "";
 
   // ─── Launch 3 perspectives in parallel ───
   const agentPromises = PERSPECTIVES.map(({ key, prompt }) => {
@@ -185,7 +186,7 @@ async function sdkResearch(opts) {
       systemPrompt: prompt,
       maxTurns: MAX_TURNS,
       maxBudgetUsd: MAX_BUDGET_USD,
-      effort: 'low',
+      effort: "low",
     });
   });
 
@@ -195,7 +196,7 @@ async function sdkResearch(opts) {
   const perspectiveResults = PERSPECTIVES.map(({ key }, idx) => {
     const outcome = settled[idx];
 
-    if (outcome.status === 'rejected') {
+    if (outcome.status === "rejected") {
       return {
         key,
         ok: false,
@@ -229,46 +230,48 @@ async function sdkResearch(opts) {
   // ─── Compute totals ───
   const totalCost = perspectiveResults.reduce((sum, p) => sum + p.cost, 0);
   const totalDurationMs = Date.now() - overallStart;
-  const anyOk = perspectiveResults.some(p => p.ok);
+  const anyOk = perspectiveResults.some((p) => p.ok);
 
   // ─── Build research.md content ───
-  const sections = perspectiveResults.map(p => {
+  const sections = perspectiveResults.map((p) => {
     const header = `## ${p.key.charAt(0).toUpperCase() + p.key.slice(1)} 관점`;
 
     if (p.ok) {
       return [
         header,
-        '',
+        "",
         `> Cost: $${p.cost.toFixed(4)} | Duration: ${p.durationMs}ms`,
-        '',
+        "",
         p.result,
-      ].join('\n');
+      ].join("\n");
     }
 
     return [
       header,
-      '',
+      "",
       `> ⚠️ 분석 실패`,
-      '',
+      "",
       `- **Error:** ${p.error}`,
       p.details ? `- **Details:** ${p.details}` : null,
       `- **Cost:** $${p.cost.toFixed(4)}`,
       `- **Duration:** ${p.durationMs}ms`,
-    ].filter(Boolean).join('\n');
+    ]
+      .filter(Boolean)
+      .join("\n");
   });
 
   const researchContent = [
-    '# Research — 3관점 병렬 분석',
-    '',
+    "# Research — 3관점 병렬 분석",
+    "",
     `- **Timestamp:** ${new Date().toISOString()}`,
     `- **Total Cost:** $${totalCost.toFixed(4)}`,
     `- **Total Duration:** ${totalDurationMs}ms`,
-    `- **Perspectives OK:** ${perspectiveResults.filter(p => p.ok).length}/3`,
-    '',
-    '---',
-    '',
+    `- **Perspectives OK:** ${perspectiveResults.filter((p) => p.ok).length}/3`,
+    "",
+    "---",
+    "",
     ...sections,
-  ].join('\n');
+  ].join("\n");
 
   // ─── Always write research.md ───
   writeResearchArtifact(artifactDir, researchContent);

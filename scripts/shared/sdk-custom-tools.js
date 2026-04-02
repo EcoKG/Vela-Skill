@@ -14,10 +14,10 @@
  * CJS module — dynamic ESM import at runtime (same pattern as sdk-runner.js).
  */
 
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 /**
  * Dynamically import the Claude Agent SDK.
@@ -26,7 +26,7 @@ const path = require('path');
  */
 async function loadSdk() {
   try {
-    const sdk = await import('@anthropic-ai/claude-agent-sdk');
+    const sdk = await import("@anthropic-ai/claude-agent-sdk");
     return sdk;
   } catch (err) {
     return { _error: err };
@@ -40,7 +40,7 @@ async function loadSdk() {
  */
 async function loadZod() {
   try {
-    const zod = await import('zod');
+    const zod = await import("zod");
     return zod;
   } catch (err) {
     return { _error: err };
@@ -55,8 +55,12 @@ async function loadZod() {
  *   or { ok: false, error, details } on failure
  */
 async function createVelaToolServer(artifactDir) {
-  if (!artifactDir || typeof artifactDir !== 'string') {
-    return { ok: false, error: 'invalid_input', details: 'artifactDir is required and must be a non-empty string' };
+  if (!artifactDir || typeof artifactDir !== "string") {
+    return {
+      ok: false,
+      error: "invalid_input",
+      details: "artifactDir is required and must be a non-empty string",
+    };
   }
 
   // --- Load dependencies ---
@@ -64,16 +68,19 @@ async function createVelaToolServer(artifactDir) {
   if (sdk._error) {
     return {
       ok: false,
-      error: 'sdk_not_available',
-      details: sdk._error.message || String(sdk._error)
+      error: "sdk_not_available",
+      details: sdk._error.message || String(sdk._error),
     };
   }
 
-  if (typeof sdk.createSdkMcpServer !== 'function' || typeof sdk.tool !== 'function') {
+  if (
+    typeof sdk.createSdkMcpServer !== "function" ||
+    typeof sdk.tool !== "function"
+  ) {
     return {
       ok: false,
-      error: 'sdk_not_available',
-      details: 'SDK loaded but createSdkMcpServer() or tool() not found'
+      error: "sdk_not_available",
+      details: "SDK loaded but createSdkMcpServer() or tool() not found",
     };
   }
 
@@ -81,17 +88,17 @@ async function createVelaToolServer(artifactDir) {
   if (zod._error) {
     return {
       ok: false,
-      error: 'zod_not_available',
-      details: zod._error.message || String(zod._error)
+      error: "zod_not_available",
+      details: zod._error.message || String(zod._error),
     };
   }
 
   const z = zod.z || zod.default || zod;
-  if (typeof z.object !== 'function') {
+  if (typeof z.object !== "function") {
     return {
       ok: false,
-      error: 'zod_not_available',
-      details: 'zod loaded but z.object() not found'
+      error: "zod_not_available",
+      details: "zod loaded but z.object() not found",
     };
   }
 
@@ -99,85 +106,105 @@ async function createVelaToolServer(artifactDir) {
 
   // Tool 1: vela_pipeline_status
   const pipelineStatusTool = sdk.tool(
-    'vela_pipeline_status',
-    'Read the current pipeline status from pipeline-state.json. Returns status, current step, completed steps, and cost.',
+    "vela_pipeline_status",
+    "Read the current pipeline status from pipeline-state.json. Returns status, current step, completed steps, and cost.",
     z.object({}),
     async () => {
       try {
-        const filePath = path.join(artifactDir, 'pipeline-state.json');
-        const raw = fs.readFileSync(filePath, 'utf8');
+        const filePath = path.join(artifactDir, "pipeline-state.json");
+        const raw = fs.readFileSync(filePath, "utf8");
         const state = JSON.parse(raw);
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              status: state.status || 'unknown',
-              current_step: state.current_step || null,
-              completed_steps: state.completed_steps || [],
-              cost: state.cost || 0
-            })
-          }]
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                status: state.status || "unknown",
+                current_step: state.current_step || null,
+                completed_steps: state.completed_steps || [],
+                cost: state.cost || 0,
+              }),
+            },
+          ],
         };
       } catch (err) {
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ error: 'Failed to read pipeline state', details: err.message })
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Failed to read pipeline state",
+                details: err.message,
+              }),
+            },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 2: vela_read_artifact
   const readArtifactTool = sdk.tool(
-    'vela_read_artifact',
-    'Read a named artifact file from the artifact directory. Path traversal is blocked for security.',
+    "vela_read_artifact",
+    "Read a named artifact file from the artifact directory. Path traversal is blocked for security.",
     z.object({ filename: z.string() }),
     async (input) => {
       const filename = input.filename;
 
       // Path traversal guard
-      if (filename.includes('..')) {
+      if (filename.includes("..")) {
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ error: 'Path traversal not allowed', filename })
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Path traversal not allowed",
+                filename,
+              }),
+            },
+          ],
+          isError: true,
         };
       }
 
       try {
         const filePath = path.join(artifactDir, filename);
-        const content = fs.readFileSync(filePath, 'utf8');
+        const content = fs.readFileSync(filePath, "utf8");
         return {
-          content: [{
-            type: 'text',
-            text: content
-          }]
+          content: [
+            {
+              type: "text",
+              text: content,
+            },
+          ],
         };
       } catch (err) {
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ error: 'Failed to read artifact', filename, details: err.message })
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Failed to read artifact",
+                filename,
+                details: err.message,
+              }),
+            },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 3: vela_record_note
   const recordNoteTool = sdk.tool(
-    'vela_record_note',
-    'Append a timestamped note to notes.md in the artifact directory. Creates the file if it does not exist.',
+    "vela_record_note",
+    "Append a timestamped note to notes.md in the artifact directory. Creates the file if it does not exist.",
     z.object({ note: z.string() }),
     async (input) => {
       try {
-        const filePath = path.join(artifactDir, 'notes.md');
+        const filePath = path.join(artifactDir, "notes.md");
         const timestamp = new Date().toISOString();
         const entry = `\n[${timestamp}] ${input.note}`;
 
@@ -186,30 +213,37 @@ async function createVelaToolServer(artifactDir) {
           fs.mkdirSync(artifactDir, { recursive: true });
         }
 
-        fs.appendFileSync(filePath, entry, 'utf8');
+        fs.appendFileSync(filePath, entry, "utf8");
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ ok: true, timestamp, note: input.note })
-          }]
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ ok: true, timestamp, note: input.note }),
+            },
+          ],
         };
       } catch (err) {
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ error: 'Failed to record note', details: err.message })
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Failed to record note",
+                details: err.message,
+              }),
+            },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   );
 
   // --- Build and return MCP server ---
   const server = sdk.createSdkMcpServer({
-    name: 'vela-tools',
-    version: '1.0.0',
-    tools: [pipelineStatusTool, readArtifactTool, recordNoteTool]
+    name: "vela-tools",
+    version: "1.0.0",
+    tools: [pipelineStatusTool, readArtifactTool, recordNoteTool],
   });
 
   return server;

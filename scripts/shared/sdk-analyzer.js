@@ -24,10 +24,10 @@
  * - [PERSPECTIVE:xxx] markers enable test mock differentiation (K012)
  */
 
-'use strict';
+"use strict";
 
-const { runSdkAgent } = require('./sdk-runner');
-const { MODEL_VERSIONS } = require('./constants');
+const { runSdkAgent } = require("./sdk-runner");
+const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Model Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
@@ -37,24 +37,27 @@ const MAX_BUDGET_USD = 0.05;
 
 // ─── Structured output schema (K011 pattern — module-local) ───
 const ANALYZER_OUTPUT_SCHEMA = {
-  type: 'object',
+  type: "object",
   properties: {
     findings: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          name: { type: 'string' },
-          severity: { type: 'string', enum: ['critical', 'high', 'moderate', 'low', 'info'] },
-          file: { type: 'string' },
-          line: { type: 'number' },
-          description: { type: 'string' },
-          suggestion: { type: 'string' },
+          name: { type: "string" },
+          severity: {
+            type: "string",
+            enum: ["critical", "high", "moderate", "low", "info"],
+          },
+          file: { type: "string" },
+          line: { type: "number" },
+          description: { type: "string" },
+          suggestion: { type: "string" },
         },
       },
     },
   },
-  required: ['findings'],
+  required: ["findings"],
 };
 
 // ─── Finding schema reference (inlined in each prompt) ───
@@ -84,8 +87,8 @@ const SEVERITY_LEVELS = `Severity levels:
 
 const PERSPECTIVES = {
   security: {
-    key: 'security',
-    label: '보안 분석',
+    key: "security",
+    label: "보안 분석",
     systemPrompt: `[PERSPECTIVE:security]
 
 # 보안 분석 에이전트
@@ -133,8 +136,8 @@ ${SEVERITY_LEVELS}
   },
 
   bugs: {
-    key: 'bugs',
-    label: '버그 분석',
+    key: "bugs",
+    label: "버그 분석",
     systemPrompt: `[PERSPECTIVE:bugs]
 
 # 버그 분석 에이전트
@@ -183,8 +186,8 @@ ${SEVERITY_LEVELS}
   },
 
   performance: {
-    key: 'performance',
-    label: '성능 분석',
+    key: "performance",
+    label: "성능 분석",
     systemPrompt: `[PERSPECTIVE:performance]
 
 # 성능 분석 에이전트
@@ -232,9 +235,9 @@ ${SEVERITY_LEVELS}
 `,
   },
 
-  'code-quality': {
-    key: 'code-quality',
-    label: '코드 품질 분석',
+  "code-quality": {
+    key: "code-quality",
+    label: "코드 품질 분석",
     systemPrompt: `[PERSPECTIVE:code-quality]
 
 # 코드 품질 분석 에이전트
@@ -283,8 +286,8 @@ ${SEVERITY_LEVELS}
   },
 
   architecture: {
-    key: 'architecture',
-    label: '아키텍처 분석',
+    key: "architecture",
+    label: "아키텍처 분석",
     systemPrompt: `[PERSPECTIVE:architecture]
 
 # 아키텍처 분석 에이전트
@@ -348,8 +351,8 @@ const VALID_PERSPECTIVE_KEYS = Object.keys(PERSPECTIVES);
  * @returns {{ findings: Array<Object>, summary?: string }}
  */
 function extractFindings(responseText) {
-  if (!responseText || typeof responseText !== 'string') {
-    return { findings: [], summary: '' };
+  if (!responseText || typeof responseText !== "string") {
+    return { findings: [], summary: "" };
   }
 
   // Strategy 1: Extract from ```json code block
@@ -389,15 +392,15 @@ function extractFindings(responseText) {
  * @returns {Array<Object>} Normalized findings
  */
 function normalizeFindingsArray(findings) {
-  const validSeverities = ['critical', 'high', 'moderate', 'low', 'info'];
+  const validSeverities = ["critical", "high", "moderate", "low", "info"];
 
-  return findings.map(f => ({
-    name: String(f.name || 'Unnamed finding'),
-    severity: validSeverities.includes(f.severity) ? f.severity : 'info',
-    file: String(f.file || ''),
-    line: typeof f.line === 'number' ? f.line : null,
-    description: String(f.description || ''),
-    suggestion: String(f.suggestion || ''),
+  return findings.map((f) => ({
+    name: String(f.name || "Unnamed finding"),
+    severity: validSeverities.includes(f.severity) ? f.severity : "info",
+    file: String(f.file || ""),
+    line: typeof f.line === "number" ? f.line : null,
+    description: String(f.description || ""),
+    suggestion: String(f.suggestion || ""),
   }));
 }
 
@@ -423,15 +426,22 @@ function normalizeFindingsArray(findings) {
  *   SDK unavailable: { ok: false, error: 'sdk_not_available' }
  */
 async function sdkAnalyze(opts) {
-  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  if (!opts || typeof opts !== "object" || Array.isArray(opts))
+    return { ok: false, error: "invalid_input" };
   const { perspectives, cwd, model, maxTurns, maxBudgetUsd } = opts;
   // ─── Input validation ───
   if (!Array.isArray(perspectives)) {
-    return { ok: false, error: 'perspectives must be an array' };
+    return { ok: false, error: "perspectives must be an array" };
   }
 
   if (perspectives.length === 0) {
-    return { ok: true, perspectives: [], totalCost: 0, totalDurationMs: 0, model: model || HAIKU_MODEL };
+    return {
+      ok: true,
+      perspectives: [],
+      totalCost: 0,
+      totalDurationMs: 0,
+      model: model || HAIKU_MODEL,
+    };
   }
 
   // Filter to valid perspective keys, warn on unknown ones
@@ -446,11 +456,19 @@ async function sdkAnalyze(opts) {
   }
 
   if (unknownKeys.length > 0) {
-    process.stderr.write(`[sdk-analyzer] Warning: unknown perspective keys skipped: ${unknownKeys.join(', ')}\n`);
+    process.stderr.write(
+      `[sdk-analyzer] Warning: unknown perspective keys skipped: ${unknownKeys.join(", ")}\n`,
+    );
   }
 
   if (validPerspectives.length === 0) {
-    return { ok: true, perspectives: [], totalCost: 0, totalDurationMs: 0, model: model || HAIKU_MODEL };
+    return {
+      ok: true,
+      perspectives: [],
+      totalCost: 0,
+      totalDurationMs: 0,
+      model: model || HAIKU_MODEL,
+    };
   }
 
   const selectedModel = model || HAIKU_MODEL;
@@ -459,7 +477,7 @@ async function sdkAnalyze(opts) {
   const overallStart = Date.now();
 
   // ─── Launch perspectives in parallel ───
-  const agentPromises = validPerspectives.map(key => {
+  const agentPromises = validPerspectives.map((key) => {
     const perspective = PERSPECTIVES[key];
     const userPrompt = `프로젝트 코드를 ${perspective.label} 관점에서 분석하라.\n\n코드베이스를 탐색하여 이슈를 찾고, 반드시 지정된 JSON 형식으로 결과를 출력하라.`;
 
@@ -470,8 +488,8 @@ async function sdkAnalyze(opts) {
       systemPrompt: perspective.systemPrompt,
       maxTurns: selectedMaxTurns,
       maxBudgetUsd: selectedMaxBudget,
-      effort: 'medium',
-      outputFormat: { type: 'json', schema: ANALYZER_OUTPUT_SCHEMA },
+      effort: "medium",
+      outputFormat: { type: "json", schema: ANALYZER_OUTPUT_SCHEMA },
       // settingSources: [] is set inside runSdkAgent (D014 — hook isolation)
     });
   });
@@ -485,7 +503,7 @@ async function sdkAnalyze(opts) {
     const outcome = settled[idx];
 
     // Promise rejected (unexpected)
-    if (outcome.status === 'rejected') {
+    if (outcome.status === "rejected") {
       return {
         perspective: key,
         ok: false,
@@ -499,13 +517,13 @@ async function sdkAnalyze(opts) {
     const agentResult = outcome.value;
 
     // SDK not available
-    if (!agentResult.ok && agentResult.error === 'sdk_not_available') {
+    if (!agentResult.ok && agentResult.error === "sdk_not_available") {
       sdkUnavailableCount++;
       return {
         perspective: key,
         ok: false,
         findings: [],
-        error: 'sdk_not_available',
+        error: "sdk_not_available",
         cost: 0,
         durationMs: 0,
       };
@@ -527,10 +545,15 @@ async function sdkAnalyze(opts) {
     // Agent succeeded — extract findings: structuredOutput first → extractFindings fallback
     hasAnyOk = true;
     let extracted;
-    if (agentResult.structuredOutput && Array.isArray(agentResult.structuredOutput.findings)) {
-      extracted = { findings: normalizeFindingsArray(agentResult.structuredOutput.findings) };
+    if (
+      agentResult.structuredOutput &&
+      Array.isArray(agentResult.structuredOutput.findings)
+    ) {
+      extracted = {
+        findings: normalizeFindingsArray(agentResult.structuredOutput.findings),
+      };
     } else {
-      extracted = extractFindings(agentResult.result || '');
+      extracted = extractFindings(agentResult.result || "");
     }
 
     return {
@@ -551,7 +574,7 @@ async function sdkAnalyze(opts) {
   if (sdkUnavailableCount === validPerspectives.length) {
     return {
       ok: false,
-      error: 'sdk_not_available',
+      error: "sdk_not_available",
       perspectives: perspectiveResults,
       totalCost,
       totalDurationMs,

@@ -16,10 +16,10 @@
  *   requires: [TaskA]
  */
 
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 // ── Parser ─────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ const path = require('path');
  *  - Korean task names (e.g. 분석 태스크)
  */
 function parsePlanMd(content) {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   const tasks = [];
 
   // 1. Find ## Task Distribution section
@@ -74,7 +74,7 @@ function parsePlanMd(content) {
     // Parse name and description
     // Format: "TaskName: description" or "TaskName (depends: [...])"
     let name, description;
-    const colonIdx = raw.indexOf(':');
+    const colonIdx = raw.indexOf(":");
 
     // Check if colon is part of a dependency marker at the start
     const isDepMarker = /^(depends|after|requires)\s*:/i.test(raw);
@@ -84,7 +84,7 @@ function parsePlanMd(content) {
       description = raw.slice(colonIdx + 1).trim();
     } else {
       // No colon or it's a dep marker — use entire text as name
-      name = raw.replace(/\s*\(.*\)\s*$/, '').trim();
+      name = raw.replace(/\s*\(.*\)\s*$/, "").trim();
       description = raw;
     }
 
@@ -110,7 +110,10 @@ function extractDependencies(text) {
   while ((match = markerRe.exec(text)) !== null) {
     const inner = match[1].trim();
     if (inner) {
-      const names = inner.split(',').map(s => s.trim()).filter(Boolean);
+      const names = inner
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       deps.push(...names);
     }
   }
@@ -127,7 +130,7 @@ function extractDependencies(text) {
  * adjacency[A] = [B] means "A → B" (B depends on A, so after A completes, B can proceed)
  */
 function buildDependencyGraph(tasks) {
-  const taskNames = tasks.map(t => t.name);
+  const taskNames = tasks.map((t) => t.name);
   const nameSet = new Set(taskNames);
   const adjacency = new Map();
   const inDegree = new Map();
@@ -199,9 +202,9 @@ function topologicalSort(graph) {
 
   // Cycle detection: if we didn't process all tasks, there's a cycle
   if (processed < taskNames.length) {
-    const remaining = taskNames.filter(n => degree.get(n) > 0);
+    const remaining = taskNames.filter((n) => degree.get(n) > 0);
     throw new Error(
-      `Cycle detected — cannot schedule ${remaining.length} task(s): ${remaining.join(', ')}`
+      `Cycle detected — cannot schedule ${remaining.length} task(s): ${remaining.join(", ")}`,
     );
   }
 
@@ -215,7 +218,7 @@ function topologicalSort(graph) {
  * Returns { text: string, json: object }
  */
 function formatWaveOutput(waves, tasks) {
-  const taskMap = new Map(tasks.map(t => [t.name, t]));
+  const taskMap = new Map(tasks.map((t) => [t.name, t]));
 
   const jsonOutput = {
     totalTasks: tasks.length,
@@ -223,14 +226,14 @@ function formatWaveOutput(waves, tasks) {
     waves: waves.map((wave, i) => ({
       wave: i + 1,
       parallel: wave.length,
-      tasks: wave.map(name => {
+      tasks: wave.map((name) => {
         const t = taskMap.get(name);
         return {
           name,
-          depends: t ? t.depends : []
+          depends: t ? t.depends : [],
         };
-      })
-    }))
+      }),
+    })),
   };
 
   // Human-readable text
@@ -239,31 +242,34 @@ function formatWaveOutput(waves, tasks) {
   lines.push(`───────────────────────────────`);
   lines.push(`Total tasks: ${tasks.length}`);
   lines.push(`Total waves: ${waves.length}`);
-  lines.push('');
+  lines.push("");
 
   for (let i = 0; i < waves.length; i++) {
     const wave = waves[i];
-    lines.push(`🌊 Wave ${i + 1} (${wave.length} task${wave.length > 1 ? 's' : ''} in parallel)`);
+    lines.push(
+      `🌊 Wave ${i + 1} (${wave.length} task${wave.length > 1 ? "s" : ""} in parallel)`,
+    );
     for (const name of wave) {
       const t = taskMap.get(name);
-      const depStr = t && t.depends.length > 0 ? ` ← [${t.depends.join(', ')}]` : '';
+      const depStr =
+        t && t.depends.length > 0 ? ` ← [${t.depends.join(", ")}]` : "";
       lines.push(`   • ${name}${depStr}`);
     }
-    lines.push('');
+    lines.push("");
   }
 
-  return { text: lines.join('\n'), json: jsonOutput };
+  return { text: lines.join("\n"), json: jsonOutput };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
 
 function main() {
   const args = process.argv.slice(2);
-  const jsonFlag = args.includes('--json');
-  const filePath = args.find(a => !a.startsWith('--'));
+  const jsonFlag = args.includes("--json");
+  const filePath = args.find((a) => !a.startsWith("--"));
 
   if (!filePath) {
-    console.error('Usage: vela-wave.js <plan.md> [--json]');
+    console.error("Usage: vela-wave.js <plan.md> [--json]");
     process.exit(1);
   }
 
@@ -273,11 +279,11 @@ function main() {
     process.exit(1);
   }
 
-  const content = fs.readFileSync(resolved, 'utf-8');
+  const content = fs.readFileSync(resolved, "utf-8");
   const tasks = parsePlanMd(content);
 
   if (tasks.length === 0) {
-    console.error('No tasks found in Task Distribution section.');
+    console.error("No tasks found in Task Distribution section.");
     process.exit(1);
   }
 
@@ -297,4 +303,9 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parsePlanMd, buildDependencyGraph, topologicalSort, formatWaveOutput };
+module.exports = {
+  parsePlanMd,
+  buildDependencyGraph,
+  topologicalSort,
+  formatWaveOutput,
+};

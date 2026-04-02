@@ -18,12 +18,12 @@
  * - Single Haiku call with low budget ($0.03) — structural check, not deep review
  */
 
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
-const { runSdkAgent } = require('./sdk-runner');
-const { MODEL_VERSIONS } = require('./constants');
+const fs = require("fs");
+const path = require("path");
+const { runSdkAgent } = require("./sdk-runner");
+const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
@@ -34,23 +34,23 @@ const VERDICT_REGEX = /VERDICT:\s*(PASS|FAIL)/i;
 
 // ─── Structured output schema (K011 pattern — module-local) ───
 const PLAN_CHECK_OUTPUT_SCHEMA = {
-  type: 'object',
+  type: "object",
   properties: {
-    verdict: { type: 'string', enum: ['PASS', 'FAIL'] },
+    verdict: { type: "string", enum: ["PASS", "FAIL"] },
     sections: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          name: { type: 'string' },
-          exists: { type: 'boolean' },
-          byteCount: { type: 'number' },
-          substantive: { type: 'boolean' },
+          name: { type: "string" },
+          exists: { type: "boolean" },
+          byteCount: { type: "number" },
+          substantive: { type: "boolean" },
         },
       },
     },
   },
-  required: ['verdict', 'sections'],
+  required: ["verdict", "sections"],
 };
 
 // ─── Self-contained system prompt ───
@@ -117,9 +117,9 @@ If the system supports structured JSON output, respond with this JSON schema:
  * @param {string} content - Check result content
  */
 function writePlanCheckArtifact(artifactDir, content) {
-  const filePath = path.join(artifactDir, 'plan-check.md');
+  const filePath = path.join(artifactDir, "plan-check.md");
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf8');
+  fs.writeFileSync(filePath, content, "utf8");
 }
 
 /**
@@ -137,15 +137,16 @@ function writePlanCheckArtifact(artifactDir, content) {
  *   SDK failure: { ok: false, error, details, cost?, durationMs? }
  */
 async function sdkPlanCheck(opts) {
-  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return { ok: false, error: 'invalid_input' };
+  if (!opts || typeof opts !== "object" || Array.isArray(opts))
+    return { ok: false, error: "invalid_input" };
   const { artifactDir, cwd } = opts;
   // ─── Check plan.md exists ───
-  const planPath = path.join(artifactDir, 'plan.md');
+  const planPath = path.join(artifactDir, "plan.md");
   if (!fs.existsSync(planPath)) {
-    return { ok: false, error: 'plan_md_not_found' };
+    return { ok: false, error: "plan_md_not_found" };
   }
 
-  const planContent = fs.readFileSync(planPath, 'utf8');
+  const planContent = fs.readFileSync(planPath, "utf8");
 
   // ─── Call Haiku via SDK ───
   const agentResult = await runSdkAgent({
@@ -155,21 +156,21 @@ async function sdkPlanCheck(opts) {
     systemPrompt: PLAN_CHECK_SYSTEM_PROMPT,
     maxTurns: MAX_TURNS,
     maxBudgetUsd: MAX_BUDGET_USD,
-    effort: 'low',
-    outputFormat: { type: 'json', schema: PLAN_CHECK_OUTPUT_SCHEMA },
+    effort: "low",
+    outputFormat: { type: "json", schema: PLAN_CHECK_OUTPUT_SCHEMA },
   });
 
   // ─── Handle SDK failure — still write artifact ───
   if (!agentResult.ok) {
     const errorContent = [
-      '# Plan Check — Error',
-      '',
+      "# Plan Check — Error",
+      "",
       `SDK agent returned an error.`,
-      '',
+      "",
       `- **Error:** ${agentResult.error}`,
-      `- **Details:** ${agentResult.details || 'N/A'}`,
+      `- **Details:** ${agentResult.details || "N/A"}`,
       `- **Timestamp:** ${new Date().toISOString()}`,
-    ].join('\n');
+    ].join("\n");
 
     writePlanCheckArtifact(artifactDir, errorContent);
 
@@ -183,29 +184,29 @@ async function sdkPlanCheck(opts) {
   }
 
   // ─── Parse verdict: structuredOutput first → VERDICT_REGEX fallback ───
-  const resultText = agentResult.result || '';
+  const resultText = agentResult.result || "";
   let verdict;
   if (agentResult.structuredOutput && agentResult.structuredOutput.verdict) {
     verdict = agentResult.structuredOutput.verdict.toLowerCase();
   } else {
     const verdictMatch = resultText.match(VERDICT_REGEX);
-    verdict = verdictMatch ? verdictMatch[1].toLowerCase() : 'fail';
+    verdict = verdictMatch ? verdictMatch[1].toLowerCase() : "fail";
   }
 
   // ─── Write plan-check.md ───
   const checkContent = [
-    '# Plan Check Results',
-    '',
+    "# Plan Check Results",
+    "",
     `- **Verdict:** ${verdict.toUpperCase()}`,
     `- **Model:** ${agentResult.model || HAIKU_MODEL}`,
     `- **Cost:** $${(agentResult.cost || 0).toFixed(4)}`,
     `- **Duration:** ${agentResult.durationMs || 0}ms`,
     `- **Timestamp:** ${new Date().toISOString()}`,
-    '',
-    '---',
-    '',
+    "",
+    "---",
+    "",
     resultText,
-  ].join('\n');
+  ].join("\n");
 
   writePlanCheckArtifact(artifactDir, checkContent);
 

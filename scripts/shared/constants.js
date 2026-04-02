@@ -4,109 +4,132 @@
  */
 
 const CODE_EXTENSIONS = new Set([
-  '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
-  '.py', '.pyw',
-  '.go',
-  '.rs',
-  '.java', '.kt', '.scala',
-  '.c', '.cpp', '.cc', '.h', '.hpp',
-  '.cs',
-  '.rb',
-  '.php',
-  '.swift',
-  '.html', '.htm', '.css', '.scss', '.sass', '.less',
-  '.vue', '.svelte',
-  '.sql',
-  '.sh', '.bash', '.zsh',
-  '.tf', '.hcl',
-  '.dockerfile', '.containerfile'
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".pyw",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".scala",
+  ".c",
+  ".cpp",
+  ".cc",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".rb",
+  ".php",
+  ".swift",
+  ".html",
+  ".htm",
+  ".css",
+  ".scss",
+  ".sass",
+  ".less",
+  ".vue",
+  ".svelte",
+  ".sql",
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".tf",
+  ".hcl",
+  ".dockerfile",
+  ".containerfile",
 ]);
 
 const SKIP_PATHS = [
-  'node_modules/',
-  '.git/',
-  'dist/',
-  'build/',
-  'out/',
-  '.next/',
-  '.nuxt/',
-  'vendor/',
-  '__pycache__/',
-  '.venv/',
-  'venv/',
-  '.cache/',
-  'coverage/',
-  '.vela/cache/',
-  'package-lock.json',
-  'yarn.lock',
-  'pnpm-lock.yaml',
-  'Cargo.lock',
-  'go.sum',
-  'poetry.lock'
+  "node_modules/",
+  ".git/",
+  "dist/",
+  "build/",
+  "out/",
+  ".next/",
+  ".nuxt/",
+  "vendor/",
+  "__pycache__/",
+  ".venv/",
+  "venv/",
+  ".cache/",
+  "coverage/",
+  ".vela/cache/",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "Cargo.lock",
+  "go.sum",
+  "poetry.lock",
 ];
 
 const SENSITIVE_FILES = [
-  '.env',
-  '.env.local',
-  '.env.production',
-  '.env.staging',
-  'credentials.json',
-  'secrets.json',
-  'secrets.yaml',
-  '.npmrc',
-  '.pypirc',
-  'id_rsa',
-  'id_ed25519'
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.staging",
+  "credentials.json",
+  "secrets.json",
+  "secrets.yaml",
+  ".npmrc",
+  ".pypirc",
+  "id_rsa",
+  "id_ed25519",
 ];
 
-const WRITE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
-const READ_TOOLS = new Set(['Read', 'Glob', 'Grep']);
+const WRITE_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
+const READ_TOOLS = new Set(["Read", "Glob", "Grep"]);
 
 const SECRET_PATTERNS = [
-  /(?:AKIA|ASIA)[A-Z0-9]{16}/,                    // AWS access key
-  /ghp_[A-Za-z0-9_]{36}/,                         // GitHub PAT
-  /gho_[A-Za-z0-9_]{36}/,                         // GitHub OAuth
-  /sk-[A-Za-z0-9]{48}/,                           // OpenAI key
-  /sk-ant-[A-Za-z0-9-]{90,}/,                     // Anthropic key
-  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./,  // JWT
-  /sk_live_[A-Za-z0-9]{24,}/,                     // Stripe live key
-  /rk_live_[A-Za-z0-9]{24,}/,                     // Stripe restricted key
-  /mongodb\+srv:\/\/[^:]+:[^@]+@/,                // MongoDB connection
-  /postgres(?:ql)?:\/\/[^:]+:[^@]+@/,             // PostgreSQL connection
-  /mysql:\/\/[^:]+:[^@]+@/,                       // MySQL connection
-  /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/,      // Private key
-  /xox[bpsar]-[A-Za-z0-9-]{10,}/,                 // Slack token
-  /AIza[A-Za-z0-9_-]{35}/,                        // Google API key
-  /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/     // SendGrid key
+  /(?:AKIA|ASIA)[A-Z0-9]{16}/, // AWS access key
+  /ghp_[A-Za-z0-9_]{36}/, // GitHub PAT
+  /gho_[A-Za-z0-9_]{36}/, // GitHub OAuth
+  /sk-[A-Za-z0-9]{48}/, // OpenAI key
+  /sk-ant-[A-Za-z0-9-]{90,}/, // Anthropic key
+  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./, // JWT
+  /sk_live_[A-Za-z0-9]{24,}/, // Stripe live key
+  /rk_live_[A-Za-z0-9]{24,}/, // Stripe restricted key
+  /mongodb\+srv:\/\/[^:]+:[^@]+@/, // MongoDB connection
+  /postgres(?:ql)?:\/\/[^:]+:[^@]+@/, // PostgreSQL connection
+  /mysql:\/\/[^:]+:[^@]+@/, // MySQL connection
+  /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/, // Private key
+  /xox[bpsar]-[A-Za-z0-9-]{10,}/, // Slack token
+  /AIza[A-Za-z0-9_-]{35}/, // Google API key
+  /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/, // SendGrid key
 ];
 
 // Bash commands that are safe in read-only mode
 // Includes: basic read utilities, version checks, git read-only, and standard build/test/lint runners
-const SAFE_BASH_READ = /^\s*(ls|cat|head|tail|find|grep|rg|wc|file|stat|tree|pwd|echo|which|node\s+.*--version|python3?\s+--version|git\s+(status|log|diff|branch|show|blame|remote|ls-files|ls-tree|rev-parse|describe|tag|config\s+--get)|(npm|yarn|pnpm)\s+(run\s+)?(test|build|lint|check|typecheck)|npx\s+(jest|vitest|eslint|prettier|tsc)|cargo\s+(test|build|check|clippy|fmt)|go\s+(test|build|vet)|pytest|python3?\s+-m\s+(pytest|unittest)|tsc|make|dotnet\s+(test|build))\b/;
+const SAFE_BASH_READ =
+  /^\s*(ls|cat|head|tail|find|grep|rg|wc|file|stat|tree|pwd|echo|which|node\s+.*--version|python3?\s+--version|git\s+(status|log|diff|branch|show|blame|remote|ls-files|ls-tree|rev-parse|describe|tag|config\s+--get)|(npm|yarn|pnpm)\s+(run\s+)?(test|build|lint|check|typecheck)|npx\s+(jest|vitest|eslint|prettier|tsc)|cargo\s+(test|build|check|clippy|fmt)|go\s+(test|build|vet)|pytest|python3?\s+-m\s+(pytest|unittest)|tsc|make|dotnet\s+(test|build))\b/;
 
 // Bash commands that write files
 const BASH_WRITE_PATTERNS = [
-  /(?<!\d)>\s*\S/,                   // redirect to file (but not 2>&1 stderr merge)
-  /\|\s*tee\s/,                      // pipe to tee
-  /\bcp\s/,                          // copy
-  /\bmv\s/,                          // move
-  /\brm\s/,                          // remove
-  /\bmkdir\s/,                       // create dir
-  /\btouch\s/,                       // create file
-  /\bsed\s+-i/,                      // sed in-place
-  /\bchmod\s/,                       // change permissions
-  /\bchown\s/,                       // change ownership
+  /(?<!\d)>\s*\S/, // redirect to file (but not 2>&1 stderr merge)
+  /\|\s*tee\s/, // pipe to tee
+  /\bcp\s/, // copy
+  /\bmv\s/, // move
+  /\brm\s/, // remove
+  /\bmkdir\s/, // create dir
+  /\btouch\s/, // create file
+  /\bsed\s+-i/, // sed in-place
+  /\bchmod\s/, // change permissions
+  /\bchown\s/, // change ownership
   /\bgit\s+(add|commit|push|merge|rebase|reset|checkout|stash)/,
   /\bnpm\s+(install|uninstall|update|publish)/,
   /\byarn\s+(add|remove|install)/,
-  /\bpip\s+(install|uninstall)/
+  /\bpip\s+(install|uninstall)/,
 ];
 
 const MODEL_VERSIONS = {
-  HAIKU: 'claude-haiku-4-5-20250929',
-  SONNET: 'claude-sonnet-4-5-20250929',
-  SONNET_NEW: 'claude-sonnet-4-6-20250514',
-  OPUS: 'claude-opus-4-20250514',
+  HAIKU: "claude-haiku-4-5-20250929",
+  SONNET: "claude-sonnet-4-5-20250929",
+  SONNET_NEW: "claude-sonnet-4-6-20250514",
+  OPUS: "claude-opus-4-20250514",
 };
 
 module.exports = {
@@ -118,5 +141,5 @@ module.exports = {
   READ_TOOLS,
   SECRET_PATTERNS,
   SAFE_BASH_READ,
-  BASH_WRITE_PATTERNS
+  BASH_WRITE_PATTERNS,
 };

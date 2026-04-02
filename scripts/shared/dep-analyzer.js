@@ -12,11 +12,11 @@
  * - execSync used intentionally (synchronous module for pipeline integration)
  */
 
-'use strict';
+"use strict";
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 // ─── Helpers ───
 
@@ -31,8 +31,8 @@ function runCommand(cmd, cwd) {
   try {
     const stdout = execSync(cmd, {
       cwd,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
       timeout: 60_000,
     });
     return { stdout, exitCode: 0, error: null };
@@ -47,9 +47,9 @@ function runCommand(cmd, cwd) {
     }
     // Genuine execution failure (command not found, timeout, etc.)
     return {
-      stdout: '',
+      stdout: "",
       exitCode: err.status || 127,
-      error: err.message || 'command execution failed',
+      error: err.message || "command execution failed",
     };
   }
 }
@@ -81,17 +81,27 @@ function parseAuditV2(auditJson) {
   for (const [name, entry] of Object.entries(vulns)) {
     findings.push({
       name,
-      severity: entry.severity || 'unknown',
+      severity: entry.severity || "unknown",
       isDirect: entry.isDirect || false,
-      title: (entry.via && Array.isArray(entry.via) && entry.via[0])
-        ? (typeof entry.via[0] === 'object' ? entry.via[0].title || '' : String(entry.via[0]))
-        : '',
-      url: (entry.via && Array.isArray(entry.via) && entry.via[0] && typeof entry.via[0] === 'object')
-        ? entry.via[0].url || ''
-        : '',
-      fixAvailable: entry.fixAvailable !== undefined
-        ? (typeof entry.fixAvailable === 'boolean' ? entry.fixAvailable : true)
-        : false,
+      title:
+        entry.via && Array.isArray(entry.via) && entry.via[0]
+          ? typeof entry.via[0] === "object"
+            ? entry.via[0].title || ""
+            : String(entry.via[0])
+          : "",
+      url:
+        entry.via &&
+        Array.isArray(entry.via) &&
+        entry.via[0] &&
+        typeof entry.via[0] === "object"
+          ? entry.via[0].url || ""
+          : "",
+      fixAvailable:
+        entry.fixAvailable !== undefined
+          ? typeof entry.fixAvailable === "boolean"
+            ? entry.fixAvailable
+            : true
+          : false,
     });
   }
 
@@ -121,9 +131,9 @@ function parseOutdated(outdatedJson) {
   for (const [name, entry] of Object.entries(outdatedJson)) {
     outdated.push({
       name,
-      current: entry.current || 'N/A',
-      wanted: entry.wanted || 'N/A',
-      latest: entry.latest || 'N/A',
+      current: entry.current || "N/A",
+      wanted: entry.wanted || "N/A",
+      latest: entry.latest || "N/A",
     });
   }
   return outdated;
@@ -142,13 +152,13 @@ function parseOutdated(outdatedJson) {
  */
 function analyzeDeps(opts) {
   // ─── Parameter validation ───
-  if (!opts || typeof opts !== 'object') {
-    return { ok: false, error: 'options object is required' };
+  if (!opts || typeof opts !== "object") {
+    return { ok: false, error: "options object is required" };
   }
 
   const { cwd } = opts;
-  if (!cwd || typeof cwd !== 'string') {
-    return { ok: false, error: 'cwd is required and must be a string' };
+  if (!cwd || typeof cwd !== "string") {
+    return { ok: false, error: "cwd is required and must be a string" };
   }
 
   // Verify cwd exists and has package.json
@@ -156,7 +166,7 @@ function analyzeDeps(opts) {
     if (!fs.existsSync(cwd)) {
       return { ok: false, error: `cwd does not exist: ${cwd}` };
     }
-    if (!fs.existsSync(path.join(cwd, 'package.json'))) {
+    if (!fs.existsSync(path.join(cwd, "package.json"))) {
       return { ok: false, error: `no package.json found in: ${cwd}` };
     }
   } catch (err) {
@@ -164,20 +174,24 @@ function analyzeDeps(opts) {
   }
 
   // ─── npm audit ───
-  const auditResult = runCommand('npm audit --json', cwd);
+  const auditResult = runCommand("npm audit --json", cwd);
   if (auditResult.error) {
     return { ok: false, error: `npm audit failed: ${auditResult.error}` };
   }
 
   const auditJson = safeJsonParse(auditResult.stdout);
   if (!auditJson) {
-    return { ok: false, error: 'audit parse failed: npm audit output is not valid JSON' };
+    return {
+      ok: false,
+      error: "audit parse failed: npm audit output is not valid JSON",
+    };
   }
 
-  const { findings, bySeverity, totalVulnerabilities } = parseAuditV2(auditJson);
+  const { findings, bySeverity, totalVulnerabilities } =
+    parseAuditV2(auditJson);
 
   // ─── npm outdated ───
-  const outdatedResult = runCommand('npm outdated --json', cwd);
+  const outdatedResult = runCommand("npm outdated --json", cwd);
   if (outdatedResult.error) {
     return { ok: false, error: `npm outdated failed: ${outdatedResult.error}` };
   }
@@ -185,12 +199,15 @@ function analyzeDeps(opts) {
   // Empty stdout means no outdated packages — normalize to {}
   const outdatedRaw = outdatedResult.stdout.trim();
   let outdatedJson;
-  if (outdatedRaw === '') {
+  if (outdatedRaw === "") {
     outdatedJson = {};
   } else {
     outdatedJson = safeJsonParse(outdatedRaw);
     if (outdatedJson === null) {
-      return { ok: false, error: 'outdated parse failed: npm outdated output is not valid JSON' };
+      return {
+        ok: false,
+        error: "outdated parse failed: npm outdated output is not valid JSON",
+      };
     }
   }
 
