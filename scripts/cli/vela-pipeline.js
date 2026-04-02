@@ -656,6 +656,44 @@ function checkLocalGate(stepDef, artifactDir) {
         }
         break;
       // Gates handled by engine (approval, git, hmac) — skip local check
+      case "ref_integrity": {
+        // Change Surface Analysis — verify no broken cross-file references
+        // Read baseline_sha from pipeline-state.json
+        const statePath = path.join(artifactDir, "pipeline-state.json");
+        let baselineSha = null;
+        if (fs.existsSync(statePath)) {
+          try {
+            const pState = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+            baselineSha = pState.baseline_sha || (pState.git && pState.git.checkpoint_hash);
+          } catch { /* ignore parse errors */ }
+        }
+        if (!baselineSha) {
+          // Legacy pipeline without baseline — skip gracefully
+          break;
+        }
+        try {
+          const configPath = path.join(TEMPLATES_DIR, "config.json");
+          let csaOpts = {};
+          if (fs.existsSync(configPath)) {
+            const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+            if (cfg.changeSurface) {
+              if (cfg.changeSurface.enabled === false) break;
+              if (cfg.changeSurface.excludePaths) {
+                csaOpts.excludePaths = cfg.changeSurface.excludePaths;
+              }
+            }
+          }
+          const { analyze } = require("../shared/change-surface.js");
+          const result = analyze(baselineSha, { cwd: CWD, ...csaOpts });
+          if (!result.verdict.pass) {
+            missing.push(`ref_integrity_fail:${result.verdict.errorCount} broken ref(s)`);
+          }
+        } catch (e) {
+          // CSA module error — don't block pipeline, warn only
+          console.error(`[ref_integrity] Warning: ${e.message}`);
+        }
+        break;
+      }
       default:
         break;
     }

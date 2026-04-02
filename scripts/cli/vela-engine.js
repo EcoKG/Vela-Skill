@@ -200,6 +200,7 @@ function cmdInit() {
           remote: gitState.remote,
         }
       : null,
+    baseline_sha: gitState.is_repo ? gitState.head_hash : null,
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
   };
@@ -1600,6 +1601,36 @@ function checkExitGate(stepDef, state) {
       case "report_md_exists":
         // Finalize gate - report is the output of this step
         break;
+      case "ref_integrity": {
+        // Change Surface Analysis — verify no broken cross-file references
+        const baselineSha = state.baseline_sha || (state.git && state.git.checkpoint_hash);
+        if (!baselineSha) {
+          // Legacy pipeline without baseline — skip gracefully
+          break;
+        }
+        try {
+          const configPath = path.join(VELA_DIR, "templates", "config.json");
+          let csaOpts = {};
+          if (fs.existsSync(configPath)) {
+            const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+            if (cfg.changeSurface) {
+              if (cfg.changeSurface.enabled === false) break;
+              if (cfg.changeSurface.excludePaths) {
+                csaOpts.excludePaths = cfg.changeSurface.excludePaths;
+              }
+            }
+          }
+          const { analyze } = require("../shared/change-surface.js");
+          const result = analyze(baselineSha, { cwd: CWD, ...csaOpts });
+          if (!result.verdict.pass) {
+            missing.push(`ref_integrity_fail:${result.verdict.errorCount} broken ref(s)`);
+          }
+        } catch (e) {
+          // CSA module error — don't block pipeline, warn only
+          console.error(`[ref_integrity] Warning: ${e.message}`);
+        }
+        break;
+      }
       default:
         // Unknown gate, skip
         break;

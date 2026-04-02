@@ -92,7 +92,7 @@
           "actor": "agent",
           "mode": "readwrite",
           "entry_gate": ["branch_created"],
-          "exit_gate": ["implementation_complete", "review_exists"],
+          "exit_gate": ["implementation_complete", "review_exists", "ref_integrity"],
           "artifacts": ["task-summary.md"],
           "max_revisions": 5,
           "sub_phases": ["test-write", "implement", "refactor"],

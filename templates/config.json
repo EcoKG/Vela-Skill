@@ -1,4 +1,17 @@
 {
   "version": "1.0",
-  "engine": "vela"
+  "engine": "vela",
+  "changeSurface": {
+    "enabled": true,
+    "excludePaths": [
+      "node_modules",
+      ".git",
+      ".gsd",
+      ".vela/artifacts",
+      "package-lock.json",
+      "yarn.lock",
+      "pnpm-lock.yaml"
+    ],
+    "minTokenLength": 3
+  }
 }
