@@ -41,3 +41,5 @@ CLAUDE.md
 # Runtime state (pi harness)
 .bg-shell/
 .artifacts/
+reports/
+next-step.md
