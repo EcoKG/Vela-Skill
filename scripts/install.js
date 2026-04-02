@@ -222,6 +222,14 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/sdk-researcher.js", dst: "shared/sdk-researcher.js" },
   { src: "scripts/shared/sdk-executor.js", dst: "shared/sdk-executor.js" },
   { src: "scripts/shared/sdk-analyzer.js", dst: "shared/sdk-analyzer.js" },
+  {
+    src: "scripts/shared/sdk-custom-tools.js",
+    dst: "shared/sdk-custom-tools.js",
+  },
+  {
+    src: "scripts/shared/change-surface.js",
+    dst: "shared/change-surface.js",
+  },
 ];
 
 // Subdirectories managed by Vela — orphan cleanup scans only these.
