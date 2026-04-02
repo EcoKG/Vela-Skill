@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { MODEL_VERSIONS } = require('../shared/constants');
 
 // ─── Argument Parsing ───
 
@@ -31,8 +32,8 @@ function getFlag(name) {
 
 const VALID_PERSPECTIVES = ['security', 'bugs', 'performance', 'code-quality', 'architecture'];
 const MODEL_MAP = {
-  haiku: 'claude-haiku-4-5-20250929',
-  sonnet: 'claude-sonnet-4-5-20250929',
+  haiku: MODEL_VERSIONS.HAIKU,
+  sonnet: MODEL_VERSIONS.SONNET,
 };
 
 function printUsage() {
