@@ -37,3 +37,7 @@ tmp/
 .vela/
 .claude/
 CLAUDE.md
+
+# Runtime state (pi harness)
+.bg-shell/
+.artifacts/
