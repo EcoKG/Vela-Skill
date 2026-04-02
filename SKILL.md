@@ -174,11 +174,16 @@ node .vela/cli/vela-engine.js auto
    │   ├── sdk-researcher.js    ← 3관점 병렬 분석
    │   ├── sdk-executor.js      ← Sonnet TDD 실행
    │   ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석
+   │   ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리
    │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
    │   └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
    ├── cli/                     ← 커스텀 CLI 도구
+   │   ├── vela-analyze.js      ← 분석 보고서 CLI (deps/run/full/report)
+   │   ├── vela-cost.js         ← 파이프라인 비용/메트릭
+   │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진
    │   ├── vela-pipeline.js     ← SDK 오케스트레이터 (파이프라인 자동 실행)
-   │   └── vela-engine.js       ← 파이프라인 상태 머신 엔진
+   │   ├── vela-report.js       ← 파이프라인 리포트/대시보드
+   │   └── vela-wave.js         ← Wave 병렬 그룹화 PoC
    ├── cache/                   ← TreeNode SQLite 캐시
    │   └── treenode.js          ← 캐시 관리자
    ├── templates/

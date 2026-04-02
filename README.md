@@ -236,8 +236,8 @@ scripts/shared/
 ├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
 ├── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
 ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석 (security/bugs/performance/code-quality/architecture)
+├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리 (3 tools)
 ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석 (SDK 불필요)
-├── pipeline.js          ← 파이프라인 상태 관리, Gate Keeper/Guard 로직
 └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
 ```
 
@@ -470,13 +470,14 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   │   ├── sdk-researcher.js    ← 3관점 병렬 분석
   │   │   ├── sdk-executor.js      ← Sonnet TDD 실행
   │   │   ├── sdk-analyzer.js      ← 5관점 코드 분석 (security/bugs/perf/quality/arch)
+  │   │   ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리
   │   │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
   │   │   └── constants.js         ← 가드 패턴 상수
-  │   ├── cli/                   ← vela-engine, vela-pipeline, vela-cost, vela-report, vela-analyze
+  │   ├── cli/                   ← vela-engine, vela-pipeline, vela-cost, vela-report, vela-analyze, vela-wave
   │   ├── agents/                ← vela.md, researcher, planner, executor, reviewer, conflict-manager, leader
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
-  │   ├── tests/                 ← 22개 계약 테스트 스위트
+  │   ├── tests/                 ← 17개 계약 테스트 스위트
   │   ├── install.js             ← 설치/검증/복구/upgrade/orphan cleanup
   │   └── statusline.sh          ← ⛵ 하단 바
   ├── templates/                 ← pipeline.json, config.json, presets.json
@@ -539,7 +540,7 @@ vela-analyze report --input <file> [--output]    # JSON → PDF 변환
 
 ## 테스트
 
-22개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
+17개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
 
 ```bash
 # 전체 SDK 통합 테스트 (81 assertions)
@@ -557,7 +558,6 @@ bash scripts/tests/test-sdk-analyzer.sh
 # 보안 강화 테스트 (M008)
 bash scripts/tests/test-fail-closed.sh        # 7 assertions — Fail-closed 게이트
 bash scripts/tests/test-chain-operators.sh     # 13 assertions — 체인 연산자 차단
-bash scripts/tests/test-hmac-signing.sh        # 13 assertions — 레거시 서명 검증
 bash scripts/tests/test-s03-relaxation.sh      # 21 assertions — 파이프라인 완화
 bash scripts/tests/test-s04-hardening.sh       # 21 assertions — 코드 품질 강화
 
@@ -567,14 +567,10 @@ bash scripts/tests/test-sdk-reviewer.sh     # 18 assertions — 3단계 리뷰
 bash scripts/tests/test-sdk-plan-checker.sh # 13 assertions — plan.md 검증
 bash scripts/tests/test-sdk-researcher.sh   # 23 assertions — 3관점 분석
 bash scripts/tests/test-sdk-executor.sh     # 13 assertions — 코드 실행
+bash scripts/tests/test-sdk-custom-tools.sh # MCP 커스텀 도구 서버 팩토리
 bash scripts/tests/test-gate-vk07.sh        # Gate Keeper 규칙
 bash scripts/tests/test-auto-mode.sh        # Auto 모드 (16 assertions)
-bash scripts/tests/test-stop-hook.sh        # 레거시 Stop hook 계약
-bash scripts/tests/test-subagent-stop.sh    # 레거시 SubagentStop 계약
-bash scripts/tests/test-permission-hook.sh  # 레거시 Permission 계약
-bash scripts/tests/test-failure-hooks.sh    # 레거시 Failure/StopFailure/TeammateIdle
-bash scripts/tests/test-prompt-async-hooks.sh # 레거시 ReviewPrompt + TestAsync
-bash scripts/tests/test-notification-hook.sh  # 레거시 데스크톱 알림
+bash scripts/tests/test-wave-poc.sh         # Wave 병렬 그룹화 PoC
 ```
 
 ⚠️ SDK 테스트 스위트들은 공유 mock 디렉토리를 사용하므로 **순차 실행** 필수 (병렬 실행 시 mock collision 발생).
@@ -612,6 +608,9 @@ bash scripts/tests/test-notification-hook.sh  # 레거시 데스크톱 알림
 | v3.2 | M008 | 전수 수정 — Fail-closed 게이트, 체인 연산자 차단(VK-08), 파이프라인 완화(trivial/hotfix exit_gate:[]), execFileSync 전환(35+ callers), SQL parameterization, SDK null guards. 21개 테스트 스위트 230/230 PASS |
 | v3.2 | M009 | 배포 고도화 — FILE_MANIFEST 단일화, orphan cleanup, 버전 일원화, config migration |
 | v3.3 | M010 | **SDK 오케스트레이터 전환** — 18개 훅 → SDK query() 기반 vela-pipeline.js 오케스트레이터. 훅 전면 제거, SDK callbacks로 Gate Keeper/Guard 구현. 파이프라인 밖 훅 오버헤드 0 |
+| v3.3 | M011 | README + GitHub 문서 최신화 — SDK 오케스트레이터 전환 이후 문서-코드 불일치 전면 해소 |
+| v3.3 | M012 | 전수 조사 + 발전 방향 수립 — UPGRADE-REPORT.md (P0~P5 우선순위 매트릭스, M013~M016 마일스톤 제안) |
+| v4.0 | M013 | **v4.0 전면 고도화** — sdk-custom-tools.js MCP 서버 팩토리, vela-wave.js PoC, SDK structured output 이중 추출, 레거시 훅 잔재 전면 제거, SDK mock 안정화, install.js 14개 감사 지적 반영. 17개 테스트 스위트 PASS |
 
 ---
 

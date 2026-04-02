@@ -14,8 +14,8 @@ description: "⛵ Vela 환경 구축 — 프로젝트에 Vela 샌드박스 엔�
 
 2. **스크립트 배포**
    이 스킬의 `scripts/` 디렉토리에 있는 파일들을 `.vela/`로 복사한다:
-   - `scripts/hooks/*` → `.vela/hooks/` (서브디렉토리 포함: `shared/` 내 SDK 모듈 7개)
-   - `scripts/cli/*` → `.vela/cli/`
+   - `scripts/shared/*` → `.vela/shared/` (SDK 모듈 9개 + constants.js)
+   - `scripts/cli/*` → `.vela/cli/` (6개 CLI 도구)
    - `scripts/cache/*` → `.vela/cache/`
    - `scripts/agents/*` → `.vela/agents/` (서브디렉토리 포함: `pm/`, `researcher/`, `executor/`, `planner/`, `reviewer/`, `conflict-manager/`)
    - `scripts/guidelines/*` → `.vela/guidelines/`

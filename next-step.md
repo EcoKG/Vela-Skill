@@ -12,6 +12,13 @@
 | **v3.1** | M006 | 글로벌 오염 정리 — ~/.claude/ 잔여물 전체 정리(146MB+ 회수), install.sh/update.sh 서브스킬 플랫 복사 제거, install.js validate() 자기 치유 가드 추가 | ✅ 완료 |
 | **v3.1** | M007 | 프로젝트 전수 검수 — 코드베이스 ~14,500줄 정밀 감사. 59건 발견(High 8, Medium 24, Low 27). AUDIT-001~059 통합 보고서 산출 | ✅ 완료 |
 | **v3.2** | M008 | 전수 수정 — Fail-closed 게이트, HMAC-SHA256 서명 체인, 체인 연산자 차단(VK-08), 파이프라인 완화(trivial/hotfix exit_gate:[]), execFileSync 전환(35+ callers), SQL parameterization, SDK null guards. 21개 테스트 스위트 230/230 PASS | ✅ 완료 |
+| **v3.2** | M009 | 배포 고도화 — FILE_MANIFEST 단일화, orphan cleanup, 버전 일원화, config migration | ✅ 완료 |
+| **v3.3** | M010 | SDK 오케스트레이터 전환 — 18개 훅 → SDK query() 기반 vela-pipeline.js. 훅 전면 제거, SDK callbacks로 Gate Keeper/Guard 구현 | ✅ 완료 |
+| **v3.3** | M011 | README + GitHub 문서 최신화 — SDK 오케스트레이터 전환 이후 문서-코드 불일치 전면 해소 | ✅ 완료 |
+| **v3.3** | M012 | 전수 조사 + 발전 방향 수립 — UPGRADE-REPORT.md (P0~P5 우선순위 매트릭스, M013~M016 마일스톤 제안) | ✅ 완료 |
+| **v4.0** | M013 | v4.0 전면 고도화 — sdk-custom-tools.js MCP 서버 팩토리, vela-wave.js PoC, SDK structured output, 레거시 훅 잔재 제거, 17개 테스트 스위트 PASS | ✅ 완료 |
+| — | R013 | Wave 병렬 그룹화 — vela-wave.js PoC (parsePlanMd + topologicalSort + cycle detection + CLI --json). test-wave-poc.sh 8/8 PASS | ✅ validated |
+| — | R014 | HTML 대시보드 — vela-report.js --html (타임라인, 점수, approve/reject 히스토리, 반응형 디자인) | ✅ validated |
 
 ---
 
@@ -19,10 +26,7 @@
 
 ### Deferred (우선순위 미정)
 
-| ID | 기능 | 설명 | 유래 |
-|----|------|------|------|
-| R013 | Wave 병렬 그룹화 | plan.md Task Distribution에서 의존성 그래프 추출 → 병렬 가능한 작업을 Wave로 그룹화 | GSD 분석 |
-| R014 | HTML 대시보드 | `vela-engine report --html`로 시각적 파이프라인 리포트 (타임라인, 점수, approve/reject 히스토리) | GSD 분석 |
+*현재 deferred 항목 없음. R013/R014는 M013에서 validated.*
 
 ### 아이디어 풀 (검토 필요)
 
