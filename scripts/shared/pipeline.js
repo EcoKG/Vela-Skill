@@ -9,6 +9,7 @@ const path = require('path');
 /**
  * Find the most recent active (non-completed) pipeline state.
  * Searches .vela/artifacts/{date}/{slug}/pipeline-state.json
+ * @deprecated Use findActiveState() in scripts/cli/vela-engine.js instead. Will be removed in S06.
  */
 function findActivePipeline(velaDir) {
   const artifactsDir = path.join(velaDir, 'artifacts');
@@ -87,6 +88,7 @@ function findActivePipeline(velaDir) {
 
 /**
  * Check if an active pipeline exists in the project.
+ * @deprecated Use findActiveState() in scripts/cli/vela-engine.js instead. Will be removed in S06.
  */
 function hasActivePipeline(cwd) {
   const velaDir = path.join(cwd, '.vela');
@@ -96,6 +98,7 @@ function hasActivePipeline(cwd) {
 
 /**
  * Read the Vela config from the project.
+ * @deprecated Use readConfig() in scripts/cli/vela-engine.js instead. Will be removed in S06.
  */
 function readConfig(cwd) {
   const configPath = path.join(cwd, '.vela', 'config.json');
@@ -109,6 +112,7 @@ function readConfig(cwd) {
 
 /**
  * Read pipeline definition.
+ * @deprecated Use loadPipelineDefinition() in scripts/cli/vela-engine.js instead. Will be removed in S06.
  */
 function readPipelineDefinition(cwd) {
   const pipelinePath = path.join(cwd, '.vela', 'templates', 'pipeline.json');
@@ -122,6 +126,7 @@ function readPipelineDefinition(cwd) {
 
 /**
  * Get the current step definition from the pipeline.
+ * @deprecated Use resolveSteps() + find in scripts/cli/vela-engine.js instead. Will be removed in S06.
  */
 function getCurrentStepDef(pipelineDef, state) {
   if (!pipelineDef || !state) return null;
@@ -151,6 +156,7 @@ function getCurrentStepDef(pipelineDef, state) {
 
 /**
  * Get the mode for the current pipeline step.
+ * @deprecated Use engine CLI bridge getActiveState() in scripts/cli/vela-pipeline.js instead. Will be removed in S06.
  */
 function getCurrentMode(cwd) {
   const velaDir = path.join(cwd, '.vela');
@@ -166,6 +172,7 @@ function getCurrentMode(cwd) {
 
 /**
  * Get session state file path (project-local).
+ * @deprecated Use session state management in scripts/cli/vela-engine.js instead. Will be removed in S06.
  */
 function getSessionStatePath(sessionId, cwd) {
   const velaStateDir = path.join(cwd || process.cwd(), '.vela', 'state');

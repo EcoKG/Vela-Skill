@@ -1116,6 +1116,11 @@ function findActiveState() {
         if (state.status === 'completed' || state.status === 'cancelled') continue;
         state._path = statePath;
         state._artifactDir = dirPath;
+        // Mark stale if untouched for 24 hours
+        const mtime = fs.statSync(statePath).mtimeMs;
+        if (Date.now() - mtime > 24 * 60 * 60 * 1000) {
+          state._stale = true;
+        }
         return state;
       } catch (e) { continue; }
     }
@@ -1133,6 +1138,11 @@ function findActiveState() {
           if (state.status === 'completed' || state.status === 'cancelled') continue;
           state._path = statePath;
           state._artifactDir = path.join(datePath, slugDir);
+          // Mark stale if untouched for 24 hours
+          const mtime = fs.statSync(statePath).mtimeMs;
+          if (Date.now() - mtime > 24 * 60 * 60 * 1000) {
+            state._stale = true;
+          }
           return state;
         } catch (e) { continue; }
       }

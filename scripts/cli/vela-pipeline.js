@@ -978,39 +978,25 @@ function resolveSteps(pipelineDef, pipelineType) {
 }
 
 /**
- * Get the active pipeline state (from engine or direct file read).
- * Uses engine 'state' command for canonical state.
+ * Get the active pipeline state (from engine CLI bridge).
+ * Uses engine 'state' command for canonical state, reads full state from artifact_dir.
  */
 function getActiveState() {
   const result = engine(['state']);
   if (!result.ok || !result.active) return null;
+  if (!result.artifact_dir) return null;
 
-  // Also read the raw state for _artifactDir
-  const artifactsDir = path.join(VELA_DIR, 'artifacts');
-  if (!fs.existsSync(artifactsDir)) return null;
+  const statePath = path.join(result.artifact_dir, 'pipeline-state.json');
+  if (!fs.existsSync(statePath)) return null;
 
   try {
-    const allDirs = fs.readdirSync(artifactsDir)
-      .filter(d => /^\d{4}-\d{2}-\d{2}_/.test(d))
-      .sort()
-      .reverse();
-
-    for (const dir of allDirs) {
-      const dirPath = path.join(artifactsDir, dir);
-      try { if (!fs.statSync(dirPath).isDirectory()) continue; } catch { continue; }
-      const statePath = path.join(dirPath, 'pipeline-state.json');
-      if (!fs.existsSync(statePath)) continue;
-      try {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-        if (state.status === 'completed' || state.status === 'cancelled') continue;
-        state._path = statePath;
-        state._artifactDir = dirPath;
-        return state;
-      } catch (_e) { continue; }
-    }
-  } catch (_e) {}
-
-  return null;
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+    state._path = statePath;
+    state._artifactDir = result.artifact_dir;
+    return state;
+  } catch (_e) {
+    return null;
+  }
 }
 
 function getFlag(flag) {
