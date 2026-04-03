@@ -77,7 +77,7 @@ Reflection 출력 후 반드시 AskUserQuestion으로 확인한다:
 - **"맞다 — 진행"** (Recommended) → scale 선택으로 진행
 - **"수정 필요"** → 보완 항목 수집으로 복귀
 
-승인된 프롬프트가 `vela-engine init`의 request가 된다.
+승인된 프롬프트가 `vela-pipeline.js run`의 request가 된다.
 
 ## UI 템플릿
 `.vela/references/interactive-ui.md`의 해당 섹션을 읽어라.

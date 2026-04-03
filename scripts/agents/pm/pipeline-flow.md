@@ -3,6 +3,7 @@
 ## Standard Pipeline (large)
 
 ```
+0. `node .vela/cli/vela-pipeline.js run "요청" --scale large` — 오케스트레이터가 파이프라인 시작
 1. TeamCreate: team_name "vela-pipeline"
 
 [Research] — Subagent (Sonnet)
@@ -10,33 +11,39 @@
    - 프로젝트 분석 수행
    - 요구사항 파악 → 코드베이스 탐색 → 의존성/제약 분석 → 결론
 3. PM이 리포트를 검토하여 research.md 작성
-4. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-research.md 생성
+4. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-research.md 생성
 5. PM이 review 읽고 approve/reject 판단
 
 [Plan] — Subagent (Sonnet)
 6. Planner subagent (model: "sonnet") → plan.md
-7. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-plan.md 생성
+7. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-plan.md 생성
 8. PM approve/reject
 
 [Execute — 단일 모듈] — Subagent (Sonnet)
-9. `node .vela/cli/vela-engine.js execute` → SDK Executor (Sonnet) 코드 구현
-10. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-execute.md 생성
+9. 오케스트레이터 → `vela-engine.js execute` 내부 호출 → SDK Executor (Sonnet) 코드 구현
+10. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-execute.md 생성
 11. PM approve/reject
 
 [Execute — CrossLayer/다중 모듈] — Teammate (Sonnet)
 9. Teammate 3~5명 (model: "sonnet", team_name, isolation: "worktree")
-10. `node .vela/cli/vela-engine.js review` → SDK Reviewer 실행 → review-execute.md 생성
+10. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-execute.md 생성
 11. PM approve/reject
 
 12. TeamDelete
 ```
 
 ## Quick Pipeline (medium)
-Plan: Planner subagent (Sonnet) + SDK Reviewer (`vela-engine.js review`)
-Execute: SDK Executor (`vela-engine.js execute`) + SDK Reviewer (`vela-engine.js review`)
+
+`node .vela/cli/vela-pipeline.js run "요청" --scale medium` — 오케스트레이터가 파이프라인 시작
+
+Plan: Planner subagent (Sonnet) + 오케스트레이터 내부 `vela-engine.js review`
+Execute: 오케스트레이터 내부 `vela-engine.js execute` + `vela-engine.js review`
 팀 소환 없음.
 
 ## Trivial Pipeline (small)
+
+`node .vela/cli/vela-pipeline.js run "요청" --scale small` — 오케스트레이터가 파이프라인 시작
+
 PM 직접 수행. 에이전트 소환 없음. 소스 코드 직접 접근 허용.
 
 ## Ralph Pipeline
