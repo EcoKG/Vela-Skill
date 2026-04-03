@@ -21,12 +21,33 @@ const path = require("path");
 
 /**
  * Dynamically import the Claude Agent SDK.
- * Returns the module or an object with _error if unavailable.
+ * Uses 3-tier fallback (same as sdk-runner.js — see K009):
+ *   1. Normal bare specifier
+ *   2. Absolute path to skill install location
+ *   3. Returns { _error }
  * @returns {Promise<Object>}
  */
 async function loadSdk() {
   try {
     const sdk = await import("@anthropic-ai/claude-agent-sdk");
+    return sdk;
+  } catch (_) {
+    // fall through to tier 2
+  }
+
+  try {
+    const os = require("os");
+    const sdkPath = path.join(
+      os.homedir(),
+      ".claude",
+      "skills",
+      "vela",
+      "node_modules",
+      "@anthropic-ai",
+      "claude-agent-sdk",
+      "sdk.mjs",
+    );
+    const sdk = await import(sdkPath);
     return sdk;
   } catch (err) {
     return { _error: err };

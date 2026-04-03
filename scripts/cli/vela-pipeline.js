@@ -821,15 +821,9 @@ async function runPipeline(request, scale, type) {
   console.log("═══════════════════════════════════════════════════");
 
   // Step 1: Initialize pipeline via engine
-  const initResult = engine([
-    "init",
-    request,
-    "--scale",
-    scale,
-    "--type",
-    type,
-    "--auto",
-  ]);
+  const engineArgs = ["init", request, "--scale", scale, "--type", type, "--auto"];
+  if (hasFlag("--force")) engineArgs.push("--force");
+  const initResult = engine(engineArgs);
 
   if (!initResult.ok) {
     console.error(`❌ Init failed: ${initResult.error}`);

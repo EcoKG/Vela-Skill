@@ -14,12 +14,42 @@
 
 /**
  * Dynamically import the Claude Agent SDK.
- * Returns the module or null if unavailable.
- * @returns {Promise<{query: Function}|null>}
+ * Uses 3-tier fallback to handle ESM import() resolution gaps (K009):
+ *   1. Normal bare specifier — works when SDK is in the module resolution chain
+ *   2. Absolute path to skill install location ($HOME/.claude/skills/vela/node_modules/)
+ *   3. Returns { _error } — caller handles as sdk_not_available
+ *
+ * Tier 2 is needed because deploy-common.sh copies scripts to .vela/shared/
+ * but doesn't copy node_modules. ESM import() resolves from the importing
+ * module's directory, so .vela/shared/sdk-runner.js can't find the SDK
+ * installed at ~/.claude/skills/vela/node_modules/.
+ *
+ * @returns {Promise<{query: Function}|{_error: Error}>}
  */
 async function loadSdk() {
+  // Tier 1: normal ESM resolution (works in source repo & when SDK is in ancestor node_modules)
   try {
     const sdk = await import("@anthropic-ai/claude-agent-sdk");
+    return sdk;
+  } catch (_) {
+    // fall through to tier 2
+  }
+
+  // Tier 2: absolute path to skill install location
+  try {
+    const os = require("os");
+    const path = require("path");
+    const sdkPath = path.join(
+      os.homedir(),
+      ".claude",
+      "skills",
+      "vela",
+      "node_modules",
+      "@anthropic-ai",
+      "claude-agent-sdk",
+      "sdk.mjs",
+    );
+    const sdk = await import(sdkPath);
     return sdk;
   } catch (err) {
     return { _error: err };
