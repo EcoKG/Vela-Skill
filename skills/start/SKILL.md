@@ -27,7 +27,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
 
 4. **파이프라인 시작**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
    ```
 
 5. **파이프라인 진행**

@@ -24,7 +24,7 @@ node .vela/cli/vela-engine.js auto
 
 4. **파이프라인 시작 (auto 플래그 추가)**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs> --auto
+   node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs> --auto
    ```
 
 5. **자동 진행**
