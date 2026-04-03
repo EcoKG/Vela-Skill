@@ -443,7 +443,7 @@ async function main() {
       }
 
       const modelName = getFlag("--model") || "haiku";
-      if (!MODEL_MAP[modelName]) {
+      if (!(modelName in MODEL_MAP)) {
         console.error(
           `Error: Unknown model "${modelName}". Valid values: ${Object.keys(MODEL_MAP).join(", ")}`,
         );
@@ -496,7 +496,7 @@ async function main() {
 
       // ─── Validate --model flag ───
       const fullModelName = getFlag("--model") || "haiku";
-      if (!MODEL_MAP[fullModelName]) {
+      if (!(fullModelName in MODEL_MAP)) {
         console.error(
           `Error: Unknown model "${fullModelName}". Valid values: ${Object.keys(MODEL_MAP).join(", ")}`,
         );
