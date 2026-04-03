@@ -87,12 +87,11 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  *
  * @param {Object} opts
  * @param {string} opts.prompt - Required. The prompt to send to the agent.
- * @param {string} [opts.model] - Model identifier (e.g. 'claude-sonnet-4-5-20250929').
+ * @param {string} [opts.model] - Model identifier (e.g. 'claude-sonnet-4-6-20250514'. Omit to use Claude Code default.).
  * @param {string} [opts.cwd] - Working directory for the agent.
  * @param {string[]} [opts.allowedTools] - Tools the agent may use.
  * @param {string[]} [opts.disallowedTools] - Tools the agent may NOT use.
  * @param {number} [opts.maxTurns] - Maximum conversation turns.
- * @param {number} [opts.maxBudgetUsd] - Budget cap in USD.
  * @param {string} [opts.permissionMode='bypassPermissions'] - Permission mode.
  * @param {string|Object} [opts.systemPrompt] - System prompt string or preset object.
  * @param {boolean} [opts.persistSession=false] - Whether to persist the session.
@@ -164,7 +163,6 @@ async function runSdkAgent(opts) {
   if (opts.allowedTools) queryOptions.allowedTools = opts.allowedTools;
   if (opts.disallowedTools) queryOptions.disallowedTools = opts.disallowedTools;
   if (opts.maxTurns != null) queryOptions.maxTurns = opts.maxTurns;
-  if (opts.maxBudgetUsd != null) queryOptions.maxBudgetUsd = opts.maxBudgetUsd;
   if (opts.systemPrompt != null) queryOptions.systemPrompt = opts.systemPrompt;
   if (opts.abortController) queryOptions.abortController = opts.abortController;
 

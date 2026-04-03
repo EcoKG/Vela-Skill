@@ -28,7 +28,6 @@ const { MODEL_VERSIONS } = require("./constants");
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const MAX_TURNS = 3;
-const MAX_BUDGET_USD = 0.03;
 
 const VERDICT_REGEX = /VERDICT:\s*(PASS|FAIL)/i;
 
@@ -155,7 +154,6 @@ async function sdkPlanCheck(opts) {
     cwd,
     systemPrompt: PLAN_CHECK_SYSTEM_PROMPT,
     maxTurns: MAX_TURNS,
-    maxBudgetUsd: MAX_BUDGET_USD,
     effort: "low",
     outputFormat: { type: "json", schema: PLAN_CHECK_OUTPUT_SCHEMA },
   });

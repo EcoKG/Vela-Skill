@@ -33,7 +33,6 @@ const { MODEL_VERSIONS } = require("./constants");
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
 const MAX_TURNS = 5;
-const MAX_BUDGET_USD = 0.05;
 
 // ─── Structured output schema (K011 pattern — module-local) ───
 const ANALYZER_OUTPUT_SCHEMA = {
@@ -415,7 +414,6 @@ function normalizeFindingsArray(findings) {
  * @param {string} opts.cwd - Project root working directory
  * @param {string} [opts.model] - Model to use (default: claude-haiku-4-5-20250929)
  * @param {number} [opts.maxTurns] - Max turns per agent (default: 5)
- * @param {number} [opts.maxBudgetUsd] - Budget per agent in USD (default: 0.05)
  *
  * settingSources: [] — passed through runSdkAgent to prevent hook loading in SDK agents
  *
@@ -428,7 +426,6 @@ function normalizeFindingsArray(findings) {
 async function sdkAnalyze(opts) {
   if (!opts || typeof opts !== "object" || Array.isArray(opts))
     return { ok: false, error: "invalid_input" };
-  const { perspectives, cwd, model, maxTurns, maxBudgetUsd } = opts;
   // ─── Input validation ───
   if (!Array.isArray(perspectives)) {
     return { ok: false, error: "perspectives must be an array" };
@@ -473,7 +470,6 @@ async function sdkAnalyze(opts) {
 
   const selectedModel = model || HAIKU_MODEL;
   const selectedMaxTurns = maxTurns || MAX_TURNS;
-  const selectedMaxBudget = maxBudgetUsd || MAX_BUDGET_USD;
   const overallStart = Date.now();
 
   // ─── Launch perspectives in parallel ───
@@ -487,7 +483,6 @@ async function sdkAnalyze(opts) {
       cwd,
       systemPrompt: perspective.systemPrompt,
       maxTurns: selectedMaxTurns,
-      maxBudgetUsd: selectedMaxBudget,
       effort: "medium",
       outputFormat: { type: "json", schema: ANALYZER_OUTPUT_SCHEMA },
       // settingSources: [] is set inside runSdkAgent (D014 — hook isolation)

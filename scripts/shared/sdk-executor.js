@@ -26,9 +26,8 @@ const { runSdkAgent } = require("./sdk-runner");
 const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
-const SONNET_MODEL = MODEL_VERSIONS.SONNET_NEW;
+const SONNET_MODEL = MODEL_VERSIONS.SONNET;
 const MAX_TURNS = 25;
-const MAX_BUDGET_USD = 1.0;
 
 // ─── Inlined executor system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.
@@ -177,7 +176,6 @@ async function sdkExecute(opts) {
     cwd,
     systemPrompt: EXECUTOR_SYSTEM_PROMPT,
     maxTurns: MAX_TURNS,
-    maxBudgetUsd: MAX_BUDGET_USD,
     permissionMode: "bypassPermissions",
     effort: "high",
   });

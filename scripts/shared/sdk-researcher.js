@@ -32,7 +32,6 @@ const { MODEL_VERSIONS } = require("./constants");
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const MAX_TURNS = 5;
-const MAX_BUDGET_USD = 0.05;
 
 // ─── Hypothesis prefix — prepended to all perspective prompts ───
 // Enforces competing-hypothesis debugging procedure for structured analysis.
@@ -185,7 +184,6 @@ async function sdkResearch(opts) {
       cwd,
       systemPrompt: prompt,
       maxTurns: MAX_TURNS,
-      maxBudgetUsd: MAX_BUDGET_USD,
       effort: "low",
     });
   });

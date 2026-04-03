@@ -377,10 +377,10 @@ function engine(engineArgs) {
  * Maps step characteristics to appropriate models.
  */
 const MODEL_MAP = {
-  researcher: MODEL_VERSIONS.SONNET_NEW, // Sonnet for research analysis
-  planner: MODEL_VERSIONS.SONNET_NEW, // Sonnet for planning
-  executor: MODEL_VERSIONS.SONNET_NEW, // Sonnet for implementation
-  reviewer: MODEL_VERSIONS.SONNET_NEW, // Sonnet for initial review
+  researcher: MODEL_VERSIONS.SONNET, // Sonnet for research analysis
+  planner: MODEL_VERSIONS.SONNET, // Sonnet for planning
+  executor: MODEL_VERSIONS.SONNET, // Sonnet for implementation
+  reviewer: MODEL_VERSIONS.SONNET, // Sonnet for initial review
 };
 
 const EFFORT_MAP = {
@@ -388,13 +388,6 @@ const EFFORT_MAP = {
   planner: "high",
   executor: "high",
   reviewer: "high",
-};
-
-const BUDGET_MAP = {
-  researcher: 0.3,
-  planner: 0.5,
-  executor: 1.0,
-  reviewer: 0.5,
 };
 
 const TURNS_MAP = {
@@ -517,8 +510,7 @@ async function runStep(stepDef, state) {
   const userPrompt = buildStepPrompt(stepDef, state, artifactDir);
 
   // Select model and budget
-  const model = MODEL_MAP[actor] || MODEL_VERSIONS.SONNET_NEW;
-  const maxBudgetUsd = BUDGET_MAP[actor] || 0.5;
+  const model = MODEL_MAP[actor] || MODEL_VERSIONS.SONNET;
   const maxTurns = TURNS_MAP[actor] || 15;
 
   // Track used tools for observability
@@ -579,7 +571,6 @@ async function runStep(stepDef, state) {
     cwd: CWD,
     systemPrompt,
     maxTurns,
-    maxBudgetUsd,
     allowedTools: modeOptions.tools,
     disallowedTools: modeOptions.disallowedTools,
     hooks,

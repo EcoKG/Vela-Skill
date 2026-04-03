@@ -75,7 +75,6 @@ const REVIEWER_OUTPUT_SCHEMA = {
 
 // ─── Stage 3: Opus escalation model + budget ───
 const OPUS_MODEL = MODEL_VERSIONS.OPUS;
-const OPUS_BUDGET = 0.5;
 
 // ─── Inlined reviewer system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.
@@ -231,7 +230,6 @@ function buildReviewPrompt(step, priorReview) {
  * @param {string} opts.step - Pipeline step name
  * @param {string} opts.cwd - Working directory
  * @param {number} opts.maxTurns - Max conversation turns
- * @param {number} opts.maxBudgetUsd - Budget cap
  * @param {string|null} opts.priorReview - Prior review text (Stage 2 only)
  * @returns {Promise<Object>} { ok, result, score, cost, model, durationMs } or { ok: false, error }
  */
@@ -244,7 +242,6 @@ async function runReviewStage(opts) {
     cwd: opts.cwd,
     systemPrompt: REVIEWER_SYSTEM_PROMPT,
     maxTurns: opts.maxTurns,
-    maxBudgetUsd: opts.maxBudgetUsd,
     outputFormat: { type: "json", schema: REVIEWER_OUTPUT_SCHEMA },
     // settingSources: [] is set by runSdkAgent internally (D014)
   };
@@ -299,7 +296,6 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
     step,
     cwd,
     maxTurns: 10,
-    maxBudgetUsd: OPUS_BUDGET,
     priorReview,
     effort: "high",
     thinking: { type: "adaptive" },
@@ -346,7 +342,6 @@ async function sdkReview(opts) {
     step,
     cwd,
     maxTurns: 5,
-    maxBudgetUsd: 0.05,
     priorReview: null,
     effort: "medium",
   });
@@ -473,7 +468,6 @@ async function sdkReview(opts) {
     step,
     cwd,
     maxTurns: 8,
-    maxBudgetUsd: 0.15,
     priorReview: haikuResult,
     effort: "high",
   });
