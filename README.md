@@ -1,4 +1,4 @@
-# ⛵ Vela Engine v3.3 — Sandbox Development System
+# ⛵ Vela Engine v4.0 — Sandbox Development System
 
 **Vela**(돛자리)는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의 파이프라인을 통해서만 진행된다.
@@ -619,6 +619,14 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v3.3 | M011 | README + GitHub 문서 최신화 — SDK 오케스트레이터 전환 이후 문서-코드 불일치 전면 해소 |
 | v3.3 | M012 | 전수 조사 + 발전 방향 수립 — UPGRADE-REPORT.md (P0~P5 우선순위 매트릭스, M013~M016 마일스톤 제안) |
 | v4.0 | M013 | **v4.0 전면 고도화** — sdk-custom-tools.js MCP 서버 팩토리, vela-wave.js PoC, SDK structured output 이중 추출, 레거시 훅 잔재 전면 제거, SDK mock 안정화, install.js 14개 감사 지적 반영. 18개 테스트 스위트 PASS |
+| v4.0 | M014 | .md 전수 최신화 — M010~M013 변경 사항을 README/SKILL/next-step 등에 전수 반영, vela-analyze.js stale 경로 버그 수정, dead 정리 후 push |
+| v4.0 | M015 | CSA 참조 무결성 자동 검증 — change-surface.js 순수 모듈로 exit_gate 자동 차단, 사라진 토큰 교차 참조 감지 |
+| v4.0 | M016 | 개발 환경 정리 — Vela 설치 잔재(.vela/, .claude/) 및 홈 디렉토리 오염 완전 제거, GSD 전용 환경 확립 |
+| v4.0 | M017 | SDK/모델/예산 버그픽스 — 8건 SDK 관련 버그픽스 전수 자동화 검증 |
+| v4.0 | M018 | change-surface.js 범용 토큰 확장 — JS/TS 전용 → 범용 식별자 변경 교차 참조 감지 |
+| v4.0 | M019 | PDF 한글 + config 경로 + 글로벌 설치 — PDF 한글 깨짐 해결, config.json 경로 불일치 수정, npm 글로벌 설치 전환 |
+| v4.0 | M020 | 퍼미션 마찰 제거 — PM GSD식 이해 확인, 읽기 도구 퍼미션 프롬프트 제거, 파이프라인 시작 시 퍼미션 안내 |
+| v4.0 | M021 | PM 오케스트레이터 지시 단절 수정 — vela.md·pipeline-flow.md가 vela-pipeline.js run을 유일한 실행 인터페이스로 지시, SDK Guard 콜백·도구 추적·비용/시간 추적 전면 활성화 |
 
 ---
 
