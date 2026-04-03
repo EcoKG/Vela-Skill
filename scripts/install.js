@@ -1208,11 +1208,16 @@ function validate() {
   }
 
   // 9. Global pollution cleanup — remove legacy vela files from ~/.claude/
-  // Valid entries: vela/ (main skill directory)
-  // Legacy sub-skill dirs (vela-init/, vela-start/, etc.) are removed as orphans
+  // Valid entries: vela/ (main skill), vela-init/ vela-start/ vela-auto/ vela-analyze/ vela-git-clean/ (sub-skills)
+  // Invalid (legacy): commands/vela/ (v1/v2 slash commands), any other vela-* dirs
   const HOME = process.env.HOME || process.env.USERPROFILE;
   const VALID_SUB_SKILLS = new Set([
     "vela",
+    "vela-init",
+    "vela-start",
+    "vela-auto",
+    "vela-analyze",
+    "vela-git-clean",
   ]);
   if (HOME) {
     const globalSkillsDir = path.join(HOME, ".claude", "skills");
