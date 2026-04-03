@@ -80,6 +80,7 @@ const FILE_MANIFEST = [
   // Shared modules (used by CLI tools)
   { src: "scripts/shared/constants.js", dst: "shared/constants.js" },
   { src: "scripts/shared/dep-analyzer.js", dst: "shared/dep-analyzer.js" },
+  { src: "scripts/shared/global-require.js", dst: "shared/global-require.js" },
   // CLI tools
   { src: "scripts/cli/vela-engine.js", dst: "cli/vela-engine.js" },
   { src: "scripts/cli/vela-analyze.js", dst: "cli/vela-analyze.js" },
