@@ -207,6 +207,118 @@ const TOKEN_EXTRACTORS = [
       return tokens;
     },
   },
+
+  // 9. Universal identifier extractor (language-agnostic)
+  //    Extracts all identifier-shaped words (3+ chars) from any file.
+  //    No fileTypes filter — works on every programming language.
+  //    Language keywords are excluded to reduce false positives.
+  {
+    name: "identifier",
+    extract(line) {
+      const identRe = /\b([a-zA-Z_]\w{2,})\b/g;
+      const tokens = [];
+      let m;
+      while ((m = identRe.exec(line))) tokens.push(m[1]);
+
+      const KEYWORDS = new Set([
+        // Control flow
+        'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue',
+        'return', 'throw', 'try', 'catch', 'finally', 'new', 'this', 'super',
+        'import', 'from', 'export', 'default', 'null', 'undefined', 'true', 'false',
+        'void', 'typeof', 'instanceof', 'delete', 'yield', 'await', 'async',
+        // OOP
+        'class', 'interface', 'extends', 'implements', 'abstract', 'final',
+        'public', 'private', 'protected', 'static', 'const', 'let', 'var', 'val',
+        'function', 'def', 'func', 'fun', 'override', 'virtual', 'extern',
+        // Types & structures
+        'struct', 'enum', 'union', 'type', 'namespace', 'package', 'module',
+        'string', 'number', 'boolean', 'int', 'float', 'double', 'long', 'short',
+        'byte', 'char', 'bool', 'void', 'object', 'any', 'never',
+        // Python / Ruby / misc
+        'with', 'pass', 'raise', 'except', 'lambda', 'self', 'cls', 'None',
+        'elif', 'not', 'and', 'println', 'print', 'require', 'include',
+        'begin', 'end', 'then', 'elsif', 'unless', 'when', 'use', 'where',
+      ]);
+      return tokens.filter(t => !KEYWORDS.has(t));
+    },
+  },
+
+  // 10. Java/Kotlin getter/setter → property name extraction
+  {
+    name: "getter_setter",
+    fileTypes: [".java", ".kt", ".scala"],
+    extract(line) {
+      const tokens = [];
+      const gsRe = /(?:get|set|is)([A-Z]\w{2,})\s*\(/g;
+      let m;
+      while ((m = gsRe.exec(line))) {
+        const prop = m[1];
+        // PascalCase → camelCase (UserName → userName)
+        tokens.push(prop.charAt(0).toLowerCase() + prop.slice(1));
+        // PascalCase → snake_case (UserName → user_name)
+        tokens.push(prop.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, ''));
+      }
+      return tokens;
+    },
+  },
+
+  // 11. Template expression variable extraction
+  //     JSP EL, Thymeleaf, Jinja2, Django, ERB, Blade, etc.
+  {
+    name: "template_expr",
+    fileTypes: [".jsp", ".jspx", ".html", ".htm", ".ftl", ".vm", ".erb",
+                ".blade.php", ".twig", ".j2", ".jinja2", ".mustache", ".hbs",
+                ".ejs", ".pug", ".jade", ".vue", ".svelte"],
+    extract(line) {
+      const tokens = [];
+      let m;
+      // JSP EL: ${obj.property} / Thymeleaf: #{msg.key}
+      const elRe = /[\$#]\{([^}]+)\}/g;
+      while ((m = elRe.exec(line))) {
+        const parts = m[1].split(/[.\[\]]+/).filter(p => p && /^\w+$/.test(p));
+        for (const p of parts) {
+          if (p.length >= 3) tokens.push(p);
+        }
+      }
+      // Jinja2/Django: {{ obj.property }} / {% if obj.property %}
+      const jinjaRe = /\{\{([^}]+)\}\}|\{%([^%]+)%\}/g;
+      while ((m = jinjaRe.exec(line))) {
+        const expr = m[1] || m[2];
+        const parts = expr.split(/[.\[\]\s|:,()]+/).filter(p => p && /^\w{3,}$/.test(p));
+        for (const p of parts) tokens.push(p);
+      }
+      // ERB: <%= obj.property %>
+      const erbRe = /<%=?\s*([^%]+)%>/g;
+      while ((m = erbRe.exec(line))) {
+        const parts = m[1].split(/[.\[\]\s|:,()]+/).filter(p => p && /^\w{3,}$/.test(p));
+        for (const p of parts) tokens.push(p);
+      }
+      return tokens;
+    },
+  },
+
+  // 12. XML attribute/property extraction
+  //     MyBatis mapper, Spring XML, pom.xml, etc.
+  {
+    name: "xml_attr",
+    fileTypes: [".xml", ".xsl", ".xslt", ".xsd", ".wsdl", ".pom"],
+    extract(line) {
+      const tokens = [];
+      const attrRe = /(?:property|column|name|field|ref|bean|id|parameterType|resultType|type)\s*=\s*"([^"]+)"/gi;
+      let m;
+      while ((m = attrRe.exec(line))) {
+        const val = m[1];
+        // For package names (com.example.MyClass), keep only the last segment
+        if (val.includes('.')) {
+          const last = val.split('.').pop();
+          if (last && last.length >= 3) tokens.push(last);
+        } else if (val.length >= 3) {
+          tokens.push(val);
+        }
+      }
+      return tokens;
+    },
+  },
 ];
 
 // ─── Phase 1: Diff Parse ───
