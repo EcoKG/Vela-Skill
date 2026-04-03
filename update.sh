@@ -72,11 +72,26 @@ if [ -d "$TMP/.claude-plugin" ]; then
   cp -r "$TMP/.claude-plugin" "$SKILL_DIR/.claude-plugin"
 fi
 
-# Update npm dependencies
-if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
-  (cd "$SKILL_DIR" && npm install --no-audit --no-fund 2>/dev/null) || {
-    (cd "$SKILL_DIR" && npm install sql.js --no-audit --no-fund 2>/dev/null) || true
+# Update npm dependencies globally
+if command -v npm &>/dev/null; then
+  GLOBAL_ROOT=$(npm root -g)
+
+  # Core: playwright + sql.js + better-sqlite3
+  npm install -g playwright sql.js --no-audit --no-fund 2>/dev/null
+  npm install -g better-sqlite3 --no-audit --no-fund 2>/dev/null || {
+    echo "  ⚠ Native build failed — sql.js (WASM) will be used"
   }
+
+  # Install Playwright Chromium browser binary
+  npx playwright install chromium 2>/dev/null || echo "  ⚠ Playwright chromium install failed"
+
+  # Create symlinks for CJS require() resolution
+  mkdir -p "$SKILL_DIR/node_modules"
+  for pkg in better-sqlite3 sql.js playwright; do
+    if [ -d "$GLOBAL_ROOT/$pkg" ]; then
+      ln -sf "$GLOBAL_ROOT/$pkg" "$SKILL_DIR/node_modules/$pkg"
+    fi
+  done
 fi
 
 echo "  ✦ Global skill updated: $SKILL_DIR"
@@ -88,11 +103,16 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     source "$TMP/scripts/deploy-common.sh"
     sync_local_project "$TMP"
 
-    # Optional: Update Claude Agent SDK
+    # Optional: Update Claude Agent SDK globally
     if command -v npm &>/dev/null; then
-      if (cd "$SKILL_DIR" && npm install @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null); then
-        echo "  ✅ Claude Agent SDK updated"
-      fi
+      GLOBAL_ROOT=$(npm root -g)
+      npm install -g @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null && {
+        mkdir -p "$SKILL_DIR/node_modules/@anthropic-ai"
+        ln -sf "$GLOBAL_ROOT/@anthropic-ai/claude-agent-sdk" "$SKILL_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
+        echo "  ✅ Claude Agent SDK updated globally"
+      } || {
+        echo "  ⚠ Claude Agent SDK not updated"
+      }
     fi
 
     echo "  ✦ Local project updated"

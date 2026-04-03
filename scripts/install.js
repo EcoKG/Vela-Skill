@@ -998,16 +998,22 @@ function validate() {
 
   // 3. config.json validity
   const configPath = path.join(velaDir, "config.json");
+  const templateConfig = path.join(velaDir, "templates", "config.json");
   if (fs.existsSync(configPath)) {
     try {
       JSON.parse(fs.readFileSync(configPath, "utf-8"));
     } catch (e) {
       // Broken config — restore from template
-      const templateConfig = path.join(velaDir, "templates", "config.json");
       if (fs.existsSync(templateConfig)) {
         fs.copyFileSync(templateConfig, configPath);
         results.fixed.push("Repaired broken config.json from template");
       }
+    }
+  } else {
+    // Missing config.json — copy from template
+    if (fs.existsSync(templateConfig)) {
+      fs.copyFileSync(templateConfig, configPath);
+      results.fixed.push("Copied missing config.json from template");
     }
   }
 

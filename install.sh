@@ -83,31 +83,45 @@ fi
 # Vela uses SDK query() orchestrator (vela-pipeline.js), not Claude Code hooks.
 # CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is not required.
 
-# ─── Install npm dependencies (SQLite backends for TreeNode cache) ───
-if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
-  echo "  📦 Installing SQLite backends..."
-  (cd "$SKILL_DIR" && npm install --no-audit --no-fund 2>/dev/null) && {
+# ─── Install npm dependencies globally (SQLite backends for TreeNode cache) ───
+if command -v npm &>/dev/null; then
+  echo "  📦 Installing npm dependencies globally..."
+  GLOBAL_ROOT=$(npm root -g)
+
+  # Core: playwright + sql.js (always needed)
+  npm install -g playwright sql.js --no-audit --no-fund 2>/dev/null
+
+  # better-sqlite3 (native build — may fail)
+  npm install -g better-sqlite3 --no-audit --no-fund 2>/dev/null && {
     SQLITE_BACKEND="better-sqlite3"
   } || {
-    # better-sqlite3 needs native compilation — try sql.js (pure WASM) as fallback
-    echo "  ⚠ Native build failed — installing sql.js (WASM fallback)..."
-    (cd "$SKILL_DIR" && npm install sql.js --no-audit --no-fund 2>/dev/null) && {
-      SQLITE_BACKEND="sql.js"
-    } || {
-      SQLITE_BACKEND="json-fallback"
-      echo "  ⚠ npm install failed — TreeNode cache will use JSON fallback"
-    }
+    SQLITE_BACKEND="sql.js"
+    echo "  ⚠ Native build failed — sql.js (WASM) will be used"
   }
+
+  # Install Playwright Chromium browser binary
+  npx playwright install chromium 2>/dev/null || echo "  ⚠ Playwright chromium install failed"
+
+  # Create symlinks for CJS require() resolution
+  mkdir -p "$SKILL_DIR/node_modules"
+  for pkg in better-sqlite3 sql.js playwright; do
+    if [ -d "$GLOBAL_ROOT/$pkg" ]; then
+      ln -sf "$GLOBAL_ROOT/$pkg" "$SKILL_DIR/node_modules/$pkg"
+    fi
+  done
 fi
 
 # ─── Optional: Install Claude Agent SDK (enables SDK orchestrator mode) ───
 if command -v npm &>/dev/null; then
   echo "  🔌 Installing Claude Agent SDK (optional)..."
-  if (cd "$SKILL_DIR" && npm install @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null); then
-    echo "  ✅ Claude Agent SDK installed — SDK orchestrator available"
-  else
+  GLOBAL_ROOT=$(npm root -g)
+  npm install -g @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null && {
+    mkdir -p "$SKILL_DIR/node_modules/@anthropic-ai"
+    ln -sf "$GLOBAL_ROOT/@anthropic-ai/claude-agent-sdk" "$SKILL_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
+    echo "  ✅ Claude Agent SDK installed globally"
+  } || {
     echo "  ⚠ Claude Agent SDK not installed — CLI mode will be used (fully functional)"
-  fi
+  }
 fi
 
 # ─── Source shared deploy functions ───
