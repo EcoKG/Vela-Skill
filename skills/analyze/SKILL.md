@@ -57,7 +57,8 @@ description: "📊 Vela 분석 보고서 — 의존성, 보안, 버그, 성능, 
          "header": "🤖 Model",
          "options": [
            { "label": "Haiku (Recommended)", "description": "빠르고 저렴한 분석. 대부분의 경우 충분" },
-           { "label": "Sonnet", "description": "더 정밀한 분석. 비용 ↑" }
+           { "label": "Sonnet", "description": "더 정밀한 분석. 비용 ↑" },
+           { "label": "Opus", "description": "최고 정밀도. 복잡한 코드베이스에 적합" }
          ],
          "multiSelect": false
        }
