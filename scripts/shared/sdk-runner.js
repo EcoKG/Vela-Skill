@@ -113,7 +113,9 @@ function _getLanguageDirective(cwd) {
     }
   }
 
-  const directive = lang && LANGUAGE_DIRECTIVES[lang] ? LANGUAGE_DIRECTIVES[lang] : null;
+  // Default to Korean if no language configured
+  if (!lang) lang = "ko";
+  const directive = LANGUAGE_DIRECTIVES[lang] || null;
   _langCache[dir] = directive;
   return directive;
 }
