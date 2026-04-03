@@ -71,6 +71,10 @@ const VELA_PERMISSIONS = {
     "Bash(node .vela/*)",
     "Bash(python .vela/*)",
     "Bash(python3 .vela/*)",
+    // Read-only tools — eliminate repetitive permission prompts
+    "Read(*)",
+    "Glob(*)",
+    "Grep(*)",
   ],
 };
 
