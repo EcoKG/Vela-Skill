@@ -297,7 +297,7 @@ node .vela/cli/vela-analyze.js full --items deps,security,performance --model so
 
 ### PDF 보고서
 
-pdfkit으로 생성. 타이틀 페이지, severity별 색상 코딩(critical=빨강, high=주황, moderate=노랑, low=파랑), outdated 패키지, 코드 분석 관점별 findings 포함. 부분 실패 허용 — 하나의 분석기가 실패해도 나머지 결과로 PDF를 생성한다.
+Playwright HTML→PDF로 생성. 타이틀 페이지, severity별 색상 코딩(critical=빨강, high=주황, moderate=노랑, low=파랑), outdated 패키지, 코드 분석 관점별 findings 포함. 부분 실패 허용 — 하나의 분석기가 실패해도 나머지 결과로 PDF를 생성한다.
 
 ---
 
