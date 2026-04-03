@@ -96,104 +96,117 @@ function buildReportHtml(data) {
 
   let body = "";
 
-  // ─── Title Page ───
+  // ─── Cover ───
   body += `<header>
-  <div class="logo">⛵</div>
-  <h1>Vela Analysis Report</h1>
-  <div class="subtitle">Automated Code & Dependency Analysis</div>
-  <div class="date">${esc(dateStr)}</div>
-  ${data.selectedItems ? `<div class="scope">${esc(data.selectedItems.join(" · ").toUpperCase())}</div>` : ""}
+  <div class="cover-rule"></div>
+  <h1>Analysis Report</h1>
+  <p class="cover-project">Vela Analyzer</p>
+  <p class="cover-date">${esc(dateStr)}</p>
+  ${data.selectedItems ? `<p class="cover-scope">${esc(data.selectedItems.join("  ·  "))}</p>` : ""}
+  <div class="cover-rule"></div>
 </header>`;
 
-  // ─── Dashboard Summary ───
-  if (hasDeps) {
-    const riskLevel = (bySev.critical || 0) > 0 ? "critical" : (bySev.high || 0) > 0 ? "high" : (bySev.moderate || 0) > 0 ? "moderate" : "healthy";
-    const riskLabel = { critical: "🔴 Critical Risk", high: "🟠 High Risk", moderate: "🟡 Moderate Risk", healthy: "🟢 Healthy" }[riskLevel];
-    const riskColor = { critical: "#DC2626", high: "#EA580C", moderate: "#D97706", healthy: "#16A34A" }[riskLevel];
+  // ─── Table of Contents ───
+  const tocItems = [];
+  if (hasDeps) { tocItems.push("Executive Summary"); tocItems.push("Vulnerability Findings"); tocItems.push("Outdated Packages"); }
+  if (data.codeAnalysis) { tocItems.push("Code Analysis"); }
+  if (tocItems.length > 1) {
+    body += `<nav class="toc"><h2>Contents</h2><ol>`;
+    for (const item of tocItems) body += `<li>${esc(item)}</li>`;
+    body += `</ol></nav>`;
+  }
 
-    body += `<section class="dashboard">
-  <h2>📊 Overview</h2>
-  <div class="risk-badge" style="background:${riskColor}">${riskLabel}</div>
-  <div class="stat-grid">
-    <div class="stat-card"><div class="stat-value">${totalVuln}</div><div class="stat-label">Vulnerabilities</div></div>
-    <div class="stat-card"><div class="stat-value">${meta.outdatedCount || 0}</div><div class="stat-label">Outdated</div></div>
-    <div class="stat-card"><div class="stat-value">${meta.totalDependencies || "—"}</div><div class="stat-label">Dependencies</div></div>
-    <div class="stat-card"><div class="stat-value">${data.codeAnalysis ? (data.codeAnalysis.perspectives || []).filter(p => p.ok).length : "—"}</div><div class="stat-label">Perspectives</div></div>
-  </div>
-  ${totalVuln > 0 ? `<div class="sev-bar">
-    ${(bySev.critical || 0) > 0 ? `<span class="sev-pill sev-critical">${bySev.critical} Critical</span>` : ""}
-    ${(bySev.high || 0) > 0 ? `<span class="sev-pill sev-high">${bySev.high} High</span>` : ""}
-    ${(bySev.moderate || 0) > 0 ? `<span class="sev-pill sev-moderate">${bySev.moderate} Moderate</span>` : ""}
-    ${(bySev.low || 0) > 0 ? `<span class="sev-pill sev-low">${bySev.low} Low</span>` : ""}
-    ${(bySev.info || 0) > 0 ? `<span class="sev-pill sev-info">${bySev.info} Info</span>` : ""}
-  </div>` : ""}
+  // ─── Executive Summary ───
+  if (hasDeps) {
+    const sevEntries = [
+      { label: "Critical", count: bySev.critical || 0, cls: "sev-critical" },
+      { label: "High", count: bySev.high || 0, cls: "sev-high" },
+      { label: "Moderate", count: bySev.moderate || 0, cls: "sev-moderate" },
+      { label: "Low", count: bySev.low || 0, cls: "sev-low" },
+      { label: "Info", count: bySev.info || 0, cls: "sev-info" },
+    ];
+
+    body += `<section>
+  <h2>1. Executive Summary</h2>
+  <table class="summary-table">
+    <tbody>
+      <tr><td class="label">Total Vulnerabilities</td><td class="value">${totalVuln}</td></tr>
+      <tr><td class="label">Outdated Packages</td><td class="value">${meta.outdatedCount || 0}</td></tr>
+      <tr><td class="label">Total Dependencies</td><td class="value">${meta.totalDependencies || "—"}</td></tr>
+      ${data.codeAnalysis ? `<tr><td class="label">Code Perspectives Analyzed</td><td class="value">${(data.codeAnalysis.perspectives || []).filter(p => p.ok).length} / ${(data.codeAnalysis.perspectives || []).length}</td></tr>` : ""}
+    </tbody>
+  </table>
+
+  ${totalVuln > 0 ? `<h3>Severity Distribution</h3>
+  <table class="dist-table">
+    <thead><tr>${sevEntries.map(s => `<th class="${s.cls}">${s.label}</th>`).join("")}</tr></thead>
+    <tbody><tr>${sevEntries.map(s => `<td>${s.count}</td>`).join("")}</tr></tbody>
+  </table>` : `<p class="note">No vulnerabilities detected.</p>`}
 </section>`;
 
     // ─── Vulnerability Findings ───
     const findings = depData.findings || [];
-    body += `<section class="findings">
-  <h2>🔒 Vulnerability Findings</h2>`;
+    body += `<section>
+  <h2>2. Vulnerability Findings</h2>`;
 
     if (findings.length === 0) {
-      body += `<div class="empty-state">
-  <div class="empty-icon">✅</div>
-  <p>No vulnerabilities found.</p>
-</div>`;
+      body += `<p class="note">No vulnerabilities found.</p>`;
     } else {
+      body += `<table class="findings-table">
+  <thead><tr><th>Severity</th><th>Package</th><th>Title</th><th>Direct</th><th>Fix</th></tr></thead>
+  <tbody>`;
       const severityOrder = ["critical", "high", "moderate", "low", "info", "unknown"];
-      const grouped = {};
-      for (const f of findings) {
+      const sorted = [...findings].sort((a, b) => severityOrder.indexOf((a.severity || "unknown").toLowerCase()) - severityOrder.indexOf((b.severity || "unknown").toLowerCase()));
+
+      for (const f of sorted) {
         const sev = (f.severity || "unknown").toLowerCase();
-        if (!grouped[sev]) grouped[sev] = [];
-        grouped[sev].push(f);
+        body += `<tr>
+  <td><span class="tag ${sev}">${sev.toUpperCase()}</span></td>
+  <td>${esc(f.name)}</td>
+  <td>${esc(f.title || "—")}</td>
+  <td>${f.isDirect ? "Yes" : "No"}</td>
+  <td>${f.fixAvailable ? "Available" : "—"}</td>
+</tr>`;
       }
+      body += `</tbody></table>`;
 
-      for (const sev of severityOrder) {
-        if (!grouped[sev] || grouped[sev].length === 0) continue;
-
-        body += `<div class="sev-group">
-  <h3><span class="sev-pill sev-${sev}">${sev.toUpperCase()}</span> <span class="sev-count">${grouped[sev].length} finding${grouped[sev].length > 1 ? "s" : ""}</span></h3>`;
-
-        for (const f of grouped[sev]) {
-          body += `<div class="finding-card">
-  <div class="finding-header"><strong>${esc(f.name)}</strong></div>
-  ${f.title ? `<p class="finding-title">${esc(f.title)}</p>` : ""}
-  <div class="finding-meta">
-    <span>${f.isDirect ? "📦 Direct" : "📎 Transitive"}</span>
-    <span>${f.fixAvailable ? "🔧 Fix Available" : "⚠ No Fix"}</span>
-  </div>
-  ${f.url ? `<p class="finding-url"><a href="${esc(f.url)}">${esc(f.url)}</a></p>` : ""}
+      // Detail blocks for critical/high
+      const serious = sorted.filter(f => ["critical", "high"].includes((f.severity || "").toLowerCase()));
+      if (serious.length > 0) {
+        body += `<h3>Detail — Critical &amp; High</h3>`;
+        for (const f of serious) {
+          const sev = (f.severity || "unknown").toLowerCase();
+          body += `<div class="detail-block ${sev}-border">
+  <p class="detail-title"><span class="tag ${sev}">${sev.toUpperCase()}</span> ${esc(f.name)}</p>
+  ${f.title ? `<p>${esc(f.title)}</p>` : ""}
+  ${f.url ? `<p class="ref"><a href="${esc(f.url)}">${esc(f.url)}</a></p>` : ""}
 </div>`;
         }
-        body += `</div>`;
       }
     }
     body += `</section>`;
 
     // ─── Outdated Packages ───
     const outdated = depData.outdated || [];
-    body += `<section class="outdated">
-  <h2>📦 Outdated Packages</h2>`;
+    body += `<section>
+  <h2>3. Outdated Packages</h2>`;
 
     if (outdated.length === 0) {
-      body += `<div class="empty-state">
-  <div class="empty-icon">✅</div>
-  <p>All packages are up to date.</p>
-</div>`;
+      body += `<p class="note">All packages are up to date.</p>`;
     } else {
-      body += `<table>
-  <thead><tr><th>Package</th><th>Current</th><th>Wanted</th><th>Latest</th><th>Gap</th></tr></thead>
+      body += `<table class="pkg-table">
+  <thead><tr><th>Package</th><th>Current</th><th>Wanted</th><th>Latest</th><th>Type</th></tr></thead>
   <tbody>`;
       for (const pkg of outdated) {
         const curMajor = (pkg.current || "").split(".")[0];
         const latMajor = (pkg.latest || "").split(".")[0];
         const isMajor = curMajor !== latMajor;
-        body += `<tr${isMajor ? ' class="major-update"' : ""}>
-  <td><strong>${esc(pkg.name)}</strong></td>
+        body += `<tr>
+  <td>${esc(pkg.name)}</td>
   <td><code>${esc(pkg.current)}</code></td>
   <td><code>${esc(pkg.wanted)}</code></td>
   <td><code>${esc(pkg.latest)}</code></td>
-  <td>${isMajor ? '<span class="sev-pill sev-high" style="font-size:8pt">MAJOR</span>' : '<span class="sev-pill sev-info" style="font-size:8pt">minor</span>'}</td>
+  <td>${isMajor ? '<span class="tag critical">MAJOR</span>' : '<span class="tag info">patch</span>'}</td>
 </tr>`;
       }
       body += `</tbody></table>`;
@@ -203,66 +216,65 @@ function buildReportHtml(data) {
 
   // ─── Code Analysis ───
   if (data.codeAnalysis) {
-    body += `<section class="code-analysis">
-  <h2>🔍 Code Analysis</h2>`;
+    const sectionNum = hasDeps ? 4 : 1;
+    body += `<section>
+  <h2>${sectionNum}. Code Analysis</h2>`;
 
-    if (
-      !data.codeAnalysis.ok &&
-      (!data.codeAnalysis.perspectives || data.codeAnalysis.perspectives.length === 0)
-    ) {
-      body += `<div class="error-card"><p>⚠ Code analysis failed: ${esc(data.codeAnalysis.error || "Unknown error")}</p></div>`;
+    if (!data.codeAnalysis.ok && (!data.codeAnalysis.perspectives || data.codeAnalysis.perspectives.length === 0)) {
+      body += `<p class="error">Analysis failed: ${esc(data.codeAnalysis.error || "Unknown error")}</p>`;
     } else {
       const perspectives = data.codeAnalysis.perspectives || [];
 
       for (const p of perspectives) {
-        const pName =
-          (p.perspective || "unknown").charAt(0).toUpperCase() +
-          (p.perspective || "unknown").slice(1);
+        const pName = (p.perspective || "unknown").charAt(0).toUpperCase() + (p.perspective || "unknown").slice(1);
 
-        const pIcon = { security: "🔐", bugs: "🐛", performance: "⚡", "code-quality": "✨", architecture: "🏗" }[p.perspective] || "📋";
-
-        body += `<div class="perspective-card">
-  <h3>${pIcon} ${esc(pName)}</h3>`;
+        body += `<div class="perspective">
+  <h3>${esc(pName)}</h3>`;
 
         if (!p.ok) {
-          body += `<div class="error-card"><p>Analysis failed: ${esc(p.error || "Unknown error")}</p></div></div>`;
+          body += `<p class="error">Analysis failed: ${esc(p.error || "Unknown error")}</p></div>`;
           continue;
         }
-
-        body += `<div class="perspective-meta">
-  <span>${(p.findings || []).length} findings</span>
-  <span>Cost: $${(p.cost || 0).toFixed(3)}</span>
-  <span>Duration: ${((p.durationMs || 0) / 1000).toFixed(1)}s</span>
-</div>`;
 
         const pFindings = p.findings || [];
+        body += `<p class="meta">Findings: ${pFindings.length} &ensp;|&ensp; Cost: $${(p.cost || 0).toFixed(3)} &ensp;|&ensp; ${((p.durationMs || 0) / 1000).toFixed(1)}s</p>`;
+
         if (pFindings.length === 0) {
-          body += `<p class="no-findings">No issues found. ✅</p></div>`;
+          body += `<p class="note">No issues found.</p></div>`;
           continue;
         }
 
+        body += `<table class="findings-table">
+  <thead><tr><th>Severity</th><th>Issue</th><th>Location</th></tr></thead>
+  <tbody>`;
         for (const f of pFindings) {
           const sev = (f.severity || "info").toLowerCase();
+          body += `<tr>
+  <td><span class="tag ${sev}">${sev.toUpperCase()}</span></td>
+  <td>${esc(f.name || f.description || "Finding")}</td>
+  <td>${f.file ? `<code>${esc(f.file)}${f.line ? ":" + f.line : ""}</code>` : "—"}</td>
+</tr>`;
+        }
+        body += `</tbody></table>`;
 
-          body += `<div class="code-finding">
-  <div class="cf-header">
-    <span class="sev-pill sev-${sev}">${sev.toUpperCase()}</span>
-    <strong>${esc(f.name || f.description || "Finding")}</strong>
-  </div>
-  ${f.file ? `<div class="cf-location"><code>${esc(f.file)}${f.line ? ":" + f.line : ""}</code></div>` : ""}
-  ${f.description ? `<p class="cf-desc">${esc(f.description)}</p>` : ""}
-  ${f.suggestion ? `<div class="cf-fix"><span class="fix-label">💡 Fix:</span> ${esc(f.suggestion)}</div>` : ""}
+        // Expanded details for each finding
+        for (const f of pFindings) {
+          if (!f.description && !f.suggestion) continue;
+          const sev = (f.severity || "info").toLowerCase();
+          body += `<div class="detail-block ${sev}-border">
+  <p class="detail-title">${esc(f.name || "Finding")}</p>
+  ${f.description ? `<p>${esc(f.description)}</p>` : ""}
+  ${f.suggestion ? `<p class="fix">Recommendation: ${esc(f.suggestion)}</p>` : ""}
 </div>`;
         }
         body += `</div>`;
       }
 
-      // Code analysis summary
-      const okPerspectives = perspectives.filter((p) => p.ok);
-      const totalFindings = perspectives.reduce((sum, p) => sum + (p.findings || []).length, 0);
-      body += `<div class="analysis-footer">
-  <p><strong>${okPerspectives.length}/${perspectives.length}</strong> perspectives analyzed · <strong>${totalFindings}</strong> total findings</p>
-  ${data.codeAnalysis.totalCost != null ? `<p>Total cost: $${data.codeAnalysis.totalCost.toFixed(3)}</p>` : ""}
+      // Totals
+      const okP = perspectives.filter(p => p.ok);
+      const totalF = perspectives.reduce((s, p) => s + (p.findings || []).length, 0);
+      body += `<div class="totals">
+  <p>${okP.length} / ${perspectives.length} perspectives completed &ensp;|&ensp; ${totalF} total findings${data.codeAnalysis.totalCost != null ? ` &ensp;|&ensp; Total cost: $${data.codeAnalysis.totalCost.toFixed(3)}` : ""}</p>
 </div>`;
     }
     body += `</section>`;
@@ -270,160 +282,140 @@ function buildReportHtml(data) {
 
   // ─── Footer ───
   body += `<footer>
-  <div class="footer-line"></div>
-  <p>Generated by <strong>Vela Analyzer</strong> · ${esc(dateStr)}</p>
+  <div class="footer-rule"></div>
+  <p>Vela Analyzer &mdash; ${esc(dateStr)}</p>
+  <p class="confidential">CONFIDENTIAL</p>
 </footer>`;
 
   return `<!DOCTYPE html>
-<html lang="ko"><head><meta charset="utf-8"><title>Vela Analysis Report</title>
+<html lang="ko"><head><meta charset="utf-8"><title>Vela Analysis Report — ${esc(dateStr)}</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
+/* ══════════════════════════════════════
+   Vela Analysis Report — Print-Optimized
+   ══════════════════════════════════════ */
+@page { margin: 18mm 16mm; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ─── Base ─── */
-body{
-  font-family:system-ui,-apple-system,'Segoe UI','Noto Sans KR',sans-serif;
-  background:#fff;color:#1a1a2e;
-  padding:0 50px 40px;max-width:820px;margin:0 auto;
-  font-size:10.5pt;line-height:1.65;
-}
-
-/* ─── Title Page ─── */
-header{
-  text-align:center;padding:60px 0 40px;
-  border-bottom:3px solid #1a1a2e;margin-bottom:2rem;
-}
-header .logo{font-size:48pt;margin-bottom:0.3rem}
-header h1{font-size:26pt;font-weight:800;letter-spacing:-0.5px;color:#1a1a2e;margin-bottom:0.2rem}
-header .subtitle{font-size:11pt;color:#64748b;font-weight:400;margin-bottom:1rem}
-header .date{font-size:11pt;color:#64748b;font-weight:500}
-header .scope{
-  display:inline-block;margin-top:0.8rem;padding:4px 16px;
-  background:#f1f5f9;border-radius:20px;font-size:9pt;
-  color:#475569;letter-spacing:1px;font-weight:600;
+body {
+  font-family: 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: #1e1e2e; background: #fff;
+  font-size: 9.5pt; line-height: 1.7;
+  max-width: 720px; margin: 0 auto; padding: 0;
 }
 
-/* ─── Section Headers ─── */
-h2{
-  font-size:15pt;font-weight:700;color:#1a1a2e;
-  border-bottom:2px solid #e2e8f0;padding-bottom:6px;
-  margin:2rem 0 0.8rem;
+/* ── Cover ── */
+header { text-align: center; padding: 56px 0 32px; margin-bottom: 24px; }
+.cover-rule { height: 2px; background: #1e1e2e; margin: 0 auto; width: 100%; }
+header h1 {
+  font-size: 28pt; font-weight: 300; letter-spacing: 3px;
+  text-transform: uppercase; color: #1e1e2e; margin: 28px 0 6px;
 }
-h3{font-size:12pt;font-weight:600;margin:0.8rem 0 0.4rem;color:#334155}
+.cover-project { font-size: 10pt; letter-spacing: 2px; color: #6b7280; text-transform: uppercase; }
+.cover-date { font-size: 10pt; color: #6b7280; margin: 16px 0 4px; }
+.cover-scope { font-size: 9pt; color: #9ca3af; margin-bottom: 28px; }
 
-/* ─── Dashboard ─── */
-.dashboard{margin-bottom:1.5rem}
-.risk-badge{
-  display:inline-block;padding:6px 20px;border-radius:20px;
-  color:#fff;font-size:11pt;font-weight:700;margin-bottom:1rem;
-}
-.stat-grid{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1rem;
-}
-.stat-card{
-  background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
-  padding:14px 12px;text-align:center;
-}
-.stat-value{font-size:22pt;font-weight:800;color:#1e293b;line-height:1.1}
-.stat-label{font-size:8.5pt;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;font-weight:600}
-.sev-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:0.5rem}
+/* ── Table of Contents ── */
+.toc { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+.toc h2 { font-size: 10pt; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280; border: none; margin-bottom: 8px; }
+.toc ol { padding-left: 20px; font-size: 9.5pt; color: #374151; }
+.toc li { margin: 2px 0; }
 
-/* ─── Severity Pills ─── */
-.sev-pill{
-  display:inline-block;padding:2px 10px;border-radius:12px;
-  font-size:9pt;font-weight:700;color:#fff;
+/* ── Headings ── */
+h2 {
+  font-size: 12pt; font-weight: 700; color: #1e1e2e;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  border-bottom: 1px solid #d1d5db; padding-bottom: 4px;
+  margin: 28px 0 12px;
 }
-.sev-critical{background:#DC2626}
-.sev-high{background:#EA580C}
-.sev-moderate{background:#D97706}
-.sev-low{background:#64748B}
-.sev-info{background:#2563EB}
+h3 { font-size: 10pt; font-weight: 600; color: #374151; margin: 14px 0 6px; }
 
-/* ─── Finding Cards ─── */
-.finding-card{
-  background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;
-  padding:10px 14px;margin:6px 0;
+/* ── Summary Table ── */
+.summary-table { width: auto; margin: 8px 0 16px; border-collapse: collapse; }
+.summary-table td { padding: 5px 0; font-size: 9.5pt; border: none; }
+.summary-table .label { color: #6b7280; padding-right: 32px; }
+.summary-table .value { font-weight: 700; color: #1e1e2e; }
+
+/* ── Distribution Table ── */
+.dist-table { width: auto; border-collapse: collapse; margin: 4px 0 16px; font-size: 9pt; }
+.dist-table th { padding: 4px 18px; font-weight: 600; color: #fff; text-align: center; }
+.dist-table td { padding: 4px 18px; text-align: center; font-weight: 700; font-size: 11pt; border-bottom: none; }
+.dist-table .sev-critical { background: #991b1b; }
+.dist-table .sev-high { background: #c2410c; }
+.dist-table .sev-moderate { background: #a16207; }
+.dist-table .sev-low { background: #4b5563; }
+.dist-table .sev-info { background: #1d4ed8; }
+
+/* ── Data Tables ── */
+table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 9pt; }
+thead th {
+  background: #f9fafb; padding: 6px 10px; text-align: left;
+  font-size: 8pt; font-weight: 700; color: #4b5563;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1.5px solid #d1d5db;
 }
-.finding-header{font-size:10.5pt;color:#1e293b}
-.finding-title{font-size:9.5pt;color:#475569;margin:2px 0}
-.finding-meta{display:flex;gap:12px;font-size:9pt;color:#64748b;margin-top:4px}
-.finding-url{font-size:8.5pt;margin-top:3px}
-.finding-url a{color:#2563EB;text-decoration:none}
-
-.sev-group{margin-bottom:1rem}
-.sev-count{font-size:10pt;color:#64748b;font-weight:400}
-
-/* ─── Empty State ─── */
-.empty-state{text-align:center;padding:1.5rem;color:#64748b;font-size:11pt}
-.empty-icon{font-size:24pt;margin-bottom:0.3rem}
-
-/* ─── Tables ─── */
-table{width:100%;border-collapse:collapse;margin:0.5rem 0;font-size:9.5pt}
-th{
-  background:#f1f5f9;padding:8px 12px;text-align:left;
-  border-bottom:2px solid #cbd5e1;color:#334155;
-  font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;
-}
-td{padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
-tr:hover td{background:#f8fafc}
-tr.major-update td{background:#fef2f2}
-code{
-  font-family:'SF Mono','Fira Code',monospace;font-size:9pt;
-  background:#f1f5f9;padding:1px 5px;border-radius:4px;color:#334155;
+tbody td { padding: 6px 10px; border-bottom: 1px solid #f3f4f6; color: #374151; vertical-align: top; }
+tbody tr:last-child td { border-bottom: 1.5px solid #e5e7eb; }
+code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 8.5pt; color: #374151;
 }
 
-/* ─── Perspective Cards ─── */
-.perspective-card{
-  background:#fff;border:1px solid #e2e8f0;border-radius:10px;
-  padding:16px 18px;margin:10px 0;
+/* ── Tags ── */
+.tag {
+  display: inline-block; padding: 1px 8px; border-radius: 3px;
+  font-size: 7.5pt; font-weight: 700; letter-spacing: 0.3px; color: #fff;
 }
-.perspective-card h3{margin:0 0 6px;font-size:12pt}
-.perspective-meta{
-  display:flex;gap:16px;font-size:9pt;color:#64748b;
-  padding-bottom:8px;border-bottom:1px solid #f1f5f9;margin-bottom:8px;
-}
-.no-findings{color:#16A34A;font-weight:500;padding:6px 0}
+.tag.critical { background: #991b1b; }
+.tag.high { background: #c2410c; }
+.tag.moderate { background: #a16207; }
+.tag.low { background: #4b5563; }
+.tag.info { background: #1d4ed8; }
+.tag.unknown { background: #6b7280; }
 
-/* ─── Code Findings ─── */
-.code-finding{
-  padding:8px 12px;margin:6px 0;
-  border-left:3px solid #e2e8f0;background:#fafafa;border-radius:0 6px 6px 0;
+/* ── Detail Blocks ── */
+.detail-block {
+  margin: 8px 0; padding: 8px 14px;
+  border-left: 3px solid #d1d5db; background: #fafafa;
+  font-size: 9pt; break-inside: avoid;
 }
-.cf-header{display:flex;align-items:center;gap:8px;font-size:10pt}
-.cf-location{font-size:9pt;margin:3px 0}
-.cf-location code{background:#e2e8f0}
-.cf-desc{font-size:9.5pt;color:#475569;margin:4px 0;line-height:1.5}
-.cf-fix{
-  font-size:9pt;color:#15803d;margin-top:4px;padding:6px 10px;
-  background:#f0fdf4;border-radius:6px;
-}
-.fix-label{font-weight:600}
+.critical-border { border-left-color: #991b1b; }
+.high-border { border-left-color: #c2410c; }
+.moderate-border { border-left-color: #a16207; }
+.low-border { border-left-color: #4b5563; }
+.info-border { border-left-color: #1d4ed8; }
+.detail-title { font-weight: 600; margin-bottom: 3px; }
+.detail-block .ref { font-size: 8.5pt; color: #6b7280; }
+.detail-block .ref a { color: #2563eb; text-decoration: none; }
+.fix { color: #166534; margin-top: 4px; }
 
-/* ─── Error ─── */
-.error-card{
-  background:#fef2f2;border:1px solid #fecaca;border-radius:8px;
-  padding:10px 14px;color:#991B1B;font-size:10pt;
+/* ── Perspective ── */
+.perspective { margin-bottom: 18px; }
+.perspective h3 { border-bottom: 1px dotted #e5e7eb; padding-bottom: 3px; }
+.meta { font-size: 8.5pt; color: #6b7280; margin-bottom: 6px; }
+
+/* ── Notes & Errors ── */
+.note { color: #6b7280; font-style: italic; margin: 6px 0; }
+.error { color: #991b1b; font-weight: 500; margin: 6px 0; }
+
+/* ── Totals ── */
+.totals {
+  margin-top: 16px; padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 9pt; color: #6b7280; text-align: right;
 }
 
-/* ─── Analysis Footer ─── */
-.analysis-footer{
-  text-align:center;padding:12px 0;margin-top:1rem;
-  border-top:1px solid #e2e8f0;font-size:10pt;color:#64748b;
-}
+/* ── Footer ── */
+footer { margin-top: 40px; text-align: center; font-size: 8pt; color: #9ca3af; }
+.footer-rule { height: 1px; background: #d1d5db; margin-bottom: 10px; }
+.confidential { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; color: #d1d5db; }
 
-/* ─── Footer ─── */
-footer{margin-top:2.5rem;text-align:center;color:#94a3b8;font-size:8.5pt}
-.footer-line{
-  height:1px;background:linear-gradient(90deg,transparent,#cbd5e1,transparent);
-  margin-bottom:12px;
-}
-footer strong{color:#64748b}
-
-/* ─── Print ─── */
-@media print{
-  body{padding:20px 30px}
-  .perspective-card{break-inside:avoid}
-  .finding-card{break-inside:avoid}
-  .code-finding{break-inside:avoid}
+/* ── Print ── */
+@media print {
+  body { padding: 0; }
+  section { break-inside: avoid; }
+  .detail-block { break-inside: avoid; }
+  table { break-inside: auto; }
+  tr { break-inside: avoid; }
 }
 </style></head><body>
 ${body}
