@@ -66,6 +66,59 @@ async function loadSdk() {
 }
 
 /**
+ * Language directive map — maps language codes to system prompt directives.
+ * @type {Object.<string, string>}
+ */
+const LANGUAGE_DIRECTIVES = {
+  ko: "# 언어 지시\n모든 응답, 분석 결과, 보고서, 리뷰를 반드시 **한국어**로 작성하라. 코드, 명령어, 기술 용어(예: SQL injection, race condition)는 원어 그대로 사용하되, 설명과 문장은 한국어로 작성한다.",
+  en: "# Language Directive\nAll responses, analysis results, reports, and reviews MUST be written in **English**.",
+  ja: "# 言語指示\nすべての応答、分析結果、レポート、レビューを必ず**日本語**で作成すること。",
+  zh: "# 语言指令\n所有回复、分析结果、报告和审查必须用**中文**撰写。",
+};
+
+/** Cache for config.json language value per cwd */
+let _langCache = {};
+
+/**
+ * Read language from config.json and return a system prompt directive.
+ * Looks for .vela/config.json (deployed) or templates/config.json (source repo).
+ * Caches per cwd to avoid repeated filesystem reads.
+ *
+ * @param {string} [cwd] - Working directory to search for config.json
+ * @returns {string|null} Language directive string, or null if not configured
+ */
+function _getLanguageDirective(cwd) {
+  const dir = cwd || process.cwd();
+  if (_langCache[dir] !== undefined) return _langCache[dir];
+
+  const fs = require("fs");
+  const p = require("path");
+
+  // Try .vela/config.json (deployed project), then templates/config.json (source repo)
+  const candidates = [
+    p.join(dir, ".vela", "config.json"),
+    p.join(dir, "templates", "config.json"),
+  ];
+
+  let lang = null;
+  for (const cfgPath of candidates) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+      if (cfg.language) {
+        lang = cfg.language;
+        break;
+      }
+    } catch {
+      // file not found or invalid JSON — try next
+    }
+  }
+
+  const directive = lang && LANGUAGE_DIRECTIVES[lang] ? LANGUAGE_DIRECTIVES[lang] : null;
+  _langCache[dir] = directive;
+  return directive;
+}
+
+/**
  * Compute retry delay with exponential backoff, clamped to [1000, 60000]ms.
  * If resetsAt timestamp is available and in the future, uses that instead.
  *
@@ -174,6 +227,17 @@ async function runSdkAgent(opts) {
   if (opts.maxTurns != null) queryOptions.maxTurns = opts.maxTurns;
   if (opts.systemPrompt != null) queryOptions.systemPrompt = opts.systemPrompt;
   if (opts.abortController) queryOptions.abortController = opts.abortController;
+
+  // --- Language directive injection ---
+  // Read language from config.json and prepend a language directive to the system prompt.
+  // This ensures all SDK agent outputs (review, research, plan-check, analysis) respect
+  // the user's configured language without modifying each module individually.
+  if (queryOptions.systemPrompt) {
+    const langDirective = _getLanguageDirective(opts.cwd);
+    if (langDirective) {
+      queryOptions.systemPrompt = langDirective + "\n\n" + queryOptions.systemPrompt;
+    }
+  }
 
   // Structured output / effort / thinking options (S07)
   if (opts.outputFormat != null) queryOptions.outputFormat = opts.outputFormat;

@@ -1,6 +1,7 @@
 {
   "version": "1.0",
   "engine": "vela",
+  "language": "ko",
   "changeSurface": {
     "enabled": true,
     "excludePaths": [
