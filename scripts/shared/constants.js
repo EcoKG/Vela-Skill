@@ -126,9 +126,9 @@ const BASH_WRITE_PATTERNS = [
 ];
 
 const MODEL_VERSIONS = {
-  HAIKU: null,  // null = use Claude Code default model
-  SONNET: null, // null = use Claude Code default model
-  OPUS: null,   // null = use Claude Code default model
+  HAIKU: "haiku",
+  SONNET: "sonnet",
+  OPUS: "opus",
 };
 
 module.exports = {
