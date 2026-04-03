@@ -9,7 +9,6 @@ set -e
 REPO="https://github.com/EcoKG/Vela-Skill.git"
 TMP="$HOME/.vela-install-tmp"
 SKILL_DIR="$HOME/.claude/skills/vela"
-SETTINGS="$HOME/.claude/settings.json"
 
 echo ""
 echo "⛵ Vela Engine — Installing..."
@@ -54,18 +53,10 @@ if [ -d "$TMP/references" ]; then
   cp -r "$TMP/references" "$SKILL_DIR/references"
 fi
 
-# Skills (sub-skills installed as independent top-level skills for Claude Code autocomplete)
+# Skills (sub-skills accessed via SKILL.md $ARGUMENTS router — not installed as independent top-level skills)
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
-  # Install as independent top-level skills so /vela:init etc. appear in autocomplete
-  SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in init start git-clean auto analyze; do
-    if [ -d "$TMP/skills/$sub" ]; then
-      mkdir -p "$SKILLS_ROOT/vela-$sub"
-      cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
-    fi
-  done
 fi
 
 # Test fixtures (sample data for analyze/report)
@@ -80,22 +71,9 @@ if [ -d "$TMP/.claude-plugin" ]; then
   cp -r "$TMP/.claude-plugin" "$SKILL_DIR/.claude-plugin"
 fi
 
-# ─── Enable Agent Teams in global settings ───
-if command -v node &>/dev/null; then
-  mkdir -p "$HOME/.claude"
-  # AUDIT-030: Backup settings.json before modification
-  cp "$SETTINGS" "$SETTINGS.bak" 2>/dev/null || true
-  node -e "
-    const fs = require('fs');
-    const p = '$SETTINGS';
-    let d = {};
-    try { d = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch(e) {}
-    if (!d.env) d.env = {};
-    d.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1';
-    fs.writeFileSync(p, JSON.stringify(d, null, 2));
-    console.log('  🌟 Agent Teams enabled in settings.json');
-  " 2>/dev/null || echo "  ⚠ Agent Teams: add CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 manually"
-fi
+# ─── Note: No Agent Teams env injection needed ───
+# Vela uses SDK query() orchestrator (vela-pipeline.js), not Claude Code hooks.
+# CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is not required.
 
 # ─── Install npm dependencies (SQLite backends for TreeNode cache) ───
 if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
@@ -114,13 +92,13 @@ if command -v npm &>/dev/null && [ -f "$SKILL_DIR/package.json" ]; then
   }
 fi
 
-# ─── Optional: Install Claude Agent SDK (enables SDK mode) ───
+# ─── Optional: Install Claude Agent SDK (enables SDK orchestrator mode) ───
 if command -v npm &>/dev/null; then
   echo "  🔌 Installing Claude Agent SDK (optional)..."
   if (cd "$SKILL_DIR" && npm install @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null); then
-    echo "  ✅ Claude Agent SDK installed — SDK mode available"
+    echo "  ✅ Claude Agent SDK installed — SDK orchestrator available"
   else
-    echo "  ⚠ Claude Agent SDK not installed — non-SDK mode will be used (fully functional)"
+    echo "  ⚠ Claude Agent SDK not installed — CLI mode will be used (fully functional)"
   fi
 fi
 
@@ -147,7 +125,7 @@ echo "✦───────────────────────�
 echo ""
 echo "  📂 Location: $SKILL_DIR"
 echo "  💾 SQLite: ${SQLITE_BACKEND:-not checked}"
-echo "  🌟 Agent Teams: enabled"
+echo "  🔌 SDK: Claude Agent SDK"
 echo ""
 echo "  🧭 Quick Start:"
 echo "     /vela init    — 프로젝트에 Vela 환경 구축"
