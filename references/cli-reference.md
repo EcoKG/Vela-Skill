@@ -45,6 +45,8 @@ node .vela/cli/vela-analyze.js full --items <list> [--model haiku|sonnet|opus] [
 
 ## TreeNode 캐시
 
+SDK 오케스트레이터(vela-pipeline.js)가 Read/Glob/Grep 도구 실행 시 파일 경로를 자동 수집하여 `pending-paths.jsonl`에 기록한다. `ingest` 명령으로 SQLite에 반영하면 세션 간 파일 위치를 기억한다.
+
 ```bash
 node .vela/cache/treenode.js ingest     # 대기 경로 SQLite 반영
 node .vela/cache/treenode.js query src/ # 접두사로 검색

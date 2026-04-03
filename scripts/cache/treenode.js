@@ -75,6 +75,32 @@ if (!backend) {
   backend = "json";
 }
 
+// ─── Programmatic API — appendPaths() ───
+// Called by vela-pipeline.js PostToolUse hook to collect file paths.
+// Appends to pending-paths.jsonl without touching the DB directly —
+// cmdIngest() flushes to SQLite on next CLI invocation.
+
+/**
+ * Append file paths to pending-paths.jsonl for later ingestion.
+ * @param {string[]} filePaths - Absolute file paths to record
+ */
+function appendPaths(filePaths) {
+  if (!filePaths || filePaths.length === 0) return;
+  try {
+    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const timestamp = Date.now();
+    const lines = filePaths
+      .filter((p) => typeof p === "string" && p.length > 0)
+      .map((p) => JSON.stringify({ path: p, timestamp }))
+      .join("\n");
+    if (lines) fs.appendFileSync(PENDING_PATH, lines + "\n");
+  } catch (e) {
+    // Silent — cache is non-critical, never block pipeline
+  }
+}
+
+module.exports = { appendPaths };
+
 // ─── Commands ───
 
 const commands = {
@@ -86,27 +112,30 @@ const commands = {
   backend: cmdBackend,
 };
 
-if (!commands[command]) {
-  output({
-    ok: false,
-    error: `Unknown command: ${command}`,
-    available: Object.keys(commands),
-  });
-  process.exit(1);
-}
+// CLI entry point — only runs when executed directly
+if (require.main === module) {
+  if (!commands[command]) {
+    output({
+      ok: false,
+      error: `Unknown command: ${command}`,
+      available: Object.keys(commands),
+    });
+    process.exit(1);
+  }
 
-// sql.js is async, so wrap everything
-if (backend === "sql.js") {
-  (async () => {
-    try {
-      await commands[command]();
-    } catch (e) {
-      output({ ok: false, error: e.message });
-      process.exit(1);
-    }
-  })();
-} else {
-  commands[command]();
+  // sql.js is async, so wrap everything
+  if (backend === "sql.js") {
+    (async () => {
+      try {
+        await commands[command]();
+      } catch (e) {
+        output({ ok: false, error: e.message });
+        process.exit(1);
+      }
+    })();
+  } else {
+    commands[command]();
+  }
 }
 
 // ─── Command Implementations ───

@@ -48,6 +48,9 @@ const {
 // ─── SDK runner ───
 const { runSdkAgent } = require("../shared/sdk-runner");
 
+// ─── TreeNode cache — path collector ───
+const { appendPaths } = require("../cache/treenode");
+
 // ─── CLI Argument Parsing ───
 const args = process.argv.slice(2);
 const command = args[0];
@@ -520,6 +523,31 @@ async function runStep(stepDef, state) {
   // Add tool tracking PostToolUse hook
   const trackingHook = async (input) => {
     usedTools.push(input.tool_name);
+
+    // ─── TreeNode path collection ───
+    // Collect file paths from Read/Glob/Grep results for cache
+    try {
+      const toolName = input.tool_name;
+      if (toolName === "Read") {
+        const filePath = input.tool_input?.path;
+        if (filePath) {
+          const abs = path.isAbsolute(filePath) ? filePath : path.resolve(CWD, filePath);
+          appendPaths([abs]);
+        }
+      } else if (toolName === "Glob" || toolName === "Grep") {
+        // Glob/Grep results contain file paths in tool_output
+        const output = input.tool_output || "";
+        const paths = output
+          .split("\n")
+          .map((line) => line.replace(/:.*$/, "").trim())
+          .filter((p) => p && !p.startsWith("{") && fs.existsSync(p))
+          .map((p) => (path.isAbsolute(p) ? p : path.resolve(CWD, p)));
+        if (paths.length > 0) appendPaths([...new Set(paths)]);
+      }
+    } catch (e) {
+      // Silent — cache is non-critical
+    }
+
     return { continue: true };
   };
 
