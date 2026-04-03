@@ -32,7 +32,7 @@ const { MODEL_VERSIONS } = require("./constants");
 // ─── Model Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
-const MAX_TURNS = 5;
+const MAX_TURNS = 15;
 
 // ─── Structured output schema (K011 pattern — module-local) ───
 const ANALYZER_OUTPUT_SCHEMA = {

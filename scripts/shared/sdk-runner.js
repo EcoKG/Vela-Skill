@@ -305,10 +305,14 @@ async function runSdkAgent(opts) {
         ...(retriesAttempted > 0 ? { retriesAttempted } : {}),
       };
     } catch (err) {
+      const msg = err.message || String(err);
+      const errorType = /max.*turns|maximum.*turns/i.test(msg)
+        ? "max_turns_exceeded"
+        : "unexpected_error";
       return {
         ok: false,
-        error: "unexpected_error",
-        details: err.message || String(err),
+        error: errorType,
+        details: msg,
         ...(retriesAttempted > 0 ? { retriesAttempted, cost: totalCost } : {}),
       };
     }
