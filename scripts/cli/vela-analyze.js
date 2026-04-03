@@ -40,22 +40,23 @@ const VALID_PERSPECTIVES = [
 const MODEL_MAP = {
   haiku: MODEL_VERSIONS.HAIKU,
   sonnet: MODEL_VERSIONS.SONNET,
+  opus: MODEL_VERSIONS.OPUS,
 };
 
 function printUsage() {
   console.error(`Usage:
   node vela-analyze.js deps                          — Run dependency analysis (JSON stdout)
   node vela-analyze.js report --input <file> [--output <file>]  — Generate PDF report
-  node vela-analyze.js run --perspectives <list> [--model haiku|sonnet]  — Run SDK code analysis
-  node vela-analyze.js full --items <list> [--model haiku|sonnet] [--output <file>]  — Run combined analysis + PDF
+  node vela-analyze.js run --perspectives <list> [--model haiku|sonnet|opus]  — Run SDK code analysis
+  node vela-analyze.js full --items <list> [--model haiku|sonnet|opus] [--output <file>]  — Run combined analysis + PDF
 
   run options:
     --perspectives  Comma-separated list of: security,bugs,performance,code-quality,architecture (required)
-    --model         Analysis model: haiku (default) or sonnet
+    --model         Analysis model: haiku (default), sonnet, or opus
 
   full options:
     --items         Comma-separated list of: deps,security,bugs,performance,code-quality,architecture (required)
-    --model         Analysis model: haiku (default) or sonnet
+    --model         Analysis model: haiku (default), sonnet, or opus
     --output        Output PDF path (default: ./vela-report-{timestamp}.pdf)`);
 }
 

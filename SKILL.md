@@ -280,7 +280,8 @@ node .vela/cli/vela-engine.js auto
          "header": "🤖 Model",
          "options": [
            { "label": "Haiku (Recommended)", "description": "빠르고 저렴한 분석. 대부분의 경우 충분" },
-           { "label": "Sonnet", "description": "더 정밀한 분석. 비용 ↑" }
+           { "label": "Sonnet", "description": "더 정밀한 분석. 비용 ↑" },
+           { "label": "Opus", "description": "최고 정밀도. 복잡한 코드베이스에 적합" }
          ],
          "multiSelect": false
        }
@@ -290,6 +291,7 @@ node .vela/cli/vela-engine.js auto
 
    - "Haiku" → `--model haiku`
    - "Sonnet" → `--model sonnet`
+   - "Opus" → `--model opus`
    - Dependencies만 선택 시 → `--model` 생략 (기본값 haiku 사용)
 
 4. **CLI 실행**
