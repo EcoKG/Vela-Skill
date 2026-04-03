@@ -19,7 +19,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
    - medium: quick (init → plan → execute → verify → commit → finalize)
    - large: standard (full 10-step with research, plan, team review)
 
-2. `node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large>`
+2. `node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large>`
 
 3. 파이프라인 단계를 순서대로 따른다. 절대 단계를 건너뛰지 않는다.
 
@@ -70,10 +70,13 @@ PM은 Read/Glob/Grep으로 소스 코드를 직접 읽어 상황을 파악한 �
 - ✅ Glob/Grep으로 파일 검색 → 변경 범위 파악 후 에이전트에 위임
 - ❌ Write/Edit으로 소스 코드를 직접 수정 (VK-07 차단)
 
-## 엔진 명령어
-
+## 파이프라인 실행 (주 명령)
 ```bash
-node .vela/cli/vela-engine.js init "설명" --scale <small|medium|large>
+node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # SDK 파이프라인 실행
+```
+
+## 내부 엔진 CLI
+```bash
 node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js transition
 node .vela/cli/vela-engine.js record pass|fail

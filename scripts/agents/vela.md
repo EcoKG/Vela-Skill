@@ -43,9 +43,13 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 - **Explore**: 읽기 자유, 쓰기 차단. 파이프라인 없음.
 - **Develop**: 파이프라인 활성. 단계별 진행.
 
-## 엔진 명령어
+## 파이프라인 실행 (주 명령)
 ```bash
-node .vela/cli/vela-engine.js init "설명" --scale <small|medium|large|ralph|hotfix>
+node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # SDK 파이프라인 실행
+```
+
+## 내부 엔진 CLI
+```bash
 node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js transition
 node .vela/cli/vela-engine.js record pass|fail
