@@ -126,7 +126,7 @@ const BASH_WRITE_PATTERNS = [
 ];
 
 const MODEL_VERSIONS = {
-  HAIKU: "claude-haiku-4-5-20250929",
+  HAIKU: null,  // null = use Claude Code default model
   SONNET: null, // null = use Claude Code default model
   OPUS: null,   // null = use Claude Code default model
 };
