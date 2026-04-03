@@ -49,6 +49,15 @@ async function loadSdk() {
     );
     const sdk = await import(sdkPath);
     return sdk;
+  } catch (_) {
+    // fall through to tier 3
+  }
+
+  // Tier 3: global npm root (npm install -g)
+  try {
+    const { globalImport } = require("./global-require");
+    const sdk = await globalImport("@anthropic-ai/claude-agent-sdk");
+    return sdk;
   } catch (err) {
     return { _error: err };
   }

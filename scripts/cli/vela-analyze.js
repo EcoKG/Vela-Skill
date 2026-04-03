@@ -280,7 +280,8 @@ ${body}
 async function generatePdf(data, outputPath) {
   let browser;
   try {
-    const { chromium } = require("playwright");
+    const { globalRequire } = require("../shared/global-require");
+    const { chromium } = globalRequire("playwright");
     browser = await chromium.launch();
     const page = await browser.newPage();
 

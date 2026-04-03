@@ -86,7 +86,6 @@ fi
 # ─── Install npm dependencies globally (SQLite backends for TreeNode cache) ───
 if command -v npm &>/dev/null; then
   echo "  📦 Installing npm dependencies globally..."
-  GLOBAL_ROOT=$(npm root -g)
 
   # Core: playwright + sql.js (always needed)
   npm install -g playwright sql.js --no-audit --no-fund 2>/dev/null
@@ -101,23 +100,12 @@ if command -v npm &>/dev/null; then
 
   # Install Playwright Chromium browser binary
   npx playwright install chromium 2>/dev/null || echo "  ⚠ Playwright chromium install failed"
-
-  # Create symlinks for CJS require() resolution
-  mkdir -p "$SKILL_DIR/node_modules"
-  for pkg in better-sqlite3 sql.js playwright; do
-    if [ -d "$GLOBAL_ROOT/$pkg" ]; then
-      ln -sf "$GLOBAL_ROOT/$pkg" "$SKILL_DIR/node_modules/$pkg"
-    fi
-  done
 fi
 
 # ─── Optional: Install Claude Agent SDK (enables SDK orchestrator mode) ───
 if command -v npm &>/dev/null; then
   echo "  🔌 Installing Claude Agent SDK (optional)..."
-  GLOBAL_ROOT=$(npm root -g)
   npm install -g @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null && {
-    mkdir -p "$SKILL_DIR/node_modules/@anthropic-ai"
-    ln -sf "$GLOBAL_ROOT/@anthropic-ai/claude-agent-sdk" "$SKILL_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
     echo "  ✅ Claude Agent SDK installed globally"
   } || {
     echo "  ⚠ Claude Agent SDK not installed — CLI mode will be used (fully functional)"

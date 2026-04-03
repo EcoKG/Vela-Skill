@@ -42,6 +42,13 @@ async function loadSdk() {
   try {
     const sdk = await import("@anthropic-ai/claude-agent-sdk");
     return sdk;
+  } catch (_) {
+    // fall through to global fallback
+  }
+  try {
+    const { globalImport } = require("../shared/global-require");
+    const sdk = await globalImport("@anthropic-ai/claude-agent-sdk");
+    return sdk;
   } catch (err) {
     console.error("SDK 로드 실패:", err.message);
     process.exit(1);

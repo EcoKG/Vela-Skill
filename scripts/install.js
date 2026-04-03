@@ -1188,13 +1188,14 @@ function validate() {
   }
 
   // SQLite backend for TreeNode cache (optional — multiple fallbacks available)
+  const { globalRequire: gReq } = require("./shared/global-require");
   let sqliteBackend = "none";
   try {
-    require("better-sqlite3");
+    gReq("better-sqlite3");
     sqliteBackend = "better-sqlite3";
   } catch (e) {
     try {
-      require("sql.js");
+      gReq("sql.js");
       sqliteBackend = "sql.js";
     } catch (e2) {
       try {

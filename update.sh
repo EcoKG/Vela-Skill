@@ -74,8 +74,6 @@ fi
 
 # Update npm dependencies globally
 if command -v npm &>/dev/null; then
-  GLOBAL_ROOT=$(npm root -g)
-
   # Core: playwright + sql.js + better-sqlite3
   npm install -g playwright sql.js --no-audit --no-fund 2>/dev/null
   npm install -g better-sqlite3 --no-audit --no-fund 2>/dev/null || {
@@ -84,14 +82,6 @@ if command -v npm &>/dev/null; then
 
   # Install Playwright Chromium browser binary
   npx playwright install chromium 2>/dev/null || echo "  ⚠ Playwright chromium install failed"
-
-  # Create symlinks for CJS require() resolution
-  mkdir -p "$SKILL_DIR/node_modules"
-  for pkg in better-sqlite3 sql.js playwright; do
-    if [ -d "$GLOBAL_ROOT/$pkg" ]; then
-      ln -sf "$GLOBAL_ROOT/$pkg" "$SKILL_DIR/node_modules/$pkg"
-    fi
-  done
 fi
 
 echo "  ✦ Global skill updated: $SKILL_DIR"
@@ -105,10 +95,7 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
 
     # Optional: Update Claude Agent SDK globally
     if command -v npm &>/dev/null; then
-      GLOBAL_ROOT=$(npm root -g)
       npm install -g @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null && {
-        mkdir -p "$SKILL_DIR/node_modules/@anthropic-ai"
-        ln -sf "$GLOBAL_ROOT/@anthropic-ai/claude-agent-sdk" "$SKILL_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
         echo "  ✅ Claude Agent SDK updated globally"
       } || {
         echo "  ⚠ Claude Agent SDK not updated"

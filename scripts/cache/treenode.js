@@ -40,10 +40,11 @@ const command = args[0] || "ingest";
 let backend = null; // 'better-sqlite3' | 'sql.js' | 'cli' | 'json'
 let betterSqlite3 = null;
 let sqlJsInit = null;
+const { globalRequire } = require("../shared/global-require");
 
 // 1. Try better-sqlite3 (native, fastest)
 try {
-  betterSqlite3 = require("better-sqlite3");
+  betterSqlite3 = globalRequire("better-sqlite3");
   backend = "better-sqlite3";
 } catch (e) {
   // Not available — try next
@@ -52,7 +53,7 @@ try {
 // 2. Try sql.js (WASM, works everywhere)
 if (!backend) {
   try {
-    sqlJsInit = require("sql.js");
+    sqlJsInit = globalRequire("sql.js");
     backend = "sql.js";
   } catch (e) {
     // Not available — try next
