@@ -426,6 +426,7 @@ function normalizeFindingsArray(findings) {
 async function sdkAnalyze(opts) {
   if (!opts || typeof opts !== "object" || Array.isArray(opts))
     return { ok: false, error: "invalid_input" };
+  const { perspectives, cwd, model, maxTurns } = opts;
   // ─── Input validation ───
   if (!Array.isArray(perspectives)) {
     return { ok: false, error: "perspectives must be an array" };
