@@ -109,7 +109,7 @@
           "actor": "agent",
           "mode": "read",
           "entry_gate": ["implementation_complete"],
-          "exit_gate": ["verification_md_exists"],
+          "exit_gate": ["verification_md_exists", "ref_integrity"],
           "artifacts": ["verification.md"],
           "max_revisions": 2
         },
