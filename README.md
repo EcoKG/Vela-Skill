@@ -13,7 +13,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 ### 2. 🌟 이중 방어 (Defense in Depth)
 - **Gate Keeper** + **Gate Guard** — SDK 콜백 레벨 이중 차단 (Fail-closed: 예외 발생 시 도구 차단)
 - **Reviewer** (SDK 3단계: Haiku→Sonnet→Opus) — 비용 효율적 독립 평가
-- **Permission deny** — settings.local.json deny 패턴으로 절대 차단
+- **Permission deny/allow** — settings.local.json deny 패턴으로 절대 차단, allow 패턴으로 읽기 도구 자동 허용
 - **GUARD 0**: 파이프라인 중 TaskCreate 차단
 - **pipeline-state.json + config.json 보호**: 직접 수정 불가
 
@@ -136,8 +136,8 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
   1차) 보완 항목 선택 (이대로 진행/대상 지정/범위 좁히기/문제 상세)
   2차) 선택 항목의 세부 정보 수집
   3차) PM이 수집 정보를 조립하여 명확한 프롬프트 작성
-  4차) 조립된 프롬프트를 사용자에게 보여주고 확인
-  5차) 승인 → 조립된 프롬프트로 파이프라인 시작
+  4차) PM이 이해 확인(Reflection) 출력 — 대상/작업/범위 요약
+  5차) AskUserQuestion으로 "맞다 — 진행" / "수정 필요" 확인 → 승인 시 scale 선택
 ```
 
 **충분한 프롬프트는 바로 진행** — "이대로 진행 (Recommended)"으로 스킵 가능.
@@ -419,6 +419,11 @@ Guard: 🌟 [Vela] ✦ BLOCKED [VG-02]: Source code modification before execute 
 
 이 규칙들은 settings.local.json의 deny 패턴으로 등록되어 SDK와 무관하게 Claude Code 레벨에서 절대 차단된다.
 
+### Permission Allow (읽기 도구 자동 허용)
+
+`Read(*)`, `Glob(*)`, `Grep(*)` — PM이 소스 코드를 읽을 때 퍼미션 프롬프트 없이 진행.
+VK-07 규칙(PM은 Read/Glob/Grep 허용)과 일치하도록 settings.local.json에 자동 등록된다.
+
 ### Fail-Closed 보안 모델
 
 Gate Keeper와 Gate Guard의 모든 오류 경로는 fail-closed로 동작한다:
@@ -488,7 +493,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
 your-project/                    ← /vela init 실행 후
   ├── .vela/                     ← 프로젝트별 설치 (cli, shared, agents, templates 복사)
   ├── .claude/
-  │   ├── settings.local.json    ← permission deny + agent + spinner + statusLine
+  │   ├── settings.local.json    ← permission deny/allow + agent + spinner + statusLine
   │   └── agents/vela.md         ← 기본 에이전트
   └── CLAUDE.md                  ← Vela 규칙
 ```

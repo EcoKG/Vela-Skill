@@ -80,7 +80,8 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - 프롬프트 분석 → AskUserQuestion으로 보완 항목 선택
    - 보완이 필요하면 세부 정보 수집
    - PM이 수집 정보를 조립하여 명확한 프롬프트 작성
-   - 조립된 프롬프트를 사용자에게 보여주고 확인
+   - PM이 이해 확인(Reflection) 출력 — 대상/작업/범위 요약
+   - AskUserQuestion으로 "맞다 — 진행" / "수정 필요" 확인
    - 승인된 프롬프트가 `vela-engine init`의 request가 된다
 
 3. **파이프라인 규모 선택**
@@ -201,7 +202,7 @@ node .vela/cli/vela-engine.js auto
    - `templates/*` → `.vela/templates/`
 
 4. **권한 규칙 등록**
-   `.vela/install.js`를 실행하여 프로젝트-로컬 `.claude/settings.local.json`에 권한 규칙을 등록한다:
+   `.vela/install.js`를 실행하여 프로젝트-로컬 `.claude/settings.local.json`에 권한 규칙(deny/allow)을 등록한다:
    ```bash
    node .vela/install.js
    ```

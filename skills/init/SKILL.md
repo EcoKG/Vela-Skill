@@ -33,7 +33,7 @@ description: "⛵ Vela 환경 구축 — 프로젝트에 Vela 샌드박스 엔�
    node .vela/install.js verify
    ```
    install.js가 자동으로:
-   - `.claude/settings.local.json`에 훅 + permission 등록
+   - `.claude/settings.local.json`에 훅 + permission(deny/allow) 등록
    - `.claude/agents/vela.md` 배포 (기본 에이전트)
    - `"agent": "vela"` 설정
    - `CLAUDE.md` 생성
