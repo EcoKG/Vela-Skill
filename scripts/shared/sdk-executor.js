@@ -27,7 +27,7 @@ const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
-const MAX_TURNS = 25;
+const MAX_TURNS = undefined; // SDK 기본값 사용
 
 // ─── Inlined executor system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.

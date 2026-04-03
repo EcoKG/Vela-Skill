@@ -32,7 +32,7 @@ const { MODEL_VERSIONS } = require("./constants");
 // ─── Model Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
-const MAX_TURNS = 15;
+const MAX_TURNS = undefined; // SDK 기본값 사용 — 분석 에이전트는 턴 제한 불필요
 
 // ─── Structured output schema (K011 pattern — module-local) ───
 const ANALYZER_OUTPUT_SCHEMA = {

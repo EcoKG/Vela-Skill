@@ -27,7 +27,7 @@ const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
-const MAX_TURNS = 3;
+const MAX_TURNS = undefined; // SDK 기본값 사용
 
 const VERDICT_REGEX = /VERDICT:\s*(PASS|FAIL)/i;
 
