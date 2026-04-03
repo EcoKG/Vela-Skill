@@ -87,7 +87,7 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  *
  * @param {Object} opts
  * @param {string} opts.prompt - Required. The prompt to send to the agent.
- * @param {string} [opts.model] - Model identifier (e.g. 'claude-sonnet-4-6-20250514'. Omit to use Claude Code default.).
+ * @param {string} [opts.model] - Model identifier (e.g. 'sonnet', 'opus'. Omit to use Claude Code default.).
  * @param {string} [opts.cwd] - Working directory for the agent.
  * @param {string[]} [opts.allowedTools] - Tools the agent may use.
  * @param {string[]} [opts.disallowedTools] - Tools the agent may NOT use.

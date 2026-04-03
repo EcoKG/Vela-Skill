@@ -412,7 +412,7 @@ function normalizeFindingsArray(findings) {
  * @param {Object} opts
  * @param {string[]} opts.perspectives - Perspective keys to run (e.g. ['security', 'bugs'])
  * @param {string} opts.cwd - Project root working directory
- * @param {string} [opts.model] - Model to use (default: claude-haiku-4-5-20250929)
+ * @param {string} [opts.model] - Model to use (default: haiku). Accepts aliases: haiku, sonnet, opus
  * @param {number} [opts.maxTurns] - Max turns per agent (default: 5)
  *
  * settingSources: [] — passed through runSdkAgent to prevent hook loading in SDK agents

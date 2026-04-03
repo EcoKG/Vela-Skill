@@ -36,8 +36,8 @@ node .vela/cli/vela-pipeline.js cancel                                          
 ```bash
 node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (npm audit/outdated, 무료)
 node .vela/cli/vela-analyze.js report --input <file> [--output <file>]  # JSON → PDF 변환
-node .vela/cli/vela-analyze.js run --perspectives <list> [--model haiku|sonnet]  # SDK 코드 분석
-node .vela/cli/vela-analyze.js full --items <list> [--model haiku|sonnet] [--output <file>]  # 통합 분석 → PDF
+node .vela/cli/vela-analyze.js run --perspectives <list> [--model haiku|sonnet|opus]  # SDK 코드 분석
+node .vela/cli/vela-analyze.js full --items <list> [--model haiku|sonnet|opus] [--output <file>]  # 통합 분석 → PDF
 
 # perspectives: security, bugs, performance, code-quality, architecture
 # items: deps, security, bugs, performance, code-quality, architecture
