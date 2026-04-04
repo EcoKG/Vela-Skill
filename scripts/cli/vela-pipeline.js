@@ -983,57 +983,76 @@ async function runPipeline(request, scale, type) {
     }
 
     // Agent steps — run SDK query
-    const stepResult = await runStep(stepDef, state);
-    stepResults.push({ step: stepDef.id, ...stepResult });
-    totalCost += stepResult.cost;
+    try {
+      const stepResult = await runStep(stepDef, state);
+      stepResults.push({ step: stepDef.id, ...stepResult });
+      totalCost += stepResult.cost;
 
-    if (!stepResult.ok) {
-      console.error(`\n❌ Step "${stepDef.name}" failed: ${stepResult.error}`);
-      engine(["record", "fail", "--summary", `Failed: ${stepResult.error}`]);
-      // Don't exit — try to continue or handle gracefully
-      continue;
-    }
+      if (!stepResult.ok) {
+        console.error(`\n❌ Step "${stepDef.name}" failed: ${stepResult.error}`);
+        engine(["record", "fail", "--summary", `Failed: ${stepResult.error}`]);
+        // Don't exit — try to continue or handle gracefully
+        continue;
+      }
 
-    // Record success
-    engine(["record", "pass", "--summary", `Completed: ${stepDef.name}`]);
+      // Record success
+      engine(["record", "pass", "--summary", `Completed: ${stepDef.name}`]);
 
-    // Check if step requires review
-    if (stepDef.team && stepDef.team.reviewer_role) {
-      const maxRev = stepDef.max_revisions || 3;
-      const reviewResult = await runReviewLoop(stepDef, state, maxRev);
-      if (reviewResult.cost) totalCost += reviewResult.cost;
+      // Check if step requires review
+      if (stepDef.team && stepDef.team.reviewer_role) {
+        const maxRev = stepDef.max_revisions || 3;
+        const reviewResult = await runReviewLoop(stepDef, state, maxRev);
+        if (reviewResult.cost) totalCost += reviewResult.cost;
 
-      if (!reviewResult.ok) {
-        console.error(
-          `\n❌ Review failed for "${stepDef.name}": ${reviewResult.error || reviewResult.decision}`,
+        // escalate_to_pm — max_revisions exhausted, graceful exit
+        if (reviewResult.decision === "escalate_to_pm") {
+          const score = reviewResult.score != null ? reviewResult.score : "N/A";
+          console.error(
+            `\n🚨 Review exhausted for "${stepDef.name}": escalate_to_pm (score: ${score}/25, step: ${reviewResult.step || stepDef.id})`,
+          );
+          engine(["record", "fail", "--summary", `Review exhausted: escalate_to_pm (score: ${score}/25)`]);
+          break; // escalate_to_pm — graceful exit from step loop
+        }
+
+        // General review failure — record and exit gracefully
+        if (!reviewResult.ok) {
+          const reason = reviewResult.error || reviewResult.decision || "unknown";
+          console.error(
+            `\n❌ Review failed for "${stepDef.name}": ${reason}`,
+          );
+          engine(["record", "fail", "--summary", `Review failed: ${reason}`]);
+          break; // review failure — graceful exit from step loop
+        }
+      }
+
+      // Check local exit gate
+      const gateCheck = checkLocalGate(stepDef, state._artifactDir);
+      if (!gateCheck.passed) {
+        console.log(
+          `\n⚠️  Exit gate not met for "${stepDef.name}": ${gateCheck.missing.join(", ")}`,
         );
-        // Continue — the engine will block transition if gates aren't met
+        // Try transition anyway — engine has more complete gate checking
       }
-    }
 
-    // Check local exit gate
-    const gateCheck = checkLocalGate(stepDef, state._artifactDir);
-    if (!gateCheck.passed) {
-      console.log(
-        `\n⚠️  Exit gate not met for "${stepDef.name}": ${gateCheck.missing.join(", ")}`,
-      );
-      // Try transition anyway — engine has more complete gate checking
-    }
-
-    // Advance to next step
-    const transResult = engine(["transition"]);
-    if (transResult.completed) {
-      console.log("\n✅ Pipeline completed successfully!");
+      // Advance to next step
+      const transResult = engine(["transition"]);
+      if (transResult.completed) {
+        console.log("\n✅ Pipeline completed successfully!");
+        break;
+      }
+      if (!transResult.ok) {
+        console.log(
+          `\n⚠️  Transition blocked: ${transResult.error || transResult.message}`,
+        );
+        if (transResult.missing) {
+          console.log(`   Missing: ${transResult.missing.join(", ")}`);
+        }
+        // Don't exit — might be recoverable in next iteration
+      }
+    } catch (stepError) {
+      console.error(`\n💥 Unexpected error in step "${stepDef.name}": ${stepError.message}`);
+      engine(["record", "fail", "--summary", `Unexpected error: ${stepError.message}`]);
       break;
-    }
-    if (!transResult.ok) {
-      console.log(
-        `\n⚠️  Transition blocked: ${transResult.error || transResult.message}`,
-      );
-      if (transResult.missing) {
-        console.log(`   Missing: ${transResult.missing.join(", ")}`);
-      }
-      // Don't exit — might be recoverable in next iteration
     }
   }
 
