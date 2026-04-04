@@ -27,6 +27,13 @@
 # Test 15: structured_output.total takes priority over parseScore() regex
 # Test 16: structured_output absent → falls back to regex parseScore()
 # Test 17: structured_output.review_text used for review artifact when present
+# Test 18: step='research' → Source Coverage in prompt, no Layer Separation
+# Test 19: step='execute' → Layer Separation in prompt, no Source Coverage
+# Test 20: step='plan' → Architecture Design in prompt
+# Test 21: step='unknown_step' → execute fallback (Layer Separation)
+# Test 22: step='research' → outputFormat schema has source_coverage
+# Sweep:   no stale reviewResult.verdict in vela-pipeline.js
+# Sweep:   escalate_to_pm exists in vela-pipeline.js
 # K001:    settingSources present in sdk-reviewer.js source
 # Broad:   No stale Reviewer subagent references in updated files
 # ──────────────────────────────────────────────────────────────
@@ -547,6 +554,130 @@ result=$(run_reviewer_test "
   }).catch(e => console.log('ERROR:' + e.message));
 ")
 assert_eq "review artifact uses structured review_text" "PASS" "$result"
+
+# ── Clean artifacts for step-aware tests ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 18: step='research' → prompt contains 'Source Coverage', not 'Layer Separation' ──
+echo ""
+echo "📋 Test 18: step='research' → Source Coverage in prompt, no Layer Separation"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: 'research', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const sp = captured.options.systemPrompt || '';
+    const hasResearch = sp.includes('Source Coverage');
+    const noExecute = !sp.includes('Layer Separation');
+    console.log(hasResearch && noExecute ? 'PASS' : 'FAIL:research=' + hasResearch + ',noExec=' + noExecute);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "research step: Source Coverage in prompt, no Layer Separation" "PASS" "$result"
+
+# ── Clean artifacts ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 19: step='execute' → prompt contains 'Layer Separation', not 'Source Coverage' ──
+echo ""
+echo "📋 Test 19: step='execute' → Layer Separation in prompt, no Source Coverage"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: 'execute', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const sp = captured.options.systemPrompt || '';
+    const hasExecute = sp.includes('Layer Separation');
+    const noResearch = !sp.includes('Source Coverage');
+    console.log(hasExecute && noResearch ? 'PASS' : 'FAIL:exec=' + hasExecute + ',noResearch=' + noResearch);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "execute step: Layer Separation in prompt, no Source Coverage" "PASS" "$result"
+
+# ── Clean artifacts ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 20: step='plan' → prompt contains 'Architecture Design' ──
+echo ""
+echo "📋 Test 20: step='plan' → Architecture Design in prompt"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: 'plan', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const sp = captured.options.systemPrompt || '';
+    const hasPlan = sp.includes('Architecture Design');
+    const noResearch = !sp.includes('Source Coverage');
+    const noExecute = !sp.includes('Layer Separation');
+    console.log(hasPlan && noResearch && noExecute ? 'PASS' : 'FAIL:plan=' + hasPlan + ',noR=' + noResearch + ',noE=' + noExecute);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "plan step: Architecture Design, no Source Coverage or Layer Separation" "PASS" "$result"
+
+# ── Clean artifacts ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 21: step='unknown_step' → execute fallback (Layer Separation in prompt) ──
+echo ""
+echo "📋 Test 21: step='unknown_step' → execute fallback (Layer Separation)"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: 'unknown_step', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const sp = captured.options.systemPrompt || '';
+    const hasExecute = sp.includes('Layer Separation');
+    console.log(hasExecute ? 'PASS' : 'FAIL:hasExecute=' + hasExecute);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "unknown step falls back to execute prompt" "PASS" "$result"
+
+# ── Clean artifacts ──
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+
+# ── Test 22: step='research' → outputFormat schema has 'source_coverage' ──
+echo ""
+echo "📋 Test 22: step='research' → outputFormat schema has source_coverage"
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: 'research', artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const schema = captured.options.outputFormat && captured.options.outputFormat.schema;
+    const scoreProp = schema && schema.properties && schema.properties.scores && schema.properties.scores.properties;
+    const hasSc = scoreProp && 'source_coverage' in scoreProp;
+    const noLayer = scoreProp && !('layer_separation' in scoreProp);
+    console.log(hasSc && noLayer ? 'PASS' : 'FAIL:hasSc=' + hasSc + ',noLayer=' + noLayer);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "research schema has source_coverage, no layer_separation" "PASS" "$result"
+
+# ── Pipeline verdict sweep ──
+echo ""
+echo "📋 Pipeline sweep: no stale reviewResult.verdict in vela-pipeline.js"
+stale_verdict=$(rg 'reviewResult\.verdict' "$PROJECT_ROOT/scripts/cli/vela-pipeline.js" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [ -z "$stale_verdict" ]; then
+  echo "  ✅ PASS: no stale verdict references"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: stale verdict references found:"
+  echo "    $stale_verdict"
+  FAIL=$((FAIL + 1))
+fi
+
+# ── Pipeline escalate_to_pm sweep ──
+echo ""
+echo "📋 Pipeline sweep: escalate_to_pm exists in vela-pipeline.js"
+esc_ref=$(rg 'escalate_to_pm' "$PROJECT_ROOT/scripts/cli/vela-pipeline.js" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [ -n "$esc_ref" ]; then
+  echo "  ✅ PASS: escalate_to_pm found"
+  echo "    $esc_ref"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: escalate_to_pm NOT found"
+  FAIL=$((FAIL + 1))
+fi
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""
