@@ -736,6 +736,7 @@ function checkLocalGate(stepDef, artifactDir) {
 async function runReviewLoop(stepDef, state, maxRevisions) {
   const artifactDir = state._artifactDir;
   const { sdkReview } = require("../shared/sdk-reviewer.js");
+  let lastReviewScore = null;
 
   for (let attempt = 1; attempt <= maxRevisions; attempt++) {
     console.log(`\n  📝 Review attempt ${attempt}/${maxRevisions}...`);
@@ -760,27 +761,18 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
     }
 
     console.log(
-      `  📊 Review score: ${reviewResult.score}/25 (${reviewResult.verdict})`,
+      `  📊 Review score: ${reviewResult.score}/25 (${reviewResult.decision})`,
     );
+    lastReviewScore = reviewResult.score;
 
-    if (reviewResult.verdict === "approve") {
-      // Write approval artifact for gate check
-      const approvalPath = path.join(
-        artifactDir,
-        `approval-${stepDef.id}.json`,
-      );
-      const approval = {
-        decision: "approve",
-        score: reviewResult.score,
-        stage: reviewResult.stage,
-        created_at: new Date().toISOString(),
-      };
-      fs.writeFileSync(approvalPath, JSON.stringify(approval, null, 2));
+    if (reviewResult.decision === "approve") {
+      // sdkReview() already writes approval-{step}.json with richer data
+      // (escalated, escalation_model, threshold) — no duplicate write needed
       console.log(`  ✅ Approved (score: ${reviewResult.score}/25)`);
 
       return {
         ok: true,
-        verdict: "approve",
+        decision: "approve",
         score: reviewResult.score,
         attempts: attempt,
       };
@@ -798,7 +790,7 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
     if (attempt >= maxRevisions) {
       return {
         ok: false,
-        verdict: "reject",
+        decision: "reject",
         score: reviewResult.score,
         attempts: attempt,
       };
@@ -817,7 +809,14 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
     }
   }
 
-  return { ok: false, error: "max_revisions_reached", attempts: maxRevisions };
+  return {
+    ok: false,
+    error: "max_revisions_reached",
+    decision: "escalate_to_pm",
+    score: lastReviewScore,
+    attempts: maxRevisions,
+    step: stepDef.id,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1006,7 +1005,7 @@ async function runPipeline(request, scale, type) {
 
       if (!reviewResult.ok) {
         console.error(
-          `\n❌ Review failed for "${stepDef.name}": ${reviewResult.error || reviewResult.verdict}`,
+          `\n❌ Review failed for "${stepDef.name}": ${reviewResult.error || reviewResult.decision}`,
         );
         // Continue — the engine will block transition if gates aren't met
       }
