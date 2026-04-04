@@ -47,7 +47,9 @@ function globalRequire(pkgName) {
 /**
  * import() with global fallback (for ESM packages).
  * 1. 로컬 import() 시도
- * 2. 실패 시 글로벌 npm root에서 import()
+ * 2. 실패 시 글로벌 npm root에서 createRequire().resolve()로 엔트리포인트 해석 후 import()
+ *    — ESM import()는 디렉토리 경로를 거부(ERR_UNSUPPORTED_DIR_IMPORT)하므로
+ *      createRequire를 사용하여 package.json exports 맵을 해석한 실제 파일 경로를 얻는다.
  * @param {string} pkgName - 패키지 이름
  * @returns {Promise<any>} 모듈
  */
@@ -57,7 +59,10 @@ async function globalImport(pkgName) {
   } catch {
     const root = getGlobalRoot();
     if (!root) throw new Error(`Cannot find module '${pkgName}' (local and global)`);
-    return await import(path.join(root, pkgName));
+    const { createRequire } = require("module");
+    const req = createRequire(path.join(root, "noop.js"));
+    const resolved = req.resolve(pkgName);
+    return await import(resolved);
   }
 }
 
