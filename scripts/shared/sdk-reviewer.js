@@ -538,6 +538,7 @@ async function sdkReview(opts) {
       threshold: PASS_THRESHOLD,
       stage: "haiku",
       model: stage1.model,
+      _source: "sdk-reviewer",
       timestamp: new Date().toISOString(),
     });
 
@@ -579,6 +580,7 @@ async function sdkReview(opts) {
         model: opusResult.model,
         escalated: true,
         escalation_model: "opus",
+        _source: "sdk-reviewer",
         timestamp: new Date().toISOString(),
       });
 
@@ -613,6 +615,7 @@ async function sdkReview(opts) {
       model: opusResult.ok ? opusResult.model : OPUS_MODEL,
       escalated: true,
       escalation_model: "opus",
+      _source: "sdk-reviewer",
       timestamp: new Date().toISOString(),
     });
     writeEscalation(cwd, opusScore, { auto_escalated: true });
@@ -677,6 +680,7 @@ async function sdkReview(opts) {
       threshold: PASS_THRESHOLD,
       stage: "sonnet",
       model: stage2.model,
+      _source: "sdk-reviewer",
       timestamp: new Date().toISOString(),
     });
 
@@ -719,6 +723,7 @@ async function sdkReview(opts) {
       model: opusResult.model,
       escalated: true,
       escalation_model: "opus",
+      _source: "sdk-reviewer",
       timestamp: new Date().toISOString(),
     });
 
@@ -753,6 +758,7 @@ async function sdkReview(opts) {
     model: opusResult.ok ? opusResult.model : OPUS_MODEL,
     escalated: true,
     escalation_model: "opus",
+    _source: "sdk-reviewer",
     timestamp: new Date().toISOString(),
   });
   writeEscalation(cwd, opusScore, { auto_escalated: true });

@@ -412,6 +412,25 @@ function buildStepPrompt(stepDef, state, artifactDir) {
   const request = state.request;
   const stepId = stepDef.id;
 
+  // Sub-phase context injection — if step defines sub_phases, query engine for current phase
+  let subPhaseBlock = "";
+  if (stepDef.sub_phases && stepDef.sub_phases.length > 0) {
+    try {
+      const status = engine(["status"]);
+      const subInfo = status.sub_phase;
+      if (subInfo && subInfo.current_phase) {
+        subPhaseBlock = [
+          "",
+          `## 현재 서브 단계`,
+          `Current sub-phase: ${subInfo.current_phase}`,
+          `Phases: ${subInfo.phases.join(" → ")}`,
+          `Progress: ${subInfo.current_index + 1}/${subInfo.phases.length}`,
+          "",
+        ].join("\n");
+      }
+    } catch { /* engine status unavailable — skip sub-phase injection */ }
+  }
+
   switch (stepId) {
     case "research":
       return [
@@ -452,7 +471,7 @@ function buildStepPrompt(stepDef, state, artifactDir) {
         "",
         `## 구현 계획`,
         `${artifactDir}/plan.md를 먼저 읽어라.`,
-        "",
+        subPhaseBlock,
         `## 지시사항`,
         `plan.md의 Class Specification에 따라 코드를 구현하라.`,
         `TDD 순서(test → implement → refactor)를 따른다.`,
@@ -673,6 +692,10 @@ function checkLocalGate(stepDef, artifactDir) {
         ) {
           missing.push(gate);
         }
+        break;
+      case "report_md_exists":
+        if (!fs.existsSync(path.join(artifactDir, "report.md")))
+          missing.push(gate);
         break;
       // Gates handled by engine (approval, git, hmac) — skip local check
       case "ref_integrity": {
@@ -998,6 +1021,13 @@ async function runPipeline(request, scale, type) {
       // Record success
       engine(["record", "pass", "--summary", `Completed: ${stepDef.name}`]);
 
+      // Advance sub-phase tracking if step defines sub_phases
+      if (stepDef.sub_phases && stepDef.sub_phases.length > 0) {
+        try {
+          engine(["sub-transition"]);
+        } catch { /* sub-transition failure is non-fatal */ }
+      }
+
       // Check if step requires review
       if (stepDef.team && stepDef.team.reviewer_role) {
         const maxRev = stepDef.max_revisions || 3;
@@ -1279,6 +1309,7 @@ module.exports = {
   checkLocalGate,
   runStep,
   runReviewLoop,
+  generateReport,
 };
 
 if (require.main === module) {
