@@ -32,8 +32,79 @@ const FALLBACK_SCORE_REGEX = /\b(\d+)\s*\/\s*25\b/;
 const PASS_THRESHOLD = 20;
 const FAIL_THRESHOLD = 15;
 
-// ─── Structured output schema (K011 pattern — module-local) ───
-const REVIEWER_OUTPUT_SCHEMA = {
+// ─── Structured output schemas — step-aware (K011 pattern — module-local) ───
+
+// Common issue + review_text portion shared by all schemas
+const _COMMON_SCHEMA_FIELDS = {
+  total: { type: "number" },
+  issues: {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        severity: {
+          type: "string",
+          enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+        },
+        description: { type: "string" },
+      },
+      required: ["severity", "description"],
+    },
+  },
+  review_text: { type: "string" },
+};
+
+const RESEARCH_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    scores: {
+      type: "object",
+      properties: {
+        source_coverage: { type: "number" },
+        analysis_depth: { type: "number" },
+        risk_identification: { type: "number" },
+        technology_assessment: { type: "number" },
+        actionable_findings: { type: "number" },
+      },
+      required: [
+        "source_coverage",
+        "analysis_depth",
+        "risk_identification",
+        "technology_assessment",
+        "actionable_findings",
+      ],
+    },
+    ..._COMMON_SCHEMA_FIELDS,
+  },
+  required: ["scores", "total", "review_text"],
+};
+
+const PLAN_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    scores: {
+      type: "object",
+      properties: {
+        architecture_design: { type: "number" },
+        specification_completeness: { type: "number" },
+        test_strategy: { type: "number" },
+        implementation_feasibility: { type: "number" },
+        risk_mitigation: { type: "number" },
+      },
+      required: [
+        "architecture_design",
+        "specification_completeness",
+        "test_strategy",
+        "implementation_feasibility",
+        "risk_mitigation",
+      ],
+    },
+    ..._COMMON_SCHEMA_FIELDS,
+  },
+  required: ["scores", "total", "review_text"],
+};
+
+const EXECUTE_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
     scores: {
@@ -53,22 +124,7 @@ const REVIEWER_OUTPUT_SCHEMA = {
         "specification_completeness",
       ],
     },
-    total: { type: "number" },
-    issues: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          severity: {
-            type: "string",
-            enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-          },
-          description: { type: "string" },
-        },
-        required: ["severity", "description"],
-      },
-    },
-    review_text: { type: "string" },
+    ..._COMMON_SCHEMA_FIELDS,
   },
   required: ["scores", "total", "review_text"],
 };
@@ -76,10 +132,12 @@ const REVIEWER_OUTPUT_SCHEMA = {
 // ─── Stage 3: Opus escalation model + budget ───
 const OPUS_MODEL = MODEL_VERSIONS.OPUS;
 
-// ─── Inlined reviewer system prompt ───
+// ─── Inlined reviewer system prompts — step-aware ───
 // SDK agents run with settingSources: [] and cannot read project files.
 // The entire reviewer context must be in the system prompt.
-const REVIEWER_SYSTEM_PROMPT = `# Reviewer Agent
+
+// Shared sections reused across all three prompts
+const _PROMPT_HEADER = `# Reviewer Agent
 
 이 지시는 **절대적**이다. 예외 없이 따라야 한다.
 
@@ -88,7 +146,88 @@ const REVIEWER_SYSTEM_PROMPT = `# Reviewer Agent
 5개 차원 각 X/5, 총 X/25 점수를 매긴다.
 
 ## 채점 기준 — 5차원 모두 빠짐없이 평가한다
+`;
 
+const _PROMPT_FOOTER = `
+## 이슈 심각도
+- **CRITICAL**: 근본적 설계 결함 — 반드시 수정 필요
+- **HIGH**: 구현 전 수정 필요
+- **MEDIUM**: 개선 권장
+- **LOW**: 사소한 제안
+
+## 절대 위반 금지
+1. 산출물만 평가한다. 프로세스를 평가하지 않는다
+2. 엄격하고 비판적으로 평가한다. 관대하게 점수를 주지 않는다
+3. review-{step}.md만 작성한다. 소스 코드나 다른 산출물을 수정하지 않는다
+
+## 출력 형식
+반드시 마지막에 다음 형식으로 총점을 작성한다:
+## Total: XX/25
+`;
+
+const RESEARCH_REVIEW_PROMPT =
+  _PROMPT_HEADER +
+  `
+### 1. Source Coverage (X/5)
+- 1차/2차 자료원의 폭과 깊이
+- 공식 문서, 논문, 실무 사례 등 근거 자료의 다양성
+- 출처 명시 여부 및 신뢰도
+
+### 2. Analysis Depth (X/5)
+- 표면적 요약이 아닌 심층 분석 여부
+- 장단점 비교, 트레이드오프 분석
+- 기술적 맥락에서의 해석 품질
+
+### 3. Risk Identification (X/5)
+- 기술적·운영적 리스크 식별 범위
+- 리스크 심각도 평가의 적절성
+- 완화 전략 제안 여부
+
+### 4. Technology Assessment (X/5)
+- 기술 선택지 비교 분석의 체계성
+- 성숙도, 커뮤니티, 유지보수성 평가
+- 프로젝트 맥락에 맞는 적합성 판단
+
+### 5. Actionable Findings (X/5)
+- 발견 사항의 실행 가능성
+- 구체적 권장 사항 제시 여부
+- 후속 단계(plan/execute)에 활용 가능한 형태인지
+` +
+  _PROMPT_FOOTER;
+
+const PLAN_REVIEW_PROMPT =
+  _PROMPT_HEADER +
+  `
+### 1. Architecture Design (X/5)
+- 컴포넌트/모듈 분리 설계의 적절성
+- 인터페이스 경계와 의존성 방향
+- 확장성과 유지보수성 고려
+
+### 2. Specification Completeness (X/5)
+- 필요한 인터페이스/계약 정의의 완전성
+- API 시그니처, 파라미터, 반환 타입 명세
+- 누락된 중요 추상화나 엣지 케이스
+
+### 3. Test Strategy (X/5)
+- 테스트 계획의 포괄성 (unit/integration/e2e)
+- 테스트 시나리오의 실질적 검증 가치
+- 엣지 케이스와 실패 경로 커버리지
+
+### 4. Implementation Feasibility (X/5)
+- 설계의 기술적 실현 가능성
+- 기존 코드베이스와의 호환성
+- 기술 부채 및 의존성 리스크
+
+### 5. Risk Mitigation (X/5)
+- 식별된 리스크에 대한 대응 전략
+- 롤백/폴백 계획의 존재 여부
+- 단계별 검증 포인트 설정
+` +
+  _PROMPT_FOOTER;
+
+const EXECUTE_REVIEW_PROMPT =
+  _PROMPT_HEADER +
+  `
 ### 1. Layer Separation (X/5)
 - Clean Architecture 레이어 분리
 - 의존성 방향 (안쪽으로만)
@@ -115,22 +254,40 @@ const REVIEWER_SYSTEM_PROMPT = `# Reviewer Agent
 - 필요한 클래스/인터페이스 정의 완전성
 - 메서드 시그니처 + 파라미터 + 반환 타입
 - 누락된 중요 추상화
+` +
+  _PROMPT_FOOTER;
 
-## 이슈 심각도
-- **CRITICAL**: 근본적 설계 결함 — 반드시 수정 필요
-- **HIGH**: 구현 전 수정 필요
-- **MEDIUM**: 개선 권장
-- **LOW**: 사소한 제안
+// ─── Step-aware getters ───
 
-## 절대 위반 금지
-1. 산출물만 평가한다. 프로세스를 평가하지 않는다
-2. 엄격하고 비판적으로 평가한다. 관대하게 점수를 주지 않는다
-3. review-{step}.md만 작성한다. 소스 코드나 다른 산출물을 수정하지 않는다
+/**
+ * Get the appropriate reviewer system prompt for a pipeline step.
+ * Unknown steps fall back to EXECUTE (preserves existing behavior).
+ * @param {string} step - Pipeline step name (research, plan, execute, etc.)
+ * @returns {string}
+ */
+function getReviewerSystemPrompt(step) {
+  const PROMPTS = {
+    research: RESEARCH_REVIEW_PROMPT,
+    plan: PLAN_REVIEW_PROMPT,
+    execute: EXECUTE_REVIEW_PROMPT,
+  };
+  return PROMPTS[step] || EXECUTE_REVIEW_PROMPT;
+}
 
-## 출력 형식
-반드시 마지막에 다음 형식으로 총점을 작성한다:
-## Total: XX/25
-`;
+/**
+ * Get the appropriate output schema for a pipeline step.
+ * Unknown steps fall back to EXECUTE_OUTPUT_SCHEMA (preserves existing behavior).
+ * @param {string} step - Pipeline step name (research, plan, execute, etc.)
+ * @returns {Object}
+ */
+function getOutputSchema(step) {
+  const SCHEMAS = {
+    research: RESEARCH_OUTPUT_SCHEMA,
+    plan: PLAN_OUTPUT_SCHEMA,
+    execute: EXECUTE_OUTPUT_SCHEMA,
+  };
+  return SCHEMAS[step] || EXECUTE_OUTPUT_SCHEMA;
+}
 
 /**
  * Parse a review score from agent output text.
@@ -213,6 +370,16 @@ function writeEscalation(cwd, score, extra) {
 function buildReviewPrompt(step, priorReview) {
   let prompt = `다음 파이프라인 단계의 산출물을 리뷰하라: "${step}"\n\n`;
   prompt += `이 단계의 artifacts 디렉토리에 있는 모든 산출물을 읽고 5차원 채점 기준에 따라 평가하라.\n`;
+
+  // Step-specific guidance
+  if (step === "research") {
+    prompt += `research.md 등 조사 산출물을 중심으로 평가하라. 자료원의 폭, 분석 깊이, 리스크 식별에 집중하라.\n`;
+  } else if (step === "plan") {
+    prompt += `plan.md 등 설계 문서를 중심으로 평가하라. 아키텍처 설계, 명세 완전성, 구현 가능성에 집중하라.\n`;
+  } else {
+    prompt += `소스 코드와 테스트를 중심으로 평가하라. 레이어 분리, 설계 패턴, SOLID 원칙 준수에 집중하라.\n`;
+  }
+
   prompt += `반드시 마지막에 "## Total: XX/25" 형식으로 총점을 명시하라.\n`;
 
   if (priorReview) {
@@ -240,9 +407,9 @@ async function runReviewStage(opts) {
     prompt,
     model: opts.model,
     cwd: opts.cwd,
-    systemPrompt: REVIEWER_SYSTEM_PROMPT,
+    systemPrompt: getReviewerSystemPrompt(opts.step),
     maxTurns: opts.maxTurns,
-    outputFormat: { type: "json", schema: REVIEWER_OUTPUT_SCHEMA },
+    outputFormat: { type: "json", schema: getOutputSchema(opts.step) },
     // settingSources: [] is set by runSdkAgent internally (D014)
   };
 
