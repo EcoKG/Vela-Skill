@@ -547,6 +547,117 @@ assert_contains "vela-engine.js loadable" '"engineOk":true' "$INTEGRATION"
 assert_contains "vela-pipeline.js loadable with exports" '"pipelineOk":true' "$INTEGRATION"
 
 # ══════════════════════════════════════════════════════════
+# Test 20: generateReport — exported as function
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 20: generateReport export ──"
+GEN_REPORT_EXPORT=$(node -e "
+  const m = require('$PIPELINE_MODULE');
+  console.log(typeof m.generateReport === 'function' ? 'EXPORTED' : 'MISSING');
+" 2>/dev/null)
+assert_eq "generateReport is exported function" "EXPORTED" "$GEN_REPORT_EXPORT"
+
+# ══════════════════════════════════════════════════════════
+# Test 21: generateReport — output format contains expected headers
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 21: generateReport output format ──"
+GEN_REPORT_FMT=$(node -e "
+  const { generateReport } = require('$PIPELINE_MODULE');
+  const state = {
+    request: 'Test request for report',
+    pipeline_type: 'standard',
+    scale: 'm',
+    created_at: '2025-01-01T00:00:00Z',
+  };
+  const stepResults = [
+    { step: 'research', ok: true, cost: 0.01, durationMs: 1200 },
+    { step: 'plan', ok: true, cost: 0.02, durationMs: 2400 },
+  ];
+  const report = generateReport(state, stepResults);
+  const results = {
+    hasTitle: report.includes('# Pipeline Report'),
+    hasRequest: report.includes('Test request for report'),
+    hasStepResults: report.includes('## Step Results'),
+    hasTable: report.includes('| Step |') && report.includes('| Status |'),
+    hasCost: report.includes('Total Cost'),
+  };
+  console.log(JSON.stringify(results));
+" 2>/dev/null)
+assert_contains "report has Pipeline Report title" '"hasTitle":true' "$GEN_REPORT_FMT"
+assert_contains "report includes request text" '"hasRequest":true' "$GEN_REPORT_FMT"
+assert_contains "report has Step Results section" '"hasStepResults":true' "$GEN_REPORT_FMT"
+assert_contains "report has results table header" '"hasTable":true' "$GEN_REPORT_FMT"
+assert_contains "report includes Total Cost" '"hasCost":true' "$GEN_REPORT_FMT"
+
+# ══════════════════════════════════════════════════════════
+# Test 22: checkLocalGate — report_md_exists gate
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 22: checkLocalGate report_md_exists ──"
+TEMP_REPORT_DIR="$TEMP_GATE_DIR/report-test"
+mkdir -p "$TEMP_REPORT_DIR"
+
+GATE_REPORT=$(node -e "
+  const { checkLocalGate } = require('$PIPELINE_MODULE');
+  const fs = require('fs');
+  const dir = '$TEMP_REPORT_DIR';
+
+  // Case 1: report.md missing → gate fails
+  const r1 = checkLocalGate({ exit_gate: ['report_md_exists'] }, dir);
+
+  // Case 2: report.md present → gate passes
+  fs.writeFileSync(dir + '/report.md', '# Pipeline Report');
+  const r2 = checkLocalGate({ exit_gate: ['report_md_exists'] }, dir);
+
+  console.log(JSON.stringify({
+    missingFails: !r1.passed && r1.missing.includes('report_md_exists'),
+    presentPasses: r2.passed,
+  }));
+" 2>/dev/null)
+assert_contains "report_md_exists fails when missing" '"missingFails":true' "$GATE_REPORT"
+assert_contains "report_md_exists passes when present" '"presentPasses":true' "$GATE_REPORT"
+
+# ══════════════════════════════════════════════════════════
+# Test 23: approval _source field — 6 occurrences in sdk-reviewer.js
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 23: approval _source markers ──"
+SOURCE_COUNT=$(grep -c '_source.*sdk-reviewer' "$PROJECT_ROOT/scripts/shared/sdk-reviewer.js" 2>/dev/null || echo "0")
+assert_eq "sdk-reviewer.js has 6 _source markers" "6" "$SOURCE_COUNT"
+
+# ══════════════════════════════════════════════════════════
+# Test 24: sub_phase / sub-transition code presence
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 24: sub_phase tracking code ──"
+SUB_PHASE_COUNT=$(grep -cE 'sub.transition|sub_phase' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+# T02 added sub_phases references — expect at least 2
+TOTAL=$((TOTAL + 1))
+if [ "$SUB_PHASE_COUNT" -ge 2 ]; then
+  echo "  ✅ PASS: sub_phase/sub-transition count ($SUB_PHASE_COUNT) >= 2"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: sub_phase/sub-transition count ($SUB_PHASE_COUNT) < 2"
+  FAIL=$((FAIL + 1))
+fi
+
+# ══════════════════════════════════════════════════════════
+# Test 25: escalate_to_pm handling code presence
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 25: escalate_to_pm handling ──"
+ESCALATE_COUNT=$(grep -c 'escalate_to_pm' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+TOTAL=$((TOTAL + 1))
+if [ "$ESCALATE_COUNT" -ge 2 ]; then
+  echo "  ✅ PASS: escalate_to_pm count ($ESCALATE_COUNT) >= 2"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: escalate_to_pm count ($ESCALATE_COUNT) < 2"
+  FAIL=$((FAIL + 1))
+fi
+
+# ══════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════
 echo ""
