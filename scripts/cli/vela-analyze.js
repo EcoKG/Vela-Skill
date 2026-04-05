@@ -108,8 +108,14 @@ function buildReportHtml(data) {
 
   // ─── Table of Contents ───
   const tocItems = [];
-  if (hasDeps) { tocItems.push("Executive Summary"); tocItems.push("Vulnerability Findings"); tocItems.push("Outdated Packages"); }
-  if (data.codeAnalysis) { tocItems.push("Code Analysis"); }
+  if (hasDeps) {
+    tocItems.push("Executive Summary");
+    tocItems.push("Vulnerability Findings");
+    tocItems.push("Outdated Packages");
+  }
+  if (data.codeAnalysis) {
+    tocItems.push("Code Analysis");
+  }
   if (tocItems.length > 1) {
     body += `<nav class="toc"><h2>Contents</h2><ol>`;
     for (const item of tocItems) body += `<li>${esc(item)}</li>`;
@@ -133,15 +139,19 @@ function buildReportHtml(data) {
       <tr><td class="label">Total Vulnerabilities</td><td class="value">${totalVuln}</td></tr>
       <tr><td class="label">Outdated Packages</td><td class="value">${meta.outdatedCount || 0}</td></tr>
       <tr><td class="label">Total Dependencies</td><td class="value">${meta.totalDependencies || "—"}</td></tr>
-      ${data.codeAnalysis ? `<tr><td class="label">Code Perspectives Analyzed</td><td class="value">${(data.codeAnalysis.perspectives || []).filter(p => p.ok).length} / ${(data.codeAnalysis.perspectives || []).length}</td></tr>` : ""}
+      ${data.codeAnalysis ? `<tr><td class="label">Code Perspectives Analyzed</td><td class="value">${(data.codeAnalysis.perspectives || []).filter((p) => p.ok).length} / ${(data.codeAnalysis.perspectives || []).length}</td></tr>` : ""}
     </tbody>
   </table>
 
-  ${totalVuln > 0 ? `<h3>Severity Distribution</h3>
+  ${
+    totalVuln > 0
+      ? `<h3>Severity Distribution</h3>
   <table class="dist-table">
-    <thead><tr>${sevEntries.map(s => `<th class="${s.cls}">${s.label}</th>`).join("")}</tr></thead>
-    <tbody><tr>${sevEntries.map(s => `<td>${s.count}</td>`).join("")}</tr></tbody>
-  </table>` : `<p class="note">No vulnerabilities detected.</p>`}
+    <thead><tr>${sevEntries.map((s) => `<th class="${s.cls}">${s.label}</th>`).join("")}</tr></thead>
+    <tbody><tr>${sevEntries.map((s) => `<td>${s.count}</td>`).join("")}</tr></tbody>
+  </table>`
+      : `<p class="note">No vulnerabilities detected.</p>`
+  }
 </section>`;
 
     // ─── Vulnerability Findings ───
@@ -155,8 +165,19 @@ function buildReportHtml(data) {
       body += `<table class="findings-table">
   <thead><tr><th>Severity</th><th>Package</th><th>Title</th><th>Direct</th><th>Fix</th></tr></thead>
   <tbody>`;
-      const severityOrder = ["critical", "high", "moderate", "low", "info", "unknown"];
-      const sorted = [...findings].sort((a, b) => severityOrder.indexOf((a.severity || "unknown").toLowerCase()) - severityOrder.indexOf((b.severity || "unknown").toLowerCase()));
+      const severityOrder = [
+        "critical",
+        "high",
+        "moderate",
+        "low",
+        "info",
+        "unknown",
+      ];
+      const sorted = [...findings].sort(
+        (a, b) =>
+          severityOrder.indexOf((a.severity || "unknown").toLowerCase()) -
+          severityOrder.indexOf((b.severity || "unknown").toLowerCase()),
+      );
 
       for (const f of sorted) {
         const sev = (f.severity || "unknown").toLowerCase();
@@ -171,7 +192,9 @@ function buildReportHtml(data) {
       body += `</tbody></table>`;
 
       // Detail blocks for critical/high
-      const serious = sorted.filter(f => ["critical", "high"].includes((f.severity || "").toLowerCase()));
+      const serious = sorted.filter((f) =>
+        ["critical", "high"].includes((f.severity || "").toLowerCase()),
+      );
       if (serious.length > 0) {
         body += `<h3>Detail — Critical &amp; High</h3>`;
         for (const f of serious) {
@@ -220,13 +243,19 @@ function buildReportHtml(data) {
     body += `<section>
   <h2>${sectionNum}. Code Analysis</h2>`;
 
-    if (!data.codeAnalysis.ok && (!data.codeAnalysis.perspectives || data.codeAnalysis.perspectives.length === 0)) {
+    if (
+      !data.codeAnalysis.ok &&
+      (!data.codeAnalysis.perspectives ||
+        data.codeAnalysis.perspectives.length === 0)
+    ) {
       body += `<p class="error">Analysis failed: ${esc(data.codeAnalysis.error || "Unknown error")}</p>`;
     } else {
       const perspectives = data.codeAnalysis.perspectives || [];
 
       for (const p of perspectives) {
-        const pName = (p.perspective || "unknown").charAt(0).toUpperCase() + (p.perspective || "unknown").slice(1);
+        const pName =
+          (p.perspective || "unknown").charAt(0).toUpperCase() +
+          (p.perspective || "unknown").slice(1);
 
         body += `<div class="perspective">
   <h3>${esc(pName)}</h3>`;
@@ -271,8 +300,11 @@ function buildReportHtml(data) {
       }
 
       // Totals
-      const okP = perspectives.filter(p => p.ok);
-      const totalF = perspectives.reduce((s, p) => s + (p.findings || []).length, 0);
+      const okP = perspectives.filter((p) => p.ok);
+      const totalF = perspectives.reduce(
+        (s, p) => s + (p.findings || []).length,
+        0,
+      );
       body += `<div class="totals">
   <p>${okP.length} / ${perspectives.length} perspectives completed &ensp;|&ensp; ${totalF} total findings${data.codeAnalysis.totalCost != null ? ` &ensp;|&ensp; Total cost: $${data.codeAnalysis.totalCost.toFixed(3)}` : ""}</p>
 </div>`;

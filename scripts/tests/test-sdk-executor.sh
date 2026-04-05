@@ -190,8 +190,18 @@ assert_eq "sdkExecute is a function" "PASS" "$result"
 # ── Test 3: SDK unavailable fallback ──
 echo ""
 echo "📋 Test 3: SDK unavailable → ok:false, no artifacts"
-# Ensure no mock is installed for this test
+# Install a broken mock that has no query() export — simulates SDK unavailable.
+# (Real SDK at project root intercepts import(), so removing mock is insufficient.)
 teardown_mock_sdk 2>/dev/null || true
+mkdir -p "$MOCK_NM"
+cat > "$MOCK_NM/package.json" <<'BPKG'
+{ "name": "@anthropic-ai/claude-agent-sdk", "version": "0.0.0-broken", "main": "index.js", "exports": { ".": "./index.js" } }
+BPKG
+cat > "$MOCK_NM/index.js" <<'BROKEN'
+'use strict';
+// Broken mock: query() not exported — triggers sdk_not_available in sdk-runner.js
+module.exports = {};
+BROKEN
 result=$(node -e "
   Object.keys(require.cache).forEach(k => {
     if (k.includes('sdk-runner') || k.includes('sdk-executor') || k.includes('claude-agent-sdk')) delete require.cache[k];
@@ -203,6 +213,7 @@ result=$(node -e "
     console.log(JSON.stringify({ crashed: true, error: e.message }));
   });
 " 2>/dev/null)
+rm -rf "$MODULE_DIR/node_modules" 2>/dev/null || true
 assert_contains "ok is false" '"ok":false' "$result"
 assert_contains "error is sdk_not_available" '"error":"sdk_not_available"' "$result"
 

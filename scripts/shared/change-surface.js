@@ -46,10 +46,10 @@ const DEFAULT_EXCLUDE_PATHS = [
 /** Patterns indicating a line is a comment or inside a code block (severity → warn) */
 const COMMENT_PATTERNS = [
   /^\s*\/\//, // JS single-line comment
-  /^\s*#/,    // Shell/YAML/Python comment
-  /^\s*\*/,   // JSDoc / block comment continuation
+  /^\s*#/, // Shell/YAML/Python comment
+  /^\s*\*/, // JSDoc / block comment continuation
   /^\s*<!--/, // HTML comment
-  /```/,      // Markdown code fence
+  /```/, // Markdown code fence
 ];
 
 // ─── Helpers ───
@@ -222,24 +222,109 @@ const TOKEN_EXTRACTORS = [
 
       const KEYWORDS = new Set([
         // Control flow
-        'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue',
-        'return', 'throw', 'try', 'catch', 'finally', 'new', 'this', 'super',
-        'import', 'from', 'export', 'default', 'null', 'undefined', 'true', 'false',
-        'void', 'typeof', 'instanceof', 'delete', 'yield', 'await', 'async',
+        "if",
+        "else",
+        "for",
+        "while",
+        "do",
+        "switch",
+        "case",
+        "break",
+        "continue",
+        "return",
+        "throw",
+        "try",
+        "catch",
+        "finally",
+        "new",
+        "this",
+        "super",
+        "import",
+        "from",
+        "export",
+        "default",
+        "null",
+        "undefined",
+        "true",
+        "false",
+        "void",
+        "typeof",
+        "instanceof",
+        "delete",
+        "yield",
+        "await",
+        "async",
         // OOP
-        'class', 'interface', 'extends', 'implements', 'abstract', 'final',
-        'public', 'private', 'protected', 'static', 'const', 'let', 'var', 'val',
-        'function', 'def', 'func', 'fun', 'override', 'virtual', 'extern',
+        "class",
+        "interface",
+        "extends",
+        "implements",
+        "abstract",
+        "final",
+        "public",
+        "private",
+        "protected",
+        "static",
+        "const",
+        "let",
+        "var",
+        "val",
+        "function",
+        "def",
+        "func",
+        "fun",
+        "override",
+        "virtual",
+        "extern",
         // Types & structures
-        'struct', 'enum', 'union', 'type', 'namespace', 'package', 'module',
-        'string', 'number', 'boolean', 'int', 'float', 'double', 'long', 'short',
-        'byte', 'char', 'bool', 'void', 'object', 'any', 'never',
+        "struct",
+        "enum",
+        "union",
+        "type",
+        "namespace",
+        "package",
+        "module",
+        "string",
+        "number",
+        "boolean",
+        "int",
+        "float",
+        "double",
+        "long",
+        "short",
+        "byte",
+        "char",
+        "bool",
+        "void",
+        "object",
+        "any",
+        "never",
         // Python / Ruby / misc
-        'with', 'pass', 'raise', 'except', 'lambda', 'self', 'cls', 'None',
-        'elif', 'not', 'and', 'println', 'print', 'require', 'include',
-        'begin', 'end', 'then', 'elsif', 'unless', 'when', 'use', 'where',
+        "with",
+        "pass",
+        "raise",
+        "except",
+        "lambda",
+        "self",
+        "cls",
+        "None",
+        "elif",
+        "not",
+        "and",
+        "println",
+        "print",
+        "require",
+        "include",
+        "begin",
+        "end",
+        "then",
+        "elsif",
+        "unless",
+        "when",
+        "use",
+        "where",
       ]);
-      return tokens.filter(t => !KEYWORDS.has(t));
+      return tokens.filter((t) => !KEYWORDS.has(t));
     },
   },
 
@@ -256,7 +341,12 @@ const TOKEN_EXTRACTORS = [
         // PascalCase → camelCase (UserName → userName)
         tokens.push(prop.charAt(0).toLowerCase() + prop.slice(1));
         // PascalCase → snake_case (UserName → user_name)
-        tokens.push(prop.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, ''));
+        tokens.push(
+          prop
+            .replace(/([A-Z])/g, "_$1")
+            .toLowerCase()
+            .replace(/^_/, ""),
+        );
       }
       return tokens;
     },
@@ -266,16 +356,35 @@ const TOKEN_EXTRACTORS = [
   //     JSP EL, Thymeleaf, Jinja2, Django, ERB, Blade, etc.
   {
     name: "template_expr",
-    fileTypes: [".jsp", ".jspx", ".html", ".htm", ".ftl", ".vm", ".erb",
-                ".blade.php", ".twig", ".j2", ".jinja2", ".mustache", ".hbs",
-                ".ejs", ".pug", ".jade", ".vue", ".svelte"],
+    fileTypes: [
+      ".jsp",
+      ".jspx",
+      ".html",
+      ".htm",
+      ".ftl",
+      ".vm",
+      ".erb",
+      ".blade.php",
+      ".twig",
+      ".j2",
+      ".jinja2",
+      ".mustache",
+      ".hbs",
+      ".ejs",
+      ".pug",
+      ".jade",
+      ".vue",
+      ".svelte",
+    ],
     extract(line) {
       const tokens = [];
       let m;
       // JSP EL: ${obj.property} / Thymeleaf: #{msg.key}
       const elRe = /[\$#]\{([^}]+)\}/g;
       while ((m = elRe.exec(line))) {
-        const parts = m[1].split(/[.\[\]]+/).filter(p => p && /^\w+$/.test(p));
+        const parts = m[1]
+          .split(/[.\[\]]+/)
+          .filter((p) => p && /^\w+$/.test(p));
         for (const p of parts) {
           if (p.length >= 3) tokens.push(p);
         }
@@ -284,13 +393,17 @@ const TOKEN_EXTRACTORS = [
       const jinjaRe = /\{\{([^}]+)\}\}|\{%([^%]+)%\}/g;
       while ((m = jinjaRe.exec(line))) {
         const expr = m[1] || m[2];
-        const parts = expr.split(/[.\[\]\s|:,()]+/).filter(p => p && /^\w{3,}$/.test(p));
+        const parts = expr
+          .split(/[.\[\]\s|:,()]+/)
+          .filter((p) => p && /^\w{3,}$/.test(p));
         for (const p of parts) tokens.push(p);
       }
       // ERB: <%= obj.property %>
       const erbRe = /<%=?\s*([^%]+)%>/g;
       while ((m = erbRe.exec(line))) {
-        const parts = m[1].split(/[.\[\]\s|:,()]+/).filter(p => p && /^\w{3,}$/.test(p));
+        const parts = m[1]
+          .split(/[.\[\]\s|:,()]+/)
+          .filter((p) => p && /^\w{3,}$/.test(p));
         for (const p of parts) tokens.push(p);
       }
       return tokens;
@@ -304,13 +417,14 @@ const TOKEN_EXTRACTORS = [
     fileTypes: [".xml", ".xsl", ".xslt", ".xsd", ".wsdl", ".pom"],
     extract(line) {
       const tokens = [];
-      const attrRe = /(?:property|column|name|field|ref|bean|id|parameterType|resultType|type)\s*=\s*"([^"]+)"/gi;
+      const attrRe =
+        /(?:property|column|name|field|ref|bean|id|parameterType|resultType|type)\s*=\s*"([^"]+)"/gi;
       let m;
       while ((m = attrRe.exec(line))) {
         const val = m[1];
         // For package names (com.example.MyClass), keep only the last segment
-        if (val.includes('.')) {
-          const last = val.split('.').pop();
+        if (val.includes(".")) {
+          const last = val.split(".").pop();
           if (last && last.length >= 3) tokens.push(last);
         } else if (val.length >= 3) {
           tokens.push(val);
@@ -409,7 +523,10 @@ function parseDiffOutput(raw) {
       continue;
     }
     if (line.startsWith("rename to ")) continue;
-    if (line.startsWith("similarity index") || line.startsWith("dissimilarity index")) {
+    if (
+      line.startsWith("similarity index") ||
+      line.startsWith("dissimilarity index")
+    ) {
       continue;
     }
     if (/^Binary files/.test(line)) {
@@ -423,9 +540,7 @@ function parseDiffOutput(raw) {
     if (isBinary) continue;
 
     // ── Hunk header ──
-    const hunkMatch = line.match(
-      /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
-    );
+    const hunkMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
     if (hunkMatch) {
       oldLineNum = parseInt(hunkMatch[1], 10);
       newLineNum = parseInt(hunkMatch[3], 10);
@@ -495,7 +610,10 @@ function extractSurface(diffResult) {
     // ── 2c: Extract tokens from removed lines ──
     const removedTokenMap = new Map(); // token → { type, line }
     for (const rl of fileData.removed_lines) {
-      for (const { token, type } of extractTokensFromLine(rl.content, filePath)) {
+      for (const { token, type } of extractTokensFromLine(
+        rl.content,
+        filePath,
+      )) {
         if (!removedTokenMap.has(token)) {
           removedTokenMap.set(token, { type, line: rl.line });
         }
@@ -506,7 +624,10 @@ function extractSurface(diffResult) {
     const addedTokenSet = new Set();
     const addedTokensByType = new Map(); // type → [{ token, line }]
     for (const al of fileData.added_lines) {
-      for (const { token, type } of extractTokensFromLine(al.content, filePath)) {
+      for (const { token, type } of extractTokensFromLine(
+        al.content,
+        filePath,
+      )) {
         addedTokenSet.add(token);
         if (!addedTokensByType.has(type)) addedTokensByType.set(type, []);
         const list = addedTokensByType.get(type);
@@ -523,7 +644,7 @@ function extractSurface(diffResult) {
 
       // Estimate likely_replacement: if exactly 1 added-only token of same type
       const addedOnly = (addedTokensByType.get(info.type) || []).filter(
-        (t) => !removedTokenMap.has(t.token)
+        (t) => !removedTokenMap.has(t.token),
       );
       const likely_replacement =
         addedOnly.length === 1 ? addedOnly[0].token : null;
@@ -646,7 +767,8 @@ function searchImpact(surfaceResult, changedFiles, options = {}) {
     return {
       impacts: [],
       rg_available: false,
-      warning: "ripgrep (rg) not found — impact search skipped. Install rg for full analysis.",
+      warning:
+        "ripgrep (rg) not found — impact search skipped. Install rg for full analysis.",
     };
   }
 
@@ -659,9 +781,7 @@ function searchImpact(surfaceResult, changedFiles, options = {}) {
   const impacts = [];
 
   // Build exclude args once
-  const excludeArgs = excludePaths
-    .map((p) => `--glob '!${p}'`)
-    .join(" ");
+  const excludeArgs = excludePaths.map((p) => `--glob '!${p}'`).join(" ");
 
   for (const entry of surface) {
     const { token, type, source_file, likely_replacement } = entry;
@@ -677,7 +797,12 @@ function searchImpact(surfaceResult, changedFiles, options = {}) {
     try {
       rgOutput = execSync(
         `rg --fixed-strings --line-number --no-heading ${excludeArgs} -- ${shellEscape(token)} .`,
-        { cwd, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] }
+        {
+          cwd,
+          encoding: "utf-8",
+          maxBuffer: 5 * 1024 * 1024,
+          stdio: ["pipe", "pipe", "pipe"],
+        },
       );
     } catch (err) {
       // rg exits 1 when no matches found — that's fine
@@ -711,7 +836,13 @@ function searchImpact(surfaceResult, changedFiles, options = {}) {
       // Determine severity
       const severity = isCommentOrCodeBlock(content) ? "warn" : "error";
 
-      refs.push({ file, line: lineNum, content: content.trim(), severity, in_diff: inDiff });
+      refs.push({
+        file,
+        line: lineNum,
+        content: content.trim(),
+        severity,
+        in_diff: inDiff,
+      });
     }
 
     if (refs.length > 0) {
@@ -766,8 +897,12 @@ function verdict(impactResult) {
   const reportLines = [];
 
   for (const impact of impacts) {
-    const externalErrors = impact.refs.filter((r) => r.severity === "error" && !r.in_diff);
-    const externalWarns = impact.refs.filter((r) => r.severity === "warn" && !r.in_diff);
+    const externalErrors = impact.refs.filter(
+      (r) => r.severity === "error" && !r.in_diff,
+    );
+    const externalWarns = impact.refs.filter(
+      (r) => r.severity === "warn" && !r.in_diff,
+    );
 
     errorCount += externalErrors.length;
     warnCount += externalWarns.length;
@@ -783,7 +918,9 @@ function verdict(impactResult) {
         reportLines.push(`    ❌ ${ref.file}:${ref.line}  ${ref.content}`);
       }
       for (const ref of externalWarns) {
-        reportLines.push(`    ⚠️  ${ref.file}:${ref.line}  ${ref.content}  (comment/code block)`);
+        reportLines.push(
+          `    ⚠️  ${ref.file}:${ref.line}  ${ref.content}  (comment/code block)`,
+        );
       }
     }
   }
@@ -825,7 +962,12 @@ function analyze(baselineSha, options = {}) {
       diff,
       surface: { surface: [] },
       impact: { impacts: [], rg_available: false, warning: diff.error },
-      verdict: { pass: false, errorCount: 0, warnCount: 0, report: `Error: ${diff.error}` },
+      verdict: {
+        pass: false,
+        errorCount: 0,
+        warnCount: 0,
+        report: `Error: ${diff.error}`,
+      },
     };
   }
 
@@ -864,7 +1006,9 @@ function main() {
 
   // Print surface details when tokens exist
   if (result.surface.surface.length > 0 && result.verdict.pass) {
-    console.log(`\n🔍 Change Surface: ${result.surface.surface.length} token(s) scanned, all references intact.`);
+    console.log(
+      `\n🔍 Change Surface: ${result.surface.surface.length} token(s) scanned, all references intact.`,
+    );
   }
 
   // Exit code: 0 = pass, 1 = fail
@@ -875,4 +1019,11 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseDiff, extractSurface, searchImpact, verdict, analyze, TOKEN_EXTRACTORS };
+module.exports = {
+  parseDiff,
+  extractSurface,
+  searchImpact,
+  verdict,
+  analyze,
+  TOKEN_EXTRACTORS,
+};

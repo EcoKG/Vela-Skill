@@ -202,8 +202,18 @@ assert_eq "sdkResearch is a function" "PASS" "$result"
 # ── Test 3: SDK unavailable fallback ──
 echo ""
 echo "📋 Test 3: SDK unavailable → research.md still written with error content"
-# Ensure no mock is installed
+# Install a broken mock that has no query() export — simulates SDK unavailable.
+# (Real SDK at project root intercepts import(), so removing mock is insufficient.)
 teardown_mock_sdk 2>/dev/null || true
+mkdir -p "$MOCK_NM"
+cat > "$MOCK_NM/package.json" <<'BPKG'
+{ "name": "@anthropic-ai/claude-agent-sdk", "version": "0.0.0-broken", "main": "index.js", "exports": { ".": "./index.js" } }
+BPKG
+cat > "$MOCK_NM/index.js" <<'BROKEN'
+'use strict';
+// Broken mock: query() not exported — triggers sdk_not_available in sdk-runner.js
+module.exports = {};
+BROKEN
 result=$(node -e "
   Object.keys(require.cache).forEach(k => {
     if (k.includes('sdk-runner') || k.includes('sdk-researcher') || k.includes('claude-agent-sdk')) delete require.cache[k];
@@ -220,9 +230,13 @@ result=$(node -e "
     console.log(JSON.stringify({ crashed: true, error: e.message }));
   });
 " 2>/dev/null)
+rm -rf "$MODULE_DIR/node_modules" 2>/dev/null || true
 assert_contains "ok is false" '"ok":false' "$result"
 assert_contains "research.md written on SDK failure" '"researchExists":true' "$result"
 assert_contains "error content present" '"hasError":true' "$result"
+
+# Clear artifact dir before good-mock tests
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
 
 # ── Setup mock SDK for tests 4-8 ──
 setup_mock_sdk

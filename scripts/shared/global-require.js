@@ -39,7 +39,8 @@ function globalRequire(pkgName) {
     return require(pkgName);
   } catch {
     const root = getGlobalRoot();
-    if (!root) throw new Error(`Cannot find module '${pkgName}' (local and global)`);
+    if (!root)
+      throw new Error(`Cannot find module '${pkgName}' (local and global)`);
     return require(path.join(root, pkgName));
   }
 }
@@ -58,7 +59,8 @@ async function globalImport(pkgName) {
     return await import(pkgName);
   } catch {
     const root = getGlobalRoot();
-    if (!root) throw new Error(`Cannot find module '${pkgName}' (local and global)`);
+    if (!root)
+      throw new Error(`Cannot find module '${pkgName}' (local and global)`);
     const { createRequire } = require("module");
     const req = createRequire(path.join(root, "noop.js"));
     const resolved = req.resolve(pkgName);

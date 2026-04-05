@@ -456,9 +456,7 @@ function detectProjectMode(cwd, scale) {
           stdio: ["pipe", "pipe", "pipe"],
           timeout: 5000,
         }).toString();
-        fileCount = out
-          .split("\n")
-          .filter((l) => l.trim().length > 0).length;
+        fileCount = out.split("\n").filter((l) => l.trim().length > 0).length;
       } catch (_e) {
         // git ls-files failed — fall through to fs scan
         fileCount = scanDirRecursive(cwd);
@@ -490,9 +488,7 @@ function detectProjectMode(cwd, scale) {
     mode = "exploratory";
   }
 
-  console.log(
-    `[project-mode] fileCount=${fileCount} scale=${scale} → ${mode}`,
-  );
+  console.log(`[project-mode] fileCount=${fileCount} scale=${scale} → ${mode}`);
   return mode;
 }
 
@@ -621,7 +617,9 @@ function buildStepPrompt(stepDef, state, artifactDir) {
           "",
         ].join("\n");
       }
-    } catch { /* engine status unavailable — skip sub-phase injection */ }
+    } catch {
+      /* engine status unavailable — skip sub-phase injection */
+    }
   }
 
   switch (stepId) {
@@ -760,7 +758,9 @@ async function runStep(stepDef, state) {
       if (toolName === "Read") {
         const filePath = input.tool_input?.path;
         if (filePath) {
-          const abs = path.isAbsolute(filePath) ? filePath : path.resolve(CWD, filePath);
+          const abs = path.isAbsolute(filePath)
+            ? filePath
+            : path.resolve(CWD, filePath);
           appendPaths([abs]);
         }
       } else if (toolName === "Glob" || toolName === "Grep") {
@@ -852,17 +852,12 @@ async function runStep(stepDef, state) {
       const denialsPath = path.join(artifactDir, "denied-tools.json");
       fs.writeFileSync(
         denialsPath,
-        JSON.stringify(
-          { step: stepDef.id, denials: deniedTools },
-          null,
-          2,
-        ) + "\n",
+        JSON.stringify({ step: stepDef.id, denials: deniedTools }, null, 2) +
+          "\n",
       );
       deniedDetailPath = denialsPath;
     } catch (err) {
-      console.warn(
-        `  ⚠ denied tools persistence skipped: ${err.message}`,
-      );
+      console.warn(`  ⚠ denied tools persistence skipped: ${err.message}`);
     }
     const detailSuffix = deniedDetailPath
       ? ` (details: ${deniedDetailPath})`
@@ -943,8 +938,11 @@ function checkLocalGate(stepDef, artifactDir) {
         if (fs.existsSync(statePath)) {
           try {
             const pState = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-            baselineSha = pState.baseline_sha || (pState.git && pState.git.checkpoint_hash);
-          } catch { /* ignore parse errors */ }
+            baselineSha =
+              pState.baseline_sha || (pState.git && pState.git.checkpoint_hash);
+          } catch {
+            /* ignore parse errors */
+          }
         }
         if (!baselineSha) {
           // Legacy pipeline without baseline — skip gracefully
@@ -965,7 +963,9 @@ function checkLocalGate(stepDef, artifactDir) {
           const { analyze } = require("../shared/change-surface.js");
           const result = analyze(baselineSha, { cwd: CWD, ...csaOpts });
           if (!result.verdict.pass) {
-            missing.push(`ref_integrity_fail:${result.verdict.errorCount} broken ref(s)`);
+            missing.push(
+              `ref_integrity_fail:${result.verdict.errorCount} broken ref(s)`,
+            );
           }
         } catch (e) {
           // CSA module error — don't block pipeline, warn only
@@ -1100,7 +1100,15 @@ async function runPipeline(request, scale, type) {
   console.log("═══════════════════════════════════════════════════");
 
   // Step 1: Initialize pipeline via engine
-  const engineArgs = ["init", request, "--scale", scale, "--type", type, "--auto"];
+  const engineArgs = [
+    "init",
+    request,
+    "--scale",
+    scale,
+    "--type",
+    type,
+    "--auto",
+  ];
   if (hasFlag("--force")) engineArgs.push("--force");
   const initResult = engine(engineArgs);
 
@@ -1265,7 +1273,9 @@ async function runPipeline(request, scale, type) {
       totalCost += stepResult.cost;
 
       if (!stepResult.ok) {
-        console.error(`\n❌ Step "${stepDef.name}" failed: ${stepResult.error}`);
+        console.error(
+          `\n❌ Step "${stepDef.name}" failed: ${stepResult.error}`,
+        );
         engine(["record", "fail", "--summary", `Failed: ${stepResult.error}`]);
         // Don't exit — try to continue or handle gracefully
         continue;
@@ -1278,7 +1288,9 @@ async function runPipeline(request, scale, type) {
       if (stepDef.sub_phases && stepDef.sub_phases.length > 0) {
         try {
           engine(["sub-transition"]);
-        } catch { /* sub-transition failure is non-fatal */ }
+        } catch {
+          /* sub-transition failure is non-fatal */
+        }
       }
 
       // Check if step requires review
@@ -1293,16 +1305,20 @@ async function runPipeline(request, scale, type) {
           console.error(
             `\n🚨 Review exhausted for "${stepDef.name}": escalate_to_pm (score: ${score}/25, step: ${reviewResult.step || stepDef.id})`,
           );
-          engine(["record", "fail", "--summary", `Review exhausted: escalate_to_pm (score: ${score}/25)`]);
+          engine([
+            "record",
+            "fail",
+            "--summary",
+            `Review exhausted: escalate_to_pm (score: ${score}/25)`,
+          ]);
           break; // escalate_to_pm — graceful exit from step loop
         }
 
         // General review failure — record and exit gracefully
         if (!reviewResult.ok) {
-          const reason = reviewResult.error || reviewResult.decision || "unknown";
-          console.error(
-            `\n❌ Review failed for "${stepDef.name}": ${reason}`,
-          );
+          const reason =
+            reviewResult.error || reviewResult.decision || "unknown";
+          console.error(`\n❌ Review failed for "${stepDef.name}": ${reason}`);
           engine(["record", "fail", "--summary", `Review failed: ${reason}`]);
           break; // review failure — graceful exit from step loop
         }
@@ -1333,8 +1349,15 @@ async function runPipeline(request, scale, type) {
         // Don't exit — might be recoverable in next iteration
       }
     } catch (stepError) {
-      console.error(`\n💥 Unexpected error in step "${stepDef.name}": ${stepError.message}`);
-      engine(["record", "fail", "--summary", `Unexpected error: ${stepError.message}`]);
+      console.error(
+        `\n💥 Unexpected error in step "${stepDef.name}": ${stepError.message}`,
+      );
+      engine([
+        "record",
+        "fail",
+        "--summary",
+        `Unexpected error: ${stepError.message}`,
+      ]);
       break;
     }
   }

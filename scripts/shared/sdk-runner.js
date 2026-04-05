@@ -237,7 +237,8 @@ async function runSdkAgent(opts) {
   if (queryOptions.systemPrompt) {
     const langDirective = _getLanguageDirective(opts.cwd);
     if (langDirective) {
-      queryOptions.systemPrompt = langDirective + "\n\n" + queryOptions.systemPrompt;
+      queryOptions.systemPrompt =
+        langDirective + "\n\n" + queryOptions.systemPrompt;
     }
   }
 
