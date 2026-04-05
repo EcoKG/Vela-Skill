@@ -1373,15 +1373,17 @@ function generateReport(state, stepResults) {
   report += `**Total Cost:** $${totalCost.toFixed(4)}\n\n`;
 
   report += `## Step Results\n\n`;
-  report += `| Step | Status | Cost | Duration | Tools Used |\n`;
-  report += `|------|--------|------|----------|------------|\n`;
+  report += `| Step | Status | Cost | Duration | Turns | Tools Used | Denied |\n`;
+  report += `|------|--------|------|----------|-------|------------|--------|\n`;
 
   for (const r of stepResults) {
     const status = r.ok ? "✅ Pass" : "❌ Fail";
     const cost = `$${(r.cost || 0).toFixed(4)}`;
     const duration = `${((r.durationMs || 0) / 1000).toFixed(1)}s`;
+    const turns = r.numTurns != null ? String(r.numTurns) : "-";
     const tools = (r.toolsUsed || []).join(", ") || "-";
-    report += `| ${r.step} | ${status} | ${cost} | ${duration} | ${tools} |\n`;
+    const deniedCount = (r.toolsDenied || []).length;
+    report += `| ${r.step} | ${status} | ${cost} | ${duration} | ${turns} | ${tools} | ${deniedCount} |\n`;
   }
 
   if (state.git) {

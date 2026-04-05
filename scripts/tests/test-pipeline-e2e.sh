@@ -682,6 +682,43 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════
+# Test 26: M023/S04 observability invariants — Turns/Denied columns
+#          in generateReport() table + "Turns used:" log in runStep()
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 26: M023/S04 observability invariants ──"
+
+TURNS_HEADER_COUNT=$(grep -c '| Turns |' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+TOTAL=$((TOTAL + 1))
+if [ "$TURNS_HEADER_COUNT" -eq 1 ]; then
+  echo "  ✅ PASS: generateReport() has '| Turns |' column header (count=$TURNS_HEADER_COUNT)"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: '| Turns |' column header count ($TURNS_HEADER_COUNT) != 1"
+  FAIL=$((FAIL + 1))
+fi
+
+DENIED_HEADER_COUNT=$(grep -c '| Denied |' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+TOTAL=$((TOTAL + 1))
+if [ "$DENIED_HEADER_COUNT" -eq 1 ]; then
+  echo "  ✅ PASS: generateReport() has '| Denied |' column header (count=$DENIED_HEADER_COUNT)"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: '| Denied |' column header count ($DENIED_HEADER_COUNT) != 1"
+  FAIL=$((FAIL + 1))
+fi
+
+TURNS_USED_COUNT=$(grep -c 'Turns used:' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+TOTAL=$((TOTAL + 1))
+if [ "$TURNS_USED_COUNT" -ge 1 ]; then
+  echo "  ✅ PASS: runStep() logs 'Turns used:' at least once (count=$TURNS_USED_COUNT)"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: 'Turns used:' log line missing from $PIPELINE_MODULE"
+  FAIL=$((FAIL + 1))
+fi
+
+# ══════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════
 echo ""
