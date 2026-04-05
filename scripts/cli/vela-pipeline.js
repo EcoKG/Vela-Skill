@@ -222,6 +222,65 @@ function createProtectedBranchGuard() {
   };
 }
 
+/**
+ * Guard: Restrict Write tool calls to paths inside artifactDir.
+ *
+ * Used by rw-artifact mode — research/verify steps need Write access but
+ * should only create artifact files under the pipeline's artifactDir (e.g.
+ * .vela/artifacts/<pipeline-id>/). Arbitrary source file writes are denied.
+ *
+ * Uses path.resolve() on both the incoming file_path and artifactDir to
+ * normalize `.`/`..` segments and block symlink escapes that would
+ * otherwise traverse outside the allowed directory.
+ *
+ * @param {string} artifactDir - Absolute or relative path to allowed write dir
+ * @returns {Function|null} PreToolUse hook callback, or null if no artifactDir
+ */
+function createArtifactPathGuard(artifactDir) {
+  if (!artifactDir) return null;
+
+  // Normalize once at creation time — resolve relative to CWD, strip ../
+  const allowedRoot = path.resolve(artifactDir);
+
+  return async (input) => {
+    if (input.tool_name !== "Write") return undefined;
+
+    const filePath =
+      input.tool_input?.file_path || input.tool_input?.path || "";
+    if (!filePath) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            "[vela-pipeline] Write blocked: missing file_path",
+        },
+      };
+    }
+
+    // Resolve the incoming path against CWD if relative, normalize segments
+    const resolved = path.resolve(CWD, filePath);
+
+    // Must be inside allowedRoot — use path separator to avoid prefix collisions
+    // (e.g. /tmp/art vs /tmp/art-backup)
+    const withSep = allowedRoot.endsWith(path.sep)
+      ? allowedRoot
+      : allowedRoot + path.sep;
+
+    if (resolved !== allowedRoot && !resolved.startsWith(withSep)) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: `[vela-pipeline] Write outside artifactDir blocked: ${filePath} (allowed: ${allowedRoot})`,
+        },
+      };
+    }
+
+    return undefined;
+  };
+}
+
 // ═══════════════════════════════════════════════════════════
 //  Step Mode → SDK Options Mapping
 // ═══════════════════════════════════════════════════════════
@@ -230,20 +289,26 @@ function createProtectedBranchGuard() {
  * Map a pipeline step's mode to SDK query options.
  *
  * Modes (from pipeline.json):
- *   read      — Read-only exploration (research, plan-check, verify)
- *   write     — Write via Write/Edit tools, no Bash (plan)
- *   readwrite — Full access (execute)
+ *   read         — Read-only exploration (plan-check)
+ *   write        — Write via Write/Edit tools, no Bash (plan)
+ *   readwrite    — Full access (execute)
+ *   rw-artifact  — Read-mode Bash policy + Write restricted to artifactDir
+ *                  (research, verify — need to run tests AND create artifacts)
  *
  * All modes use bypassPermissions (D029) for non-interactive execution.
  *
- * @param {string} mode - 'read', 'write', or 'readwrite'
+ * @param {string} mode - 'read', 'write', 'readwrite', or 'rw-artifact'
+ * @param {string|null} artifactDir - Allowed Write dir for rw-artifact mode
  * @returns {Object} SDK query options fragment { tools, disallowedTools, hooks }
  */
-function buildModeOptions(mode) {
+function buildModeOptions(mode, artifactDir = null) {
   const sensitiveGuard = createSensitiveFileGuard();
   const secretGuard = createSecretGuard();
   const branchGuard = createProtectedBranchGuard();
-  const bashGuard = createBashGuard(mode);
+  // rw-artifact reuses read-mode Bash policy (read_only)
+  const bashGuard = createBashGuard(mode === "rw-artifact" ? "read" : mode);
+  const artifactGuard =
+    mode === "rw-artifact" ? createArtifactPathGuard(artifactDir) : null;
 
   // Build PreToolUse hooks array
   const preToolUseHooks = [
@@ -253,6 +318,10 @@ function buildModeOptions(mode) {
 
   if (bashGuard) {
     preToolUseHooks.push({ matcher: "Bash", hooks: [bashGuard] });
+  }
+
+  if (artifactGuard) {
+    preToolUseHooks.push({ matcher: "Write", hooks: [artifactGuard] });
   }
 
   const hooks = {
@@ -279,6 +348,16 @@ function buildModeOptions(mode) {
       return {
         // No tools restriction — all available
         disallowedTools: [],
+        hooks,
+      };
+
+    case "rw-artifact":
+      // Read-mode Bash policy (test execution) + Write restricted to artifactDir.
+      // Edit/NotebookEdit blocked — Write is the only mutation path, and it is
+      // scoped to artifactDir by createArtifactPathGuard.
+      return {
+        tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "Write"],
+        disallowedTools: ["Edit", "NotebookEdit"],
         hooks,
       };
 
@@ -522,8 +601,9 @@ async function runStep(stepDef, state) {
   console.log(`  Mode: ${mode} | Actor: ${actor}`);
   console.log(`${"─".repeat(60)}\n`);
 
-  // Build SDK options from mode
-  const modeOptions = buildModeOptions(mode);
+  // Build SDK options from mode. artifactDir is passed so rw-artifact mode
+  // can scope Write tool calls to the pipeline's artifact directory.
+  const modeOptions = buildModeOptions(mode, artifactDir);
 
   // Load system prompt
   const systemPrompt = loadAgentPrompt(actor);
@@ -1303,6 +1383,7 @@ module.exports = {
   createSensitiveFileGuard,
   createSecretGuard,
   createProtectedBranchGuard,
+  createArtifactPathGuard,
   buildModeOptions,
   loadAgentPrompt,
   buildStepPrompt,
