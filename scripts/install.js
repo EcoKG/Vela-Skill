@@ -236,6 +236,7 @@ const FILE_MANIFEST = [
     src: "scripts/shared/change-surface.js",
     dst: "shared/change-surface.js",
   },
+  { src: "scripts/shared/turn-config.js", dst: "shared/turn-config.js" },
 ];
 
 // Subdirectories managed by Vela — orphan cleanup scans only these.
