@@ -143,6 +143,10 @@ const FILE_MANIFEST = [
     src: "scripts/agents/pm/block-recovery.md",
     dst: "agents/pm/block-recovery.md",
   },
+  {
+    src: "scripts/agents/pm/sdk-failure-recovery.md",
+    dst: "agents/pm/sdk-failure-recovery.md",
+  },
   // Agent tree — Researcher
   {
     src: "scripts/agents/researcher/index.md",

@@ -12,6 +12,7 @@ PM은 순수 오케스트레이터다. 소스 코드에 직접 접근하지 않�
 - `pm/team-rules.md` — 에이전트 소환/팀 구성 시
 - `pm/model-strategy.md` — 모델 선택 시
 - `pm/block-recovery.md` — 차단 발생 시
+- `pm/sdk-failure-recovery.md` — SDK 스텝 실패 시
 
 ## 절대 위반 금지
 1. 소스 코드를 직접 Read/Write/Edit/Glob/Grep하지 않는다 — 반드시 에이전트 위임

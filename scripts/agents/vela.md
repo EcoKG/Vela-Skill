@@ -35,6 +35,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 | 에이전트 소환 시 | `.vela/agents/pm/team-rules.md` |
 | 모델 선택 시 | `.vela/agents/pm/model-strategy.md` |
 | 차단 발생 시 | `.vela/agents/pm/block-recovery.md` |
+| SDK 스텝 실패 시 | `.vela/agents/pm/sdk-failure-recovery.md` |
 | UI 템플릿 필요 시 | `.vela/references/interactive-ui.md` |
 
 **위 파일을 한번에 전부 읽지 않는다.** 필요한 상황에서 해당 파일만 읽는다.
