@@ -336,15 +336,17 @@ node .vela/cli/vela-engine.js auto
 | 단계 | 모드 | 팀 | 설명 |
 |------|------|-----|------|
 | init | read | — | 초기화, git 상태 스냅샷, dirty tree 체크 |
-| research | read | Researcher(Subagent) → Reviewer(Subagent) → PM | 프로젝트 분석 |
+| research | rw-artifact | Researcher(Subagent) → Reviewer(Subagent) → PM | 프로젝트 분석 (research.md 생성, artifactDir scope Write 허용) |
 | plan | write | Planner(Subagent) → Reviewer(Subagent) → PM | 구현 계획 작성 |
 | plan-check | read | — | 계획 검증 (plan-check.md 생성) |
 | checkpoint | read | — | 사용자 승인 대기 |
 | **branch** | read | — | feature 브랜치 생성 (git) |
 | execute | readwrite | Executor/Teammate → Reviewer → PM 판단 | 구현 |
-| verify | read | — | 독립 검증 |
+| verify | rw-artifact | — | 독립 검증 (verification.md 생성, artifactDir scope Write 허용) |
 | **commit** | read | — | 변경사항 원자적 커밋 (git) |
 | finalize | write | — | 보고서 생성, 선택적 PR |
+
+**rw-artifact 모드 (M023 신규)**: `read` 모드 기반에 artifactDir scope의 Write만 추가로 허용. `createArtifactPathGuard(artifactDir)` PreToolUse 훅이 separator-aware prefix check로 Write 경로를 제한. Edit/NotebookEdit는 차단 유지. research/verify 단계가 artifact를 쓰면서도 코드 변경은 차단된다.
 
 ### 엔진 명령어
 
@@ -688,7 +690,8 @@ vela-pipeline.js (오케스트레이터)
        ├── createBashGuard() — R/W 모드 Bash 차단
        ├── createSensitiveFileGuard() — 민감 파일 보호
        ├── createSecretGuard() — 시크릿 패턴 차단
-       └── createProtectedBranchGuard() — 보호 브랜치 차단
+       ├── createProtectedBranchGuard() — 보호 브랜치 차단
+       └── createArtifactPathGuard() — rw-artifact 모드 Write 경로 제한 (M023)
 ```
 
 ### SDK 콜백 기반 보안 규칙
@@ -701,6 +704,7 @@ SDK `query()`의 `hooks` 파라미터로 보안 규칙을 인라인 적용한다
 | `createSensitiveFileGuard()` | .env, secrets 등 민감 파일 보호 | Gate Keeper GUARD 4-6 |
 | `createSecretGuard()` | API 키, 토큰 등 시크릿 패턴 차단 | Gate Guard 규칙 |
 | `createProtectedBranchGuard()` | main/master 직접 커밋 방지 | Gate Keeper GUARD 7-9 |
+| `createArtifactPathGuard()` | rw-artifact 모드에서 Write를 artifactDir scope로 제한 (separator-aware prefix check) | M023 — research/verify artifact 쓰기 허용 |
 
 ### SDK 미설치 시 폴백
 
