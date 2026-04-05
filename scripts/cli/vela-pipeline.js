@@ -840,9 +840,36 @@ async function runStep(stepDef, state) {
   console.log(`\n  Result: ${sdkResult.ok ? "✅ SUCCESS" : "❌ FAILED"}`);
   console.log(`  Cost: $${(sdkResult.cost || 0).toFixed(4)}`);
   console.log(`  Duration: ${(durationMs / 1000).toFixed(1)}s`);
+  if (sdkResult.numTurns != null) {
+    console.log(`  Turns used: ${sdkResult.numTurns}/${maxTurns}`);
+  }
   console.log(`  Tools used: [${[...new Set(usedTools)].join(", ")}]`);
   if (deniedTools.length > 0) {
-    console.log(`  Tools denied: ${deniedTools.length} denial(s)`);
+    // Persist denied tools detail to artifactDir for post-mortem inspection.
+    // K042: non-fatal — file write failure must not abort the pipeline.
+    let deniedDetailPath = null;
+    try {
+      const denialsPath = path.join(artifactDir, "denied-tools.json");
+      fs.writeFileSync(
+        denialsPath,
+        JSON.stringify(
+          { step: stepDef.id, denials: deniedTools },
+          null,
+          2,
+        ) + "\n",
+      );
+      deniedDetailPath = denialsPath;
+    } catch (err) {
+      console.warn(
+        `  ⚠ denied tools persistence skipped: ${err.message}`,
+      );
+    }
+    const detailSuffix = deniedDetailPath
+      ? ` (details: ${deniedDetailPath})`
+      : "";
+    console.log(
+      `  Tools denied: ${deniedTools.length} denial(s)${detailSuffix}`,
+    );
   }
 
   return {
