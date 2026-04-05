@@ -303,6 +303,13 @@ STEP_PROMPTS=$(node -e "
   const executePrompt = buildStepPrompt({ id: 'execute', name: 'Execute' }, state, artifactDir);
   const verifyPrompt = buildStepPrompt({ id: 'verify', name: 'Verify' }, state, artifactDir);
 
+  // M023/S02 — mode-aware prompt assertions
+  const bootstrapPrompt = buildStepPrompt({ id: 'research', name: 'Research' }, { ...state, project_mode: 'bootstrap' }, artifactDir);
+  const targetedPrompt = buildStepPrompt({ id: 'research', name: 'Research' }, { ...state, project_mode: 'targeted' }, artifactDir);
+  const exploratoryPrompt = buildStepPrompt({ id: 'research', name: 'Research' }, { ...state, project_mode: 'exploratory' }, artifactDir);
+  // Fallback when project_mode is missing — should default to 'exploratory'
+  const fallbackPrompt = buildStepPrompt({ id: 'research', name: 'Research' }, state, artifactDir);
+
   const results = {
     researchHasRequest: researchPrompt.includes('Add OAuth'),
     researchHasResearchMd: researchPrompt.includes('research.md'),
@@ -311,6 +318,11 @@ STEP_PROMPTS=$(node -e "
     executeHasTdd: executePrompt.includes('TDD'),
     executeHasPlanRef: executePrompt.includes('plan.md'),
     verifyHasVerification: verifyPrompt.includes('verification.md'),
+    researchHasModeBlock: researchPrompt.includes('## 프로젝트 모드'),
+    bootstrapMode: bootstrapPrompt.includes('## 프로젝트 모드') && bootstrapPrompt.includes('bootstrap'),
+    targetedMode: targetedPrompt.includes('## 프로젝트 모드') && targetedPrompt.includes('targeted'),
+    exploratoryMode: exploratoryPrompt.includes('## 프로젝트 모드') && exploratoryPrompt.includes('exploratory'),
+    fallbackIsExploratory: fallbackPrompt.includes('exploratory'),
   };
   console.log(JSON.stringify(results));
 " 2>/dev/null)
@@ -321,6 +333,11 @@ assert_contains "plan prompt includes plan.md" '"planHasPlanMd":true' "$STEP_PRO
 assert_contains "execute prompt includes TDD" '"executeHasTdd":true' "$STEP_PROMPTS"
 assert_contains "execute prompt references plan.md" '"executeHasPlanRef":true' "$STEP_PROMPTS"
 assert_contains "verify prompt includes verification.md" '"verifyHasVerification":true' "$STEP_PROMPTS"
+assert_contains "research prompt has 프로젝트 모드 block" '"researchHasModeBlock":true' "$STEP_PROMPTS"
+assert_contains "bootstrap mode injected into prompt" '"bootstrapMode":true' "$STEP_PROMPTS"
+assert_contains "targeted mode injected into prompt" '"targetedMode":true' "$STEP_PROMPTS"
+assert_contains "exploratory mode injected into prompt" '"exploratoryMode":true' "$STEP_PROMPTS"
+assert_contains "missing project_mode falls back to exploratory" '"fallbackIsExploratory":true' "$STEP_PROMPTS"
 
 # ══════════════════════════════════════════════════════════
 # Test 11: checkLocalGate — file-based gate verification

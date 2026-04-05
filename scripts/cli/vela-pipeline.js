@@ -420,6 +420,124 @@ function loadAgentPrompt(actor) {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  Project Mode Detection — M023/S02
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Detect project mode based on codebase state + work scale.
+ *
+ * Modes:
+ *   bootstrap   — Empty repo / no code to explore (fileCount === 0)
+ *   targeted    — Existing codebase, narrow change scope (scale: small/medium)
+ *   exploratory — Existing codebase, wide/ambiguous scope (scale: large)
+ *
+ * fileCount is derived from `git ls-files` when cwd is a git repo,
+ * otherwise from a 1-level recursive fs.readdirSync() that skips
+ * node_modules/.git/.gsd/.vela. Errors fall back to 'exploratory'
+ * (err on the side of more thorough methodology).
+ *
+ * @param {string} cwd - Working directory to inspect
+ * @param {string} scale - Work scale: small/medium/large
+ * @returns {'bootstrap'|'targeted'|'exploratory'} project mode
+ */
+function detectProjectMode(cwd, scale) {
+  let fileCount = 0;
+
+  try {
+    // Prefer git ls-files — respects .gitignore, cheap on large repos
+    const gitDir = path.join(cwd, ".git");
+    if (fs.existsSync(gitDir)) {
+      try {
+        const out = execFileSync("git", ["ls-files"], {
+          cwd,
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: 5000,
+        }).toString();
+        fileCount = out
+          .split("\n")
+          .filter((l) => l.trim().length > 0).length;
+      } catch (_e) {
+        // git ls-files failed — fall through to fs scan
+        fileCount = scanDirRecursive(cwd);
+      }
+    } else if (fs.existsSync(cwd)) {
+      fileCount = scanDirRecursive(cwd);
+    } else {
+      // cwd doesn't exist — treat as empty
+      fileCount = 0;
+    }
+  } catch (_e) {
+    // Unexpected error — fallback to exploratory (conservative)
+    console.log(
+      `[project-mode] detection error, fallback=exploratory scale=${scale}`,
+    );
+    return "exploratory";
+  }
+
+  // Decision tree
+  let mode;
+  if (fileCount === 0) {
+    mode = "bootstrap";
+  } else if (scale === "small" || scale === "medium") {
+    mode = "targeted";
+  } else if (scale === "large") {
+    mode = "exploratory";
+  } else {
+    // Unknown scale — conservative fallback
+    mode = "exploratory";
+  }
+
+  console.log(
+    `[project-mode] fileCount=${fileCount} scale=${scale} → ${mode}`,
+  );
+  return mode;
+}
+
+/**
+ * Scan a directory recursively up to 1 extra depth (cwd + 1 subdir level),
+ * excluding node_modules/.git/.gsd/.vela. Used as fs fallback when git is
+ * unavailable.
+ */
+function scanDirRecursive(cwd) {
+  const EXCLUDE = new Set([
+    "node_modules",
+    ".git",
+    ".gsd",
+    ".vela",
+    ".bg-shell",
+    ".artifacts",
+  ]);
+  let count = 0;
+  let entries;
+  try {
+    entries = fs.readdirSync(cwd, { withFileTypes: true });
+  } catch (_e) {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (EXCLUDE.has(entry.name)) continue;
+    if (entry.isFile()) {
+      count += 1;
+    } else if (entry.isDirectory()) {
+      // 1-depth recursive scan
+      let subEntries;
+      try {
+        subEntries = fs.readdirSync(path.join(cwd, entry.name), {
+          withFileTypes: true,
+        });
+      } catch (_e) {
+        continue;
+      }
+      for (const sub of subEntries) {
+        if (EXCLUDE.has(sub.name)) continue;
+        if (sub.isFile()) count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+// ═══════════════════════════════════════════════════════════
 //  Engine CLI Bridge
 // ═══════════════════════════════════════════════════════════
 
@@ -511,20 +629,36 @@ function buildStepPrompt(stepDef, state, artifactDir) {
   }
 
   switch (stepId) {
-    case "research":
+    case "research": {
+      const mode = state.project_mode || "exploratory";
+      const modeDescriptions = {
+        bootstrap:
+          "신규 프로젝트, 탐색할 기존 코드 없음 — 기술 스택 선택과 근거 기록에 집중한다.",
+        targeted:
+          "기존 코드베이스, 변경 범위 좁음 — 작업 관련 파일/함수만 파악하고 가설은 필요할 때만 1~2개.",
+        exploratory:
+          "기존 코드베이스, 변경 범위 넓거나 원인 불명확 — 경쟁가설 디버깅 절차(3~5 가설)를 적용한다.",
+      };
+      const modeDesc = modeDescriptions[mode] || modeDescriptions.exploratory;
       return [
         `## 작업 요청\n${request}`,
+        "",
+        `## 프로젝트 모드`,
+        mode,
+        "",
+        modeDesc,
         "",
         `## 지시사항`,
         `프로젝트를 분석하여 research.md를 작성하라.`,
         `- 프로젝트 구조, 기술 스택, 아키텍처를 파악한다`,
         `- 작업 요청과 관련된 코드를 집중 분석한다`,
-        `- 경쟁가설 디버깅 절차를 적용한다`,
+        `- project_mode에 따라 적절한 방법론을 선택한다 (bootstrap/targeted/exploratory)`,
         `- 분석 결과를 research.md에 작성한다`,
         "",
         `## 출력`,
         `${artifactDir}/research.md 파일을 작성하라.`,
       ].join("\n");
+    }
 
     case "plan":
       return [
@@ -955,6 +1089,21 @@ async function runPipeline(request, scale, type) {
   console.log(`\n✅ Pipeline initialized: ${initResult.pipeline_type}`);
   console.log(`   Steps: ${initResult.steps.map((s) => s.id).join(" → ")}`);
   console.log(`   Artifact dir: ${initResult.artifact_dir}\n`);
+
+  // Inject project_mode into pipeline-state.json for downstream steps (M023/S02)
+  try {
+    const projectMode = detectProjectMode(CWD, scale);
+    const statePath = path.join(initResult.artifact_dir, "pipeline-state.json");
+    if (fs.existsSync(statePath)) {
+      const stateData = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+      stateData.project_mode = projectMode;
+      stateData.updated_at = new Date().toISOString();
+      fs.writeFileSync(statePath, JSON.stringify(stateData, null, 2));
+    }
+  } catch (e) {
+    // Non-fatal: project_mode injection is an enhancement, not a hard requirement
+    console.log(`[project-mode] injection skipped: ${e.message}`);
+  }
 
   // Load pipeline definition for step details
   const pipelineDef = loadPipelineDefinition();
@@ -1391,6 +1540,7 @@ module.exports = {
   runStep,
   runReviewLoop,
   generateReport,
+  detectProjectMode,
 };
 
 if (require.main === module) {
