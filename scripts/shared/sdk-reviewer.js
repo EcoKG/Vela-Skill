@@ -8,7 +8,7 @@
  * Stage 2 (Sonnet): Deep review. Score ≥ 20 → pass, < 20 → Stage 3 (Opus).
  * Stage 3 (Opus):  Final escalation. Score ≥ 20 → approve + escalated:true, < 20 → reject + escalated:true.
  *
- * Exports: sdkReview({ step, artifactDir, cwd })
+ * Exports: sdkReview({ step, artifactDir, cwd, scale? })
  *
  * Design decisions:
  * - settingSources: [] passed through runSdkAgent (D014 — hook isolation)
@@ -23,6 +23,7 @@
 const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
+const { getTurnLimit } = require("./turn-config");
 const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
@@ -455,14 +456,15 @@ async function runReviewStage(opts) {
  * @param {string} opts.step - Pipeline step name
  * @param {string} opts.cwd - Working directory
  * @param {string} opts.priorReview - Best available prior review text
+ * @param {string} [opts.scale] - Optional scale hint ('small'|'medium'|'large') for turn limit
  * @returns {Promise<Object>} Same shape as runReviewStage
  */
-async function runOpusEscalation({ step, cwd, priorReview }) {
+async function runOpusEscalation({ step, cwd, priorReview, scale }) {
   return runReviewStage({
     model: OPUS_MODEL,
     step,
     cwd,
-    maxTurns: 10,
+    maxTurns: getTurnLimit("reviewer-opus", scale),
     priorReview,
     effort: "high",
     thinking: { type: "adaptive" },
@@ -489,6 +491,7 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
  * @param {string} opts.step - Pipeline step name (e.g. 'design', 'implement')
  * @param {string} opts.artifactDir - Directory for review artifacts
  * @param {string} opts.cwd - Project root working directory
+ * @param {string} [opts.scale] - Optional scale hint ('small'|'medium'|'large') propagated to turn limits
  * @returns {Promise<Object>} Result:
  *   Success: { ok: true, score, decision: 'approve'|'reject', stage, model, cost, durationMs, escalated? }
  *   Failure: { ok: false, error: string }
@@ -496,7 +499,7 @@ async function runOpusEscalation({ step, cwd, priorReview }) {
 async function sdkReview(opts) {
   if (!opts || typeof opts !== "object" || Array.isArray(opts))
     return { ok: false, error: "invalid_input" };
-  const { step, artifactDir, cwd } = opts;
+  const { step, artifactDir, cwd, scale } = opts;
   const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
   const SONNET_MODEL = MODEL_VERSIONS.SONNET;
 
@@ -508,7 +511,7 @@ async function sdkReview(opts) {
     model: HAIKU_MODEL,
     step,
     cwd,
-    maxTurns: 5,
+    maxTurns: getTurnLimit("reviewer-haiku", scale),
     priorReview: null,
     effort: "medium",
   });
@@ -557,6 +560,7 @@ async function sdkReview(opts) {
       step,
       cwd,
       priorReview: haikuResult,
+      scale,
     });
     totalCost += opusResult.cost || 0;
     totalDurationMs += opusResult.durationMs || 0;
@@ -637,7 +641,7 @@ async function sdkReview(opts) {
     model: SONNET_MODEL,
     step,
     cwd,
-    maxTurns: 8,
+    maxTurns: getTurnLimit("reviewer-sonnet", scale),
     priorReview: haikuResult,
     effort: "high",
   });
@@ -700,6 +704,7 @@ async function sdkReview(opts) {
     step,
     cwd,
     priorReview: sonnetResult,
+    scale,
   });
   totalCost += opusResult.cost || 0;
   totalDurationMs += opusResult.durationMs || 0;
