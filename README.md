@@ -61,12 +61,20 @@ Auto 모드에서는:
 ### 4. 업데이트
 
 ```bash
+# Claude Code 내부에서 (권장)
+/vela update
+
+# 또는 터미널에서 직접
 # 글로벌만
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash
 
 # 글로벌 + 현재 프로젝트
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash -s -- --local
 ```
+
+`/vela update`는 현재 워크스페이스에 `.vela/`가 있으면 자동으로 `--local`을 포함해 로컬도 함께 업데이트한다.
+
+**자동 업데이트 알림:** Vela는 설치 시 Claude Code의 `SessionStart` 훅에 버전 체크 스크립트를 등록한다. 세션을 시작할 때마다 로컬 버전과 GitHub 최신 버전을 비교하고(24시간 캐시, 2초 타임아웃), 새 버전이 있으면 Claude가 사용자에게 "지금 업데이트할까요?"라고 묻는다. "지금 업데이트"를 선택하면 `/vela update`가 바로 실행된다.
 
 ---
 

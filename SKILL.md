@@ -1,6 +1,6 @@
 ---
 name: vela
-description: "⛵ Vela 샌드박스 엔진. /vela:init 으로 환경 구축, /vela:start 로 파이프라인 시작, /vela:auto 로 무인 자동 실행, /vela:analyze 로 분석 보고서, /vela:git-clean 으로 git 정리. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, start, init, auto, analyze, git-clean 등의 키워드가 언급되면 이 스킬을 트리거한다."
+description: "⛵ Vela 샌드박스 엔진. /vela:init 으로 환경 구축, /vela:start 로 파이프라인 시작, /vela:auto 로 무인 자동 실행, /vela:analyze 로 분석 보고서, /vela:git-clean 으로 git 정리, /vela:update 로 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, start, init, auto, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
 ---
 
 # ⛵ Vela Engine v4.0 — Sandbox Development System
@@ -712,4 +712,6 @@ SDK `query()`의 `hooks` 파라미터로 보안 규칙을 인라인 적용한다
 
 Gate Keeper/Guard 규칙, CLI 명령어, TreeNode 캐시 상세는 `references/` 디렉토리를 참조한다:
 - `references/gates-and-guards.md` — 전체 게이트/가드 규칙 목록
+- `references/cli-reference.md` — CLI 명령어 전체 레퍼런스
+목록
 - `references/cli-reference.md` — CLI 명령어 전체 레퍼런스

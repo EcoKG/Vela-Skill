@@ -58,7 +58,7 @@ if [ -d "$TMP/skills" ]; then
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
   # Install as independent top-level skills so /vela:init etc. appear in autocomplete
   SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in init start git-clean auto analyze; do
+  for sub in init start git-clean auto analyze update; do
     if [ -d "$TMP/skills/$sub" ]; then
       mkdir -p "$SKILLS_ROOT/vela-$sub"
       cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
@@ -86,11 +86,14 @@ fi
 
 echo "  ✦ Global skill updated: $SKILL_DIR"
 
+# ─── Register SessionStart version-check hook ───
+source "$TMP/scripts/deploy-common.sh"
+register_session_start_hook
+
 # ─── Local project update (--local) ───
 if [ "$LOCAL_FLAG" = "--local" ]; then
   if [ -d ".vela" ]; then
     echo "  🧭 Updating local project: $(pwd)/.vela/"
-    source "$TMP/scripts/deploy-common.sh"
     sync_local_project "$TMP"
 
     # Optional: Update Claude Agent SDK globally

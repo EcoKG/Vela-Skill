@@ -70,3 +70,60 @@ sync_local_project() {
     node .vela/install.js 2>/dev/null | tail -1
   fi
 }
+
+# ─── Shared function: register SessionStart version check hook ───
+# Used by install.sh and update.sh to add the version-check hook to ~/.claude/settings.json
+# Idempotent — safe to call multiple times.
+register_session_start_hook() {
+  local HOOK_SCRIPT="$HOME/.claude/skills/vela/scripts/hooks/session-start-version-check.js"
+  local SETTINGS_FILE="$HOME/.claude/settings.json"
+
+  # Verify hook script exists
+  if [ ! -f "$HOOK_SCRIPT" ]; then
+    return 1
+  fi
+
+  # Use node to safely merge the hook into settings.json
+  node -e "
+const fs = require('fs');
+const path = '$SETTINGS_FILE';
+const hookCommand = 'node $HOOK_SCRIPT';
+
+let settings = {};
+try {
+  if (fs.existsSync(path)) {
+    settings = JSON.parse(fs.readFileSync(path, 'utf8'));
+  }
+} catch (e) {
+  console.error('  ⚠ Could not parse ' + path + ' — skipping hook registration');
+  process.exit(1);
+}
+
+settings.hooks = settings.hooks || {};
+settings.hooks.SessionStart = settings.hooks.SessionStart || [];
+
+// Remove any existing Vela version-check hook entries (match by command substring)
+settings.hooks.SessionStart = settings.hooks.SessionStart.filter(entry => {
+  if (!entry || !Array.isArray(entry.hooks)) return true;
+  const hasVelaHook = entry.hooks.some(h =>
+    h && h.command && h.command.includes('session-start-version-check.js')
+  );
+  return !hasVelaHook;
+});
+
+// Add fresh entry
+settings.hooks.SessionStart.push({
+  hooks: [
+    {
+      type: 'command',
+      command: hookCommand,
+      timeout: 5
+    }
+  ]
+});
+
+fs.mkdirSync(require('path').dirname(path), { recursive: true });
+fs.writeFileSync(path, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+console.log('  ⛵ SessionStart version-check hook registered');
+" 2>&1
+}

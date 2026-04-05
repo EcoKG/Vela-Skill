@@ -59,7 +59,7 @@ if [ -d "$TMP/skills" ]; then
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
   # Install as independent top-level skills so /vela:init etc. appear in autocomplete
   SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in init start git-clean auto analyze; do
+  for sub in init start git-clean auto analyze update; do
     if [ -d "$TMP/skills/$sub" ]; then
       mkdir -p "$SKILLS_ROOT/vela-$sub"
       cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
@@ -114,6 +114,9 @@ fi
 
 # ─── Source shared deploy functions ───
 source "$SKILL_DIR/scripts/deploy-common.sh"
+
+# ─── Register SessionStart version-check hook ───
+register_session_start_hook
 
 # ─── Auto-upgrade existing local .vela/ projects ───
 # If install.sh is run from inside a project that already has .vela/,
