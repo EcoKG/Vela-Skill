@@ -18,7 +18,7 @@
           "id": "research",
           "name": "Research & Analysis",
           "actor": "agent",
-          "mode": "read",
+          "mode": "rw-artifact",
           "entry_gate": ["init_complete"],
           "exit_gate": ["research_md_exists", "approval_exists"],
           "artifacts": ["research.md"],
@@ -107,7 +107,7 @@
           "id": "verify",
           "name": "Verification",
           "actor": "agent",
-          "mode": "read",
+          "mode": "rw-artifact",
           "entry_gate": ["implementation_complete"],
           "exit_gate": ["verification_md_exists", "ref_integrity"],
           "artifacts": ["verification.md"],
@@ -230,6 +230,13 @@
       "blocked_tools": [],
       "bash_policy": "restricted",
       "treenode_cache": true
+    },
+    "rw-artifact": {
+      "allowed_tools": ["Read", "Glob", "Grep", "Write", "Agent"],
+      "blocked_tools": ["Edit", "NotebookEdit"],
+      "bash_policy": "read_only",
+      "treenode_cache": true,
+      "artifact_write_only": true
     }
   },
   "scale_detection": {
