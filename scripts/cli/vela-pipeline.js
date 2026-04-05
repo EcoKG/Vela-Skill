@@ -48,6 +48,9 @@ const {
 // ─── SDK runner ───
 const { runSdkAgent } = require("../shared/sdk-runner");
 
+// ─── Turn limit configuration ───
+const { getTurnLimit } = require("../shared/turn-config");
+
 // ─── TreeNode cache — path collector ───
 const { appendPaths } = require("../cache/treenode");
 
@@ -590,13 +593,6 @@ const EFFORT_MAP = {
   reviewer: "high",
 };
 
-const TURNS_MAP = {
-  researcher: 15,
-  planner: 15,
-  executor: 25,
-  reviewer: 10,
-};
-
 /**
  * Build the user prompt for a specific pipeline step.
  *
@@ -747,7 +743,7 @@ async function runStep(stepDef, state) {
 
   // Select model and budget
   const model = MODEL_MAP[actor] || MODEL_VERSIONS.SONNET;
-  const maxTurns = TURNS_MAP[actor] || 15;
+  const maxTurns = getTurnLimit(actor, state.scale);
 
   // Track used tools for observability
   const usedTools = [];
@@ -982,6 +978,7 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
       step: stepDef.id,
       artifactDir,
       cwd: CWD,
+      scale: state.scale,
     });
 
     if (!reviewResult.ok) {
