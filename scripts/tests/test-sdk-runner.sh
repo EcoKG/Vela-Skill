@@ -171,6 +171,11 @@ function query(args) {
         num_turns: 10,
         duration_ms: 5000
       };
+    } else if (prompt.includes('__throw_max_turns__')) {
+      // Yield session init only, then throw to exercise the catch block.
+      // Message must match /max.*turns|maximum.*turns/i to classify as max_turns_exceeded.
+      yield { type: 'system', subtype: 'init', session_id: 'mock-session-throw' };
+      throw new Error('max turns exceeded');
     } else if (prompt.includes('__checkpoint_test__')) {
       // Emit user messages with UUIDs before the result
       yield { type: 'user', uuid: 'ckpt-001' };
@@ -595,6 +600,23 @@ result=$(run_with_mock "
   });
 ")
 assert_eq "checkpoints empty array" "PASS" "$result"
+
+# ── Test 23: catch-block cost preserved when SDK query throws ──
+echo ""
+echo "📋 Test 23: Exception in SDK query → cost field preserved as number (not missing)"
+result=$(run_with_mock "
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__throw_max_turns__' }).then(r => {
+    const checks = [
+      r.ok === false,
+      r.error === 'max_turns_exceeded',
+      r.cost === 0,              // cost preserved even when retriesAttempted=0
+      typeof r.cost === 'number' // not undefined
+    ];
+    console.log(checks.every(Boolean) ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  });
+")
+assert_eq "catch-block cost preserved" "PASS" "$result"
 
 # ── Results ──
 echo ""

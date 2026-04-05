@@ -315,9 +315,8 @@ async function runSdkAgent(opts) {
           error: "no_result",
           details: "SDK query completed without producing a result message",
           durationMs: elapsedMs,
-          ...(retriesAttempted > 0
-            ? { retriesAttempted, cost: totalCost }
-            : {}),
+          cost: totalCost,
+          ...(retriesAttempted > 0 ? { retriesAttempted } : {}),
         };
       }
 
@@ -379,7 +378,8 @@ async function runSdkAgent(opts) {
         ok: false,
         error: errorType,
         details: msg,
-        ...(retriesAttempted > 0 ? { retriesAttempted, cost: totalCost } : {}),
+        cost: totalCost,
+        ...(retriesAttempted > 0 ? { retriesAttempted } : {}),
       };
     }
   }
