@@ -261,6 +261,7 @@ MODE_OPTIONS=$(node -e "
   const readOpts = buildModeOptions('read');
   const writeOpts = buildModeOptions('write');
   const rwOpts = buildModeOptions('readwrite');
+  const rwaOpts = buildModeOptions('rw-artifact', '/tmp/art');
 
   const results = {
     readHasDisallowed: readOpts.disallowedTools && readOpts.disallowedTools.includes('Write'),
@@ -270,6 +271,9 @@ MODE_OPTIONS=$(node -e "
     readHasHooks: !!readOpts.hooks && !!readOpts.hooks.PreToolUse,
     writeHasHooks: !!writeOpts.hooks && !!writeOpts.hooks.PreToolUse,
     rwHasHooks: !!rwOpts.hooks && !!rwOpts.hooks.PostToolUse,
+    rwaAllowsWrite: rwaOpts.tools && rwaOpts.tools.includes('Write'),
+    rwaBlocksEdit: rwaOpts.disallowedTools && rwaOpts.disallowedTools.includes('Edit') && rwaOpts.disallowedTools.includes('NotebookEdit') && !rwaOpts.disallowedTools.includes('Bash'),
+    rwaHasArtifactGuard: !!rwaOpts.hooks && Array.isArray(rwaOpts.hooks.PreToolUse) && rwaOpts.hooks.PreToolUse.length >= 3,
   };
   console.log(JSON.stringify(results));
 " 2>/dev/null)
@@ -280,6 +284,9 @@ assert_contains "readwrite mode has no disallowed tools" '"rwNoDisallowed":true'
 assert_contains "read mode has PreToolUse hooks" '"readHasHooks":true' "$MODE_OPTIONS"
 assert_contains "write mode has PreToolUse hooks" '"writeHasHooks":true' "$MODE_OPTIONS"
 assert_contains "readwrite mode has PostToolUse hooks" '"rwHasHooks":true' "$MODE_OPTIONS"
+assert_contains "rw-artifact mode allows Write" '"rwaAllowsWrite":true' "$MODE_OPTIONS"
+assert_contains "rw-artifact blocks Edit/NotebookEdit but not Bash" '"rwaBlocksEdit":true' "$MODE_OPTIONS"
+assert_contains "rw-artifact has >=3 PreToolUse hooks (artifact-path guard)" '"rwaHasArtifactGuard":true' "$MODE_OPTIONS"
 
 # ══════════════════════════════════════════════════════════
 # Test 10: buildStepPrompt — generates step-specific prompts
