@@ -1111,7 +1111,7 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
 
     if (reviewResult.decision === "approve") {
       // sdkReview() already writes approval-{step}.json with richer data
-      // (escalated, escalation_model, threshold) — no duplicate write needed
+      // (score, threshold, stage, model) — no duplicate write needed
       console.log(`  ✅ Approved (score: ${reviewResult.score}/25)`);
 
       return {

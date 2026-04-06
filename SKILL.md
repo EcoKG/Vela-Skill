@@ -170,7 +170,7 @@ node .vela/cli/vela-engine.js auto
    ├── config.json              ← Vela 설정
    ├── shared/                  ← SDK 공유 모듈
    │   ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit, 격리)
-   │   ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+   │   ├── sdk-reviewer.js      ← Opus 단일 리뷰
    │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
    │   ├── sdk-researcher.js    ← 3관점 병렬 분석
    │   ├── sdk-executor.js      ← Sonnet TDD 실행
@@ -371,7 +371,7 @@ node .vela/cli/vela-engine.js branch                # 브랜치 생성 (branch �
 node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commit 단계)
 node .vela/cli/vela-engine.js sub-transition         # execute sub-phase 전진
 node .vela/cli/vela-engine.js cancel                # 파이프라인 취소 (복구 안내 포함)
-node .vela/cli/vela-engine.js review                # SDK 3단계 코드 리뷰 (Haiku→Sonnet→Opus)
+node .vela/cli/vela-engine.js review                # SDK Opus 단일 리뷰
 node .vela/cli/vela-engine.js plan-check            # SDK plan.md 구조 검증 (Haiku)
 node .vela/cli/vela-engine.js research              # SDK 3-관점 병렬 리서치 (Haiku)
 node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
@@ -459,7 +459,7 @@ Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계�
 
 | 커맨드 | 모델 | 설명 |
 |--------|------|------|
-| `review` | Haiku→Sonnet→Opus (3단계) | 코드/산출물 리뷰, 점수 기반 에스컬레이션 |
+| `review` | Opus (단일) | 코드/산출물 리뷰, 5차원 채점 (≥20/25 승인) |
 | `plan-check` | Haiku | plan.md 구조 검증 (필수 섹션 + 200byte 최소 분량) |
 | `research` | Haiku × 3 (병렬) | 아키텍처/보안/품질 3-관점 병렬 분석 |
 | `execute` | Sonnet | TDD 기반 코드 구현 (readwrite 권한) |
@@ -683,7 +683,7 @@ Vela는 `@anthropic-ai/claude-agent-sdk`의 `query()` API를 사용하여 파이
 vela-pipeline.js (오케스트레이터)
   ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
   ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
-  ├── sdk-reviewer.js (3단계 리뷰)
+  ├── sdk-reviewer.js (Opus 단일 리뷰)
   ├── sdk-plan-checker.js (plan 검증)
   ├── sdk-researcher.js (3관점 분석)
   ├── sdk-executor.js (코드 구현)

@@ -12,7 +12,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 
 ### 2. 🌟 이중 방어 (Defense in Depth)
 - **Gate Keeper** + **Gate Guard** — SDK 콜백 레벨 이중 차단 (Fail-closed: 예외 발생 시 도구 차단)
-- **Reviewer** (SDK 3단계: Haiku→Sonnet→Opus) — 비용 효율적 독립 평가
+- **Reviewer** (SDK Opus 단일) — 고품질 독립 평가
 - **Permission deny/allow** — settings.local.json deny 패턴으로 절대 차단, allow 패턴으로 읽기 도구 자동 허용
 - **GUARD 0**: 파이프라인 중 TaskCreate 차단
 - **pipeline-state.json + config.json 보호**: 직접 수정 불가
@@ -96,7 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │       → branch → execute → verify → commit → finalize    │
 │                                                           │
 │  🔌 SDK ORCHESTRATOR (vela-pipeline.js) ─────────        │
-│  review:     Haiku→Sonnet→Opus 3단계 리뷰                 │
+│  review:     Opus 단일 리뷰                               │
 │  plan-check: Haiku 구조 검증                               │
 │  research:   Haiku × 3 병렬 분석 (아키텍처/보안/품질)      │
 │  execute:    Sonnet 코드 구현 (TDD)                        │
@@ -185,7 +185,7 @@ M010에서 도입된 SDK 오케스트레이터는 `@anthropic-ai/claude-agent-sd
 vela-pipeline.js (오케스트레이터)
   ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
   ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
-  ├── sdk-reviewer.js (3단계 리뷰)
+  ├── sdk-reviewer.js (Opus 단일 리뷰)
   ├── sdk-plan-checker.js (plan 검증)
   ├── sdk-researcher.js (3관점 분석)
   ├── sdk-executor.js (코드 구현)
@@ -208,7 +208,7 @@ vela-pipeline.js (오케스트레이터)
 
 | 항목 | SDK 모드 | 비-SDK 모드 |
 |------|----------|------------|
-| 리뷰 | Haiku→Sonnet→Opus 3단계 (비용 ~80%↓) | PM → Reviewer Subagent |
+| 리뷰 | Opus 단일 리뷰 | PM → Reviewer Subagent |
 | 리서치 | Haiku × 3 병렬 (비용 ~70%↓) | PM → Researcher Subagent |
 | plan-check | Haiku 자동 검증 | PM 직접 검증 |
 | 실행 | SDK Executor (Sonnet) | PM → Executor Subagent |
@@ -223,7 +223,7 @@ vela-pipeline.js (오케스트레이터)
 node .vela/cli/vela-pipeline.js run "OAuth 인증 추가" --scale large
 
 # 엔진 직접 호출 (SDK 단계별)
-node .vela/cli/vela-engine.js review      # Haiku→Sonnet→Opus 3단계 리뷰
+node .vela/cli/vela-engine.js review      # Opus 단일 리뷰
 node .vela/cli/vela-engine.js plan-check   # Haiku plan.md 구조 검증
 node .vela/cli/vela-engine.js research     # 3-관점 병렬 리서치 (Haiku × 3)
 node .vela/cli/vela-engine.js execute      # Sonnet TDD 코드 구현
@@ -240,7 +240,7 @@ node .vela/cli/vela-analyze.js report --input data.json          # JSON → PDF
 ```
 scripts/shared/
 ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit 재시도, hook 격리)
-├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+├── sdk-reviewer.js      ← Opus 단일 리뷰
 ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
 ├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
 ├── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
@@ -350,7 +350,7 @@ Conflict Manager가 최종 병합 + 충돌 해결
 
 ### 승인 메커니즘 — 파일 기반
 
-- **SDK 모드**: sdk-reviewer.js가 3단계 리뷰 → review-{step}.md + approval-{step}.json 자동 생성
+- **SDK 모드**: sdk-reviewer.js가 Opus 단일 리뷰 → review-{step}.md + approval-{step}.json 자동 생성
 - **비-SDK 모드**: Reviewer (Subagent, Sonnet) → `review-{step}.md` → PM → `approval-{step}.json`
 - 엔진 exit gate가 파일 확인 → 없으면 transition 차단
 
@@ -367,14 +367,14 @@ Auto 모드(`/vela auto` 또는 `--auto`)는 파이프라인을 완전 무인으
 | **단계별 Agent spawn** | vela-pipeline.js가 각 파이프라인 단계(research/plan/execute/review)에 맞는 SDK Agent를 spawn. 단계별 도구 화이트리스트와 시스템 프롬프트가 코드로 제어됨 |
 | **권한 제어** | `permissionMode: 'bypassPermissions'` + `disallowedTools`로 단계별 도구 접근 제어. PM/user 단계는 자동 진행 |
 | **실패 복구** | SDK Agent 실패 시 상태 보존 + 에러 기록. Rate limit 시 exponential backoff 재시도 |
-| **에스컬레이션** | 리뷰 점수 미달 → Haiku→Sonnet→Opus 자동 에스컬레이션 |
+| **리뷰** | Opus 단일 리뷰 — 점수 ≥ 20/25 → 승인, 미달 → 거부 |
 | **상태 보존** | API 에러 시 파이프라인 상태 스냅샷을 artifact 디렉토리에 보존 |
 
 ### 자동 품질 검사
 
 | 메커니즘 | 동작 |
 |---------|------|
-| **SDK 리뷰** | sdk-reviewer.js가 review 단계에서 3단계 자동 리뷰 수행 |
+| **SDK 리뷰** | sdk-reviewer.js가 review 단계에서 Opus 단일 리뷰 수행 |
 | **SDK plan-check** | sdk-plan-checker.js가 plan.md 구조를 자동 검증 |
 | **exit gate** | 엔진이 단계별 필수 산출물(review-*.md, approval-*.json) 존재를 확인 → 없으면 transition 차단 |
 
@@ -480,7 +480,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   ├── scripts/
   │   ├── shared/                ← SDK 모듈 + 공유 유틸리티
   │   │   ├── sdk-runner.js        ← SDK 인프라 (인증/폴백/rate limit/격리)
-  │   │   ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+  │   │   ├── sdk-reviewer.js      ← Opus 단일 리뷰
   │   │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
   │   │   ├── sdk-researcher.js    ← 3관점 병렬 분석
   │   │   ├── sdk-executor.js      ← Sonnet TDD 실행
@@ -538,7 +538,7 @@ vela-engine branch [--mode auto|prompt|none]
 vela-engine commit [--message TEXT]
 vela-engine cancel
 vela-engine history
-vela-engine review                               # SDK 3단계 리뷰 (Haiku→Sonnet→Opus)
+vela-engine review                               # SDK Opus 단일 리뷰
 vela-engine plan-check                           # SDK plan.md 구조 검증 (Haiku)
 vela-engine research                             # SDK 3-관점 병렬 리서치 (Haiku × 3)
 vela-engine execute                              # SDK 단일 실행 (Sonnet)
@@ -584,7 +584,7 @@ bash scripts/tests/test-researcher-modes.sh     # project_mode 계약 검증
 
 # 개별 테스트 스위트
 bash scripts/tests/test-sdk-runner.sh       # 14 assertions — SDK 인프라
-bash scripts/tests/test-sdk-reviewer.sh     # 18 assertions — 3단계 리뷰
+bash scripts/tests/test-sdk-reviewer.sh     # 18 assertions — Opus 단일 리뷰
 bash scripts/tests/test-sdk-plan-checker.sh # 13 assertions — plan.md 검증
 bash scripts/tests/test-sdk-researcher.sh   # 23 assertions — 3관점 분석
 bash scripts/tests/test-sdk-executor.sh     # 13 assertions — 코드 실행
@@ -622,7 +622,7 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v1.0 | — | Gate Keeper + Gate Guard + Orchestrator + Tracker 기본 4 hook, 5종 파이프라인 |
 | v2.0 | M001 | 비용 최적화(Opus→Sonnet), Auto 모드, PM 속독, Bash 완화, persona.md |
 | v2.5 | M002 | Hook 4→18개, Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification |
-| v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, 3단계 리뷰, PM 코드 작성 구조 차단 |
+| v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, SDK 리뷰, PM 코드 작성 구조 차단 |
 | v3.1 | M004 | 분석 보고서, dep-analyzer + sdk-analyzer, vela-analyze CLI, PDF 생성, `/vela analyze` |
 | v3.1 | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션+유니코드 프로그레스 바, Orchestrator 박스 드로잉 |
 | v3.1 | M006 | 글로벌 오염 정리 — ~/.claude/ 잔여물 회수, 서브스킬 플랫 복사 제거, install.js 자기 치유 가드 |
