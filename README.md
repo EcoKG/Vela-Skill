@@ -248,7 +248,6 @@ scripts/shared/
 ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리 (3 tools)
 ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석 (SDK 불필요)
 ├── change-surface.js    ← 참조 무결성 검증 (diff 기반 cross-file reference 분석)
-├── turn-config.js       ← turn-budget 중앙화 (getTurnLimit(role, scale), scale=large 1.5x ceil)
 └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
 ```
 
@@ -638,7 +637,7 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v4.0 | M020 | 퍼미션 마찰 제거 — PM GSD식 이해 확인, 읽기 도구 퍼미션 프롬프트 제거, 파이프라인 시작 시 퍼미션 안내 |
 | v4.0 | M021 | PM 오케스트레이터 지시 단절 수정 — vela.md·pipeline-flow.md가 vela-pipeline.js run을 유일한 실행 인터페이스로 지시, SDK Guard 콜백·도구 추적·비용/시간 추적 전면 활성화 |
 | v4.0 | M022 | 리뷰 시스템 + 오케스트레이터 복원력 강화 — 단계별 채점 기준 분기, ESM globalImport 수정, escalate_to_pm graceful 종료, approval _source provenance, report_md_exists 게이트, sub_phase 추적 |
-| v4.0 | M023 | SDK 오케스트레이터 Research 실패 복구 + 관찰 가능성 강화 — rw-artifact mode + artifactDir-scoped Write guard, project_mode 주입(bootstrap/targeted/exploratory), turn-config.js 중앙화(scale=large 1.5x), cost 보존 + denied-tools.json artifact + Turns used 로그, sdk-failure-recovery.md, pipeline-consistency + turn-config-centralization invariant 테스트 |
+| v4.0 | M023 | SDK 오케스트레이터 Research 실패 복구 + 관찰 가능성 강화 — rw-artifact mode + artifactDir-scoped Write guard, project_mode 주입(bootstrap/targeted/exploratory), cost 보존 + denied-tools.json artifact + Turns used 로그, sdk-failure-recovery.md, pipeline-consistency invariant 테스트 |
 
 ---
 

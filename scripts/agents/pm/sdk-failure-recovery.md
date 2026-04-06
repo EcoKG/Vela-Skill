@@ -10,7 +10,7 @@ SDK 오케스트레이터(`vela-pipeline.js`)가 스텝 실행 중 실패(`ok: f
 |-----------|------|-----------|------|
 | `sdk_not_available` | Claude Code SDK 미설치/미로드 | cost=0, numTurns=null | `npm ls @anthropic-ai/claude-agent-sdk` 확인 → install.sh 재실행 지시 |
 | `no_result` | SDK 쿼리 완료했으나 result 메시지 없음 | durationMs > 0, cost=0 | 동일 스텝 1회 재시도 (일시적 통신 오류 가능). 재실패 시 AskUserQuestion |
-| `error_max_turns` | SDK 내부 최대 턴 초과 | Turns used = N/N (상한 도달) | 프롬프트 축소 + maxTurns 재산정 필요 → 엔진 재구성 필요, AskUserQuestion |
+| `error_max_turns` | SDK 내부 최대 턴 초과 | Turns used: N (SDK 내부 상한 도달) | 프롬프트 축소 필요 → 엔진 재구성 필요, AskUserQuestion |
 | `error_during_execution` | 실행 중 에러 (rate limit은 자동 재시도 처리됨) | details 필드에 원인 문자열, retriesAttempted 존재 가능 | details 원인 확인. Rate limit 소진이면 대기 후 재시도, 그 외는 AskUserQuestion |
 | `error_max_structured_output_retries` | 구조화 출력 재시도 한도 초과 | outputFormat 지정된 스텝에서만 발생 | JSON 스키마 적합성 문제 — 스텝 프롬프트 수정 필요, AskUserQuestion |
 | `max_turns_exceeded` | catch 블록에서 감지된 턴 초과 (예외 경로) | details에 "max turns" 패턴 | `error_max_turns`와 동일 처리 |
@@ -20,9 +20,9 @@ SDK 오케스트레이터(`vela-pipeline.js`)가 스텝 실행 중 실패(`ok: f
 
 SDK 스텝 실행 종료 시 콘솔/아티팩트에 3종 신호가 기록된다. 실패 원인 분류에 반드시 이 신호를 사용한다.
 
-1. **`Turns used: N/M`** (콘솔 로그)
-   - `N == M` → 턴 상한 도달 (`error_max_turns` / `max_turns_exceeded`의 결정적 증거)
-   - `N < M` → 다른 원인으로 종료됨 (details 필드 확인 필수)
+1. **`Turns used: N`** (콘솔 로그)
+   - SDK 내부 상한에 도달하면 `error_max_turns` / `max_turns_exceeded` 에러 코드와 함께 기록됨
+   - 정상 종료 시에도 소비 턴 수가 기록됨 (details 필드 확인 필수)
 2. **`denied-tools.json`** (artifactDir 하위)
    - 파일 존재 → 스텝이 차단된 도구를 호출하려 시도함. 각 denial의 `tool_name`/`reason`을 확인하여 프롬프트 수정 방향 결정
    - 파일 없음 → 도구 접근 문제는 아님
