@@ -186,6 +186,7 @@ vela-pipeline.js (오케스트레이터)
   ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
   ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
   ├── sdk-reviewer.js (Opus 단일 리뷰)
+  ├── sdk-learning.js (Haiku 파이프라인 학습 축적)
   ├── sdk-plan-checker.js (plan 검증)
   ├── sdk-researcher.js (3관점 분석)
   ├── sdk-executor.js (코드 구현)
@@ -241,6 +242,7 @@ node .vela/cli/vela-analyze.js report --input data.json          # JSON → PDF
 scripts/shared/
 ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit 재시도, hook 격리)
 ├── sdk-reviewer.js      ← Opus 단일 리뷰
+├── sdk-learning.js      ← Haiku 파이프라인 학습 축적 (패턴 추출 + learnings.json 누적)
 ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
 ├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
 ├── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
@@ -482,6 +484,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   ├── shared/                ← SDK 모듈 + 공유 유틸리티
   │   │   ├── sdk-runner.js        ← SDK 인프라 (인증/폴백/rate limit/격리)
   │   │   ├── sdk-reviewer.js      ← Opus 단일 리뷰
+  │   │   ├── sdk-learning.js      ← Haiku 파이프라인 학습 축적
   │   │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
   │   │   ├── sdk-researcher.js    ← 3관점 병렬 분석
   │   │   ├── sdk-executor.js      ← Sonnet TDD 실행
@@ -595,6 +598,7 @@ bash scripts/tests/test-auto-mode.sh        # Auto 모드 (16 assertions)
 bash scripts/tests/test-wave-poc.sh         # Wave 병렬 그룹화 PoC
 bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성 검증
 bash scripts/tests/test-sdk-diff-summary.sh # 20 assertions — Opus 전체 diff 통합 검토
+bash scripts/tests/test-sdk-learning.sh     # 20 assertions — Haiku 학습 축적
 ```
 
 ⚠️ SDK 테스트 스위트들은 공유 mock 디렉토리를 사용하므로 **순차 실행** 필수 (병렬 실행 시 mock collision 발생).
