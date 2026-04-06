@@ -1,4 +1,4 @@
-# ⛵ Vela Engine v4.0 — Sandbox Development System
+# ⛵ Vela Engine v4.1 — Sandbox Development System
 
 **Vela**(돛자리)는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의 파이프라인을 통해서만 진행된다.
