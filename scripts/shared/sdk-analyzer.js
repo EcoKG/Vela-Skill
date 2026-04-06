@@ -32,8 +32,6 @@ const { MODEL_VERSIONS } = require("./constants");
 // ─── Model Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
-const MAX_TURNS = undefined; // SDK 기본값 사용 — 분석 에이전트는 턴 제한 불필요
-
 // ─── Structured output schema (K011 pattern — module-local) ───
 const ANALYZER_OUTPUT_SCHEMA = {
   type: "object",
@@ -413,7 +411,6 @@ function normalizeFindingsArray(findings) {
  * @param {string[]} opts.perspectives - Perspective keys to run (e.g. ['security', 'bugs'])
  * @param {string} opts.cwd - Project root working directory
  * @param {string} [opts.model] - Model to use (default: haiku). Accepts aliases: haiku, sonnet, opus
- * @param {number} [opts.maxTurns] - Max turns per agent (default: 5)
  *
  * settingSources: [] — passed through runSdkAgent to prevent hook loading in SDK agents
  *
@@ -426,7 +423,7 @@ function normalizeFindingsArray(findings) {
 async function sdkAnalyze(opts) {
   if (!opts || typeof opts !== "object" || Array.isArray(opts))
     return { ok: false, error: "invalid_input" };
-  const { perspectives, cwd, model, maxTurns } = opts;
+  const { perspectives, cwd, model } = opts;
   // ─── Input validation ───
   if (!Array.isArray(perspectives)) {
     return { ok: false, error: "perspectives must be an array" };
@@ -470,7 +467,6 @@ async function sdkAnalyze(opts) {
   }
 
   const selectedModel = model || HAIKU_MODEL;
-  const selectedMaxTurns = maxTurns || MAX_TURNS;
   const overallStart = Date.now();
 
   // ─── Launch perspectives in parallel ───
@@ -483,7 +479,6 @@ async function sdkAnalyze(opts) {
       model: selectedModel,
       cwd,
       systemPrompt: perspective.systemPrompt,
-      maxTurns: selectedMaxTurns,
       effort: "medium",
       outputFormat: { type: "json", schema: ANALYZER_OUTPUT_SCHEMA },
       // settingSources: [] is set inside runSdkAgent (D014 — hook isolation)

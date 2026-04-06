@@ -48,9 +48,6 @@ const {
 // ─── SDK runner ───
 const { runSdkAgent } = require("../shared/sdk-runner");
 
-// ─── Turn limit configuration ───
-const { getTurnLimit } = require("../shared/turn-config");
-
 // ─── TreeNode cache — path collector ───
 const { appendPaths } = require("../cache/treenode");
 
@@ -741,8 +738,6 @@ async function runStep(stepDef, state) {
 
   // Select model and budget
   const model = MODEL_MAP[actor] || MODEL_VERSIONS.SONNET;
-  const maxTurns = getTurnLimit(actor, state.scale);
-
   // Track used tools for observability
   const usedTools = [];
   const deniedTools = [];
@@ -827,7 +822,6 @@ async function runStep(stepDef, state) {
     model,
     cwd: CWD,
     systemPrompt,
-    maxTurns,
     allowedTools: modeOptions.tools,
     disallowedTools: modeOptions.disallowedTools,
     hooks,
@@ -841,7 +835,7 @@ async function runStep(stepDef, state) {
   console.log(`  Cost: $${(sdkResult.cost || 0).toFixed(4)}`);
   console.log(`  Duration: ${(durationMs / 1000).toFixed(1)}s`);
   if (sdkResult.numTurns != null) {
-    console.log(`  Turns used: ${sdkResult.numTurns}/${maxTurns}`);
+    console.log(`  Turns used: ${sdkResult.numTurns}`);
   }
   console.log(`  Tools used: [${[...new Set(usedTools)].join(", ")}]`);
   if (deniedTools.length > 0) {

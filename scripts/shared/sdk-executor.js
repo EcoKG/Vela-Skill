@@ -27,8 +27,6 @@ const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
-const MAX_TURNS = undefined; // SDK 기본값 사용
-
 // ─── Inlined executor system prompt ───
 // SDK agents run with settingSources: [] and cannot read project files.
 // The entire executor context must be in the system prompt.
@@ -175,7 +173,6 @@ async function sdkExecute(opts) {
     model: SONNET_MODEL,
     cwd,
     systemPrompt: EXECUTOR_SYSTEM_PROMPT,
-    maxTurns: MAX_TURNS,
     permissionMode: "bypassPermissions",
     effort: "high",
   });

@@ -23,7 +23,6 @@
 const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
-const { getTurnLimit } = require("./turn-config");
 const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
@@ -397,7 +396,6 @@ function buildReviewPrompt(step, priorReview) {
  * @param {string} opts.model - Model identifier
  * @param {string} opts.step - Pipeline step name
  * @param {string} opts.cwd - Working directory
- * @param {number} opts.maxTurns - Max conversation turns
  * @param {string|null} opts.priorReview - Prior review text (Stage 2 only)
  * @returns {Promise<Object>} { ok, result, score, cost, model, durationMs } or { ok: false, error }
  */
@@ -409,7 +407,6 @@ async function runReviewStage(opts) {
     model: opts.model,
     cwd: opts.cwd,
     systemPrompt: getReviewerSystemPrompt(opts.step),
-    maxTurns: opts.maxTurns,
     outputFormat: { type: "json", schema: getOutputSchema(opts.step) },
     // settingSources: [] is set by runSdkAgent internally (D014)
   };
@@ -464,7 +461,6 @@ async function runOpusEscalation({ step, cwd, priorReview, scale }) {
     model: OPUS_MODEL,
     step,
     cwd,
-    maxTurns: getTurnLimit("reviewer-opus", scale),
     priorReview,
     effort: "high",
     thinking: { type: "adaptive" },
@@ -511,7 +507,6 @@ async function sdkReview(opts) {
     model: HAIKU_MODEL,
     step,
     cwd,
-    maxTurns: getTurnLimit("reviewer-haiku", scale),
     priorReview: null,
     effort: "medium",
   });
@@ -641,7 +636,6 @@ async function sdkReview(opts) {
     model: SONNET_MODEL,
     step,
     cwd,
-    maxTurns: getTurnLimit("reviewer-sonnet", scale),
     priorReview: haikuResult,
     effort: "high",
   });

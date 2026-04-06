@@ -31,8 +31,6 @@ const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
-const MAX_TURNS = undefined; // SDK 기본값 사용
-
 // ─── Hypothesis prefix — prepended to all perspective prompts ───
 // Enforces competing-hypothesis debugging procedure for structured analysis.
 // Source: scripts/agents/researcher/hypothesis.md (inlined for SDK isolation)
@@ -183,7 +181,6 @@ async function sdkResearch(opts) {
       model: HAIKU_MODEL,
       cwd,
       systemPrompt: prompt,
-      maxTurns: MAX_TURNS,
       effort: "low",
     });
   });

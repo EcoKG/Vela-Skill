@@ -27,8 +27,6 @@ const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
-const MAX_TURNS = undefined; // SDK 기본값 사용
-
 const VERDICT_REGEX = /VERDICT:\s*(PASS|FAIL)/i;
 
 // ─── Structured output schema (K011 pattern — module-local) ───
@@ -153,7 +151,6 @@ async function sdkPlanCheck(opts) {
     model: HAIKU_MODEL,
     cwd,
     systemPrompt: PLAN_CHECK_SYSTEM_PROMPT,
-    maxTurns: MAX_TURNS,
     effort: "low",
     outputFormat: { type: "json", schema: PLAN_CHECK_OUTPUT_SCHEMA },
   });
