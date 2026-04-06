@@ -36,6 +36,7 @@ const VELA_DIR = path.join(CWD, ".vela");
 const TEMPLATES_DIR = path.join(VELA_DIR, "templates");
 const AGENTS_DIR = path.join(VELA_DIR, "scripts", "agents");
 const ENGINE_PATH = path.resolve(__dirname, "vela-engine.js");
+const LOCK_PATH = path.join(VELA_DIR, "state", ".orchestrator.lock");
 
 // ─── Constants for SDK hooks guards ───
 const {
@@ -541,6 +542,64 @@ function scanDirRecursive(cwd) {
 /**
  * Execute a vela-engine.js command and return parsed JSON result.
  *
+// ═══════════════════════════════════════════════════════════
+//  Orchestrator Lock — prevents duplicate run/resume
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Acquire the orchestrator lock. Writes PID to lock file.
+ * If a lock already exists and the holding process is alive, rejects.
+ * Stale locks (dead PID) are automatically cleaned up.
+ */
+function acquireLock() {
+  const stateDir = path.dirname(LOCK_PATH);
+  if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+
+  if (fs.existsSync(LOCK_PATH)) {
+    try {
+      const lockData = JSON.parse(fs.readFileSync(LOCK_PATH, "utf8"));
+      // Check if holding process is still alive
+      try {
+        process.kill(lockData.pid, 0); // signal 0 = check existence
+        // Process is alive — reject
+        console.error("❌ 오케스트레이터가 이미 실행 중입니다.");
+        console.error(`   PID: ${lockData.pid} | 시작: ${lockData.started_at}`);
+        console.error("   중복 실행은 파이프라인 상태를 꼬이게 합니다.");
+        console.error("   기다리거나, 기존 프로세스가 완료된 후 다시 시도하십시오.");
+        process.exit(1);
+      } catch (_e) {
+        // Process is dead — stale lock, clean up
+        fs.unlinkSync(LOCK_PATH);
+      }
+    } catch (_e) {
+      // Corrupt lock file — clean up
+      try { fs.unlinkSync(LOCK_PATH); } catch (_e2) {}
+    }
+  }
+
+  // Write lock
+  fs.writeFileSync(LOCK_PATH, JSON.stringify({
+    pid: process.pid,
+    started_at: new Date().toISOString(),
+  }));
+}
+
+/**
+ * Release the orchestrator lock.
+ */
+function releaseLock() {
+  try {
+    if (fs.existsSync(LOCK_PATH)) {
+      const lockData = JSON.parse(fs.readFileSync(LOCK_PATH, "utf8"));
+      // Only release our own lock
+      if (lockData.pid === process.pid) {
+        fs.unlinkSync(LOCK_PATH);
+      }
+    }
+  } catch (_e) { /* best-effort cleanup */ }
+}
+
+/**
  * @param {string[]} engineArgs - Arguments for vela-engine.js
  * @returns {Object} Parsed JSON output from the engine
  */
@@ -1202,6 +1261,16 @@ async function runPipeline(request, scale, type) {
  * @param {number} totalCost - Running cost total
  */
 async function executeStepLoop(steps, stepResults, totalCost) {
+  // Acquire lock — prevents duplicate run/resume from colliding
+  acquireLock();
+
+  // Ensure lock is released on exit (normal, error, or signal)
+  const cleanup = () => releaseLock();
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => { cleanup(); process.exit(130); });
+  process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+
+  try {
   for (let i = 0; i < steps.length; i++) {
     const stepDef = steps[i];
 
@@ -1421,6 +1490,10 @@ async function executeStepLoop(steps, stepResults, totalCost) {
     `  Steps completed: ${stepResults.filter((r) => r.ok).length}/${stepResults.length}`,
   );
   console.log("═══════════════════════════════════════════════════");
+
+  } finally {
+    releaseLock();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
