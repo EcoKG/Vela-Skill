@@ -493,7 +493,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   ├── agents/                ← vela.md, researcher, planner, executor, reviewer, conflict-manager, leader
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
-  │   ├── tests/                 ← 18개 계약 테스트 스위트
+  │   ├── tests/                 ← 21개 계약 테스트 스위트
   │   ├── install.js             ← 설치/검증/복구/upgrade/orphan cleanup
   │   └── statusline.sh          ← ⛵ 하단 바
   ├── templates/                 ← pipeline.json, config.json, presets.json
@@ -556,7 +556,7 @@ vela-analyze report --input <file> [--output]    # JSON → PDF 변환
 
 ## 테스트
 
-18개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
+21개 계약 테스트 스위트로 Vela의 핵심 메커니즘을 검증한다.
 
 ```bash
 # 전체 SDK 통합 테스트 (81 assertions)
@@ -576,6 +576,11 @@ bash scripts/tests/test-fail-closed.sh        # 7 assertions — Fail-closed 게
 bash scripts/tests/test-chain-operators.sh     # 13 assertions — 체인 연산자 차단
 bash scripts/tests/test-s03-relaxation.sh      # 21 assertions — 파이프라인 완화
 bash scripts/tests/test-s04-hardening.sh       # 21 assertions — 코드 품질 강화
+
+# 구조 검증 테스트 (M023)
+bash scripts/tests/test-pipeline-consistency.sh # pipeline.json invariant 검증
+bash scripts/tests/test-gate-keeper.sh          # VK-01~VK-12 게이트 규칙 검증
+bash scripts/tests/test-researcher-modes.sh     # project_mode 계약 검증
 
 # 개별 테스트 스위트
 bash scripts/tests/test-sdk-runner.sh       # 14 assertions — SDK 인프라
@@ -638,6 +643,7 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v4.0 | M021 | PM 오케스트레이터 지시 단절 수정 — vela.md·pipeline-flow.md가 vela-pipeline.js run을 유일한 실행 인터페이스로 지시, SDK Guard 콜백·도구 추적·비용/시간 추적 전면 활성화 |
 | v4.0 | M022 | 리뷰 시스템 + 오케스트레이터 복원력 강화 — 단계별 채점 기준 분기, ESM globalImport 수정, escalate_to_pm graceful 종료, approval _source provenance, report_md_exists 게이트, sub_phase 추적 |
 | v4.0 | M023 | SDK 오케스트레이터 Research 실패 복구 + 관찰 가능성 강화 — rw-artifact mode + artifactDir-scoped Write guard, project_mode 주입(bootstrap/targeted/exploratory), cost 보존 + denied-tools.json artifact + Turns used 로그, sdk-failure-recovery.md, pipeline-consistency invariant 테스트 |
+| v4.1 | M024 | maxTurns 상한 제거 — SDK 에이전트 자율 턴 소비, turn-config.js 삭제, 6개 SDK 모듈에서 maxTurns 코드 21곳 제거 |
 
 ---
 
