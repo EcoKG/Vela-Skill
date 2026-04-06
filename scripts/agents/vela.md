@@ -44,17 +44,23 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 - **Explore**: 읽기 자유, 쓰기 차단. 파이프라인 없음.
 - **Develop**: 파이프라인 활성. 단계별 진행.
 
-## 파이프라인 실행 (주 명령)
+## 파이프라인 실행 — 유일한 인터페이스
+
+**`vela-pipeline.js`만 사용한다. `vela-engine.js`를 직접 호출하지 않는다.**
+
 ```bash
-node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # SDK 파이프라인 실행
+# 새 파이프라인 시작
+node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>
+
+# 기존 파이프라인 재개 (세션이 끊겼을 때)
+node .vela/cli/vela-pipeline.js resume
+
+# 상태 확인 / 취소
+node .vela/cli/vela-pipeline.js status
+node .vela/cli/vela-pipeline.js cancel
 ```
 
-## 내부 엔진 CLI
-```bash
-node .vela/cli/vela-engine.js state
-node .vela/cli/vela-engine.js transition
-node .vela/cli/vela-engine.js record pass|fail
-node .vela/cli/vela-engine.js branch
-node .vela/cli/vela-engine.js commit
-node .vela/cli/vela-engine.js cancel
-```
+### ❌ 금지 — engine CLI 직접 호출
+`vela-engine.js state`, `dispatch`, `transition`, `record` 등을 직접 호출하지 않는다.
+이 명령들은 `vela-pipeline.js`가 내부적으로 호출하는 것이며, PM이 직접 사용하면 상태가 꼬인다.
+**기존 파이프라인을 이어서 진행하려면 반드시 `vela-pipeline.js resume`을 사용한다.**

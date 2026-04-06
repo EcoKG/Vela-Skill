@@ -1,48 +1,45 @@
 # 파이프라인 운영 흐름 — 단계를 절대 건너뛰지 않는다
 
+**핵심: `vela-pipeline.js`가 유일한 실행 인터페이스다. PM은 `vela-engine.js`를 직접 호출하지 않는다.**
+
+## 새 파이프라인 시작
+```bash
+node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>
+```
+
+## 기존 파이프라인 재개
+세션이 끊기거나 중단된 파이프라인을 이어서 진행할 때:
+```bash
+node .vela/cli/vela-pipeline.js resume
+```
+`resume`은 현재 단계부터 자동으로 이어서 실행한다. 완료된 단계는 skip된다.
+
 ## Standard Pipeline (large)
 
 ```
-0. `node .vela/cli/vela-pipeline.js run "요청" --scale large` — 오케스트레이터가 파이프라인 시작
-1. TeamCreate: team_name "vela-pipeline"
+오케스트레이터가 자동 실행하는 흐름:
 
-[Research] — Subagent (Sonnet)
-2. Researcher subagent 1명 소환 (model: "sonnet"):
-   - 프로젝트 분석 수행
-   - 요구사항 파악 → 코드베이스 탐색 → 의존성/제약 분석 → 결론
-3. PM이 리포트를 검토하여 research.md 작성
-4. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-research.md 생성
-5. PM이 review 읽고 approve/reject 판단
+[Research] — SDK Agent (Sonnet)
+1. 오케스트레이터가 Researcher SDK agent 실행
+2. 오케스트레이터가 자동 리뷰 실행 → review-research.md 생성
+3. approve/reject 자동 판정
 
-[Plan] — Subagent (Sonnet)
-6. Planner subagent (model: "sonnet") → plan.md
-7. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-plan.md 생성
-8. PM approve/reject
+[Plan] — SDK Agent (Sonnet)
+4. 오케스트레이터가 Planner SDK agent 실행 → plan.md
+5. 오케스트레이터가 자동 리뷰 실행 → review-plan.md 생성
+6. approve/reject 자동 판정
 
-[Execute — 단일 모듈] — Subagent (Sonnet)
-9. 오케스트레이터 → `vela-engine.js execute` 내부 호출 → SDK Executor (Sonnet) 코드 구현
-10. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-execute.md 생성
-11. PM approve/reject
-
-[Execute — CrossLayer/다중 모듈] — Teammate (Sonnet)
-9. Teammate 3~5명 (model: "sonnet", team_name, isolation: "worktree")
-10. 오케스트레이터 → `vela-engine.js review` 내부 호출 → review-execute.md 생성
-11. PM approve/reject
-
-12. TeamDelete
+[Execute] — SDK Agent (Sonnet)
+7. 오케스트레이터가 Executor SDK agent 실행 → 코드 구현
+8. 오케스트레이터가 자동 리뷰 실행 → review-execute.md 생성
+9. approve/reject 자동 판정 (reject 시 리뷰 피드백과 함께 재실행)
 ```
 
 ## Quick Pipeline (medium)
 
-`node .vela/cli/vela-pipeline.js run "요청" --scale medium` — 오케스트레이터가 파이프라인 시작
-
-Plan: Planner subagent (Sonnet) + 오케스트레이터 내부 `vela-engine.js review`
-Execute: 오케스트레이터 내부 `vela-engine.js execute` + `vela-engine.js review`
-팀 소환 없음.
+Plan → Execute. 오케스트레이터가 각 단계의 SDK agent + 리뷰를 자동 실행.
 
 ## Trivial Pipeline (small)
-
-`node .vela/cli/vela-pipeline.js run "요청" --scale small` — 오케스트레이터가 파이프라인 시작
 
 PM 직접 수행. 에이전트 소환 없음. 소스 코드 직접 접근 허용.
 

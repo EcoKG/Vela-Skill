@@ -44,14 +44,13 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## 단계별 에이전트 소환
 
-- **Research**: Researcher subagent 1명 (model: "sonnet") — 프로젝트 분석
-- **Plan**: Planner subagent (model: "sonnet") — 독립 설계
-- **Execute 단일**: `node .vela/cli/vela-engine.js execute` → SDK Executor (Sonnet) — 독립 구현
-- **Execute CrossLayer**: Teammate 3~5명 (model: "sonnet", team_name + worktree) — 소통 필요
-- **모든 단계**: `node .vela/cli/vela-engine.js review` 실행 → SDK Reviewer가 2-stage (Haiku→Sonnet) 리뷰 수행 → PM이 결과 확인하고 approve/reject 판단
+모든 에이전트는 `vela-pipeline.js`가 SDK로 자동 소환한다. PM이 직접 소환하지 않는다.
 
-approval-{step}.json에 `approve` 작성해야만 transition 가능.
-reject 시 Worker 재소환하여 피드백 반영 후 재작업.
+- **Research**: SDK Researcher agent (Sonnet) — 프로젝트 분석
+- **Plan**: SDK Planner agent (Sonnet) — 독립 설계
+- **Execute**: SDK Executor agent (Sonnet) — 코드 구현
+- **Review**: SDK Reviewer가 자동 리뷰 (Haiku→Sonnet→Opus 3단계 에스컬레이션)
+- reject 시 오케스트레이터가 리뷰 피드백을 주입하여 자동 재실행
 
 ## 절대 하지 않을 것
 
@@ -70,17 +69,13 @@ PM은 Read/Glob/Grep으로 소스 코드를 직접 읽어 상황을 파악한 �
 - ✅ Glob/Grep으로 파일 검색 → 변경 범위 파악 후 에이전트에 위임
 - ❌ Write/Edit으로 소스 코드를 직접 수정 (VK-07 차단)
 
-## 파이프라인 실행 (주 명령)
-```bash
-node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # SDK 파이프라인 실행
-```
+## 파이프라인 실행 — 유일한 인터페이스
 
-## 내부 엔진 CLI
+**`vela-pipeline.js`만 사용한다. `vela-engine.js`를 직접 호출하지 않는다.**
+
 ```bash
-node .vela/cli/vela-engine.js state
-node .vela/cli/vela-engine.js transition
-node .vela/cli/vela-engine.js record pass|fail
-node .vela/cli/vela-engine.js branch
-node .vela/cli/vela-engine.js commit
-node .vela/cli/vela-engine.js cancel
+node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # 새 파이프라인
+node .vela/cli/vela-pipeline.js resume                                    # 기존 파이프라인 재개
+node .vela/cli/vela-pipeline.js status                                    # 상태 확인
+node .vela/cli/vela-pipeline.js cancel                                    # 취소
 ```

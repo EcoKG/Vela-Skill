@@ -9,6 +9,7 @@
  *
  * Commands:
  *   run <request> --scale <s/m/l> [--type TYPE]  — Run full pipeline
+ *   resume                                         — Resume active pipeline from current step
  *   status                                         — Show pipeline status
  *   cancel                                         — Cancel active pipeline
  *
@@ -1189,7 +1190,18 @@ async function runPipeline(request, scale, type) {
   let totalCost = 0;
   const stepResults = [];
 
-  // Step 2: Execute each step sequentially
+  await executeStepLoop(steps, stepResults, totalCost);
+}
+
+/**
+ * Execute pipeline steps sequentially, skipping completed ones.
+ * Shared by runPipeline (new pipeline) and cmdResume (existing pipeline).
+ *
+ * @param {Array} steps - Resolved step definitions
+ * @param {Array} stepResults - Accumulator for step results (mutated in-place)
+ * @param {number} totalCost - Running cost total
+ */
+async function executeStepLoop(steps, stepResults, totalCost) {
   for (let i = 0; i < steps.length; i++) {
     const stepDef = steps[i];
 
@@ -1551,6 +1563,40 @@ async function cmdRun() {
   await runPipeline(request, scale, type);
 }
 
+/**
+ * Resume an existing active pipeline from where it left off.
+ * Reads pipeline_type and request from active state — no init needed.
+ */
+async function cmdResume() {
+  const state = getActiveState();
+  if (!state) {
+    console.error("❌ No active pipeline to resume.");
+    console.error("   Use 'run' to start a new pipeline.");
+    process.exit(1);
+  }
+
+  console.log("═══════════════════════════════════════════════════");
+  console.log("  Vela Pipeline Orchestrator — RESUME");
+  console.log(`  Request: ${state.request}`);
+  console.log(`  Scale: ${state.scale} | Type: ${state.pipeline_type}`);
+  console.log(`  Current step: ${state.current_step}`);
+  console.log(`  Completed: ${(state.completed_steps || []).join(", ") || "none"}`);
+  console.log("═══════════════════════════════════════════════════");
+
+  const pipelineDef = loadPipelineDefinition();
+  if (!pipelineDef) {
+    console.error("❌ Pipeline definition not found.");
+    process.exit(1);
+  }
+
+  const steps = resolveSteps(pipelineDef, state.pipeline_type);
+
+  let totalCost = 0;
+  const stepResults = [];
+
+  await executeStepLoop(steps, stepResults, totalCost);
+}
+
 function cmdStatus() {
   const result = engine(["state"]);
   output(result);
@@ -1567,12 +1613,14 @@ Vela Pipeline Orchestrator — SDK-based Pipeline Execution
 
 Usage:
   node vela-pipeline.js run <request> --scale <s|m|l> [--type <type>]
+  node vela-pipeline.js resume
   node vela-pipeline.js status
   node vela-pipeline.js cancel
   node vela-pipeline.js --help
 
 Commands:
   run       Run the full pipeline for a task
+  resume    Resume the active pipeline from where it left off
   status    Show current pipeline status
   cancel    Cancel the active pipeline
 
@@ -1584,6 +1632,7 @@ Options:
 Examples:
   node vela-pipeline.js run "Add user authentication" --scale large
   node vela-pipeline.js run "Fix typo in README" --scale small --type docs
+  node vela-pipeline.js resume
   node vela-pipeline.js status
   node vela-pipeline.js cancel
 `);
@@ -1600,6 +1649,9 @@ async function main() {
   switch (command) {
     case "run":
       await cmdRun();
+      break;
+    case "resume":
+      await cmdResume();
       break;
     case "status":
       cmdStatus();

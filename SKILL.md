@@ -353,12 +353,13 @@ node .vela/cli/vela-engine.js auto
 파이프라인 실행은 오케스트레이터를 통해 수행한다:
 
 ```bash
-node .vela/cli/vela-pipeline.js run "작업 설명" --scale <s|m|l> [--type <type>]   # 파이프라인 실행 (SDK 기반 자동 진행)
+node .vela/cli/vela-pipeline.js run "작업 설명" --scale <s|m|l> [--type <type>]   # 새 파이프라인 시작
+node .vela/cli/vela-pipeline.js resume                                              # 기존 파이프라인 재개
 node .vela/cli/vela-pipeline.js status                                              # 파이프라인 상태 조회
 node .vela/cli/vela-pipeline.js cancel                                              # 파이프라인 취소
 ```
 
-내부 엔진 CLI (오케스트레이터가 내부적으로 사용하는 저수준 명령어):
+내부 엔진 CLI (⚠️ 오케스트레이터가 내부적으로만 사용 — PM이 직접 호출하지 않는다):
 
 ```bash
 node .vela/cli/vela-engine.js init "작업 설명"     # 파이프라인 초기화 (git 상태 체크)

@@ -7,14 +7,12 @@ description: "⚡ Vela Auto 모드 — 파이프라인 전 단계를 무인 자�
 
 `/vela auto` (또는 `/vela:auto`)는 두 가지 동작을 한다:
 
-### 1. 활성 파이프라인이 있을 때 → Auto 모드 토글
+### 1. 활성 파이프라인이 있을 때 → 파이프라인 재개
 
-이미 파이프라인이 진행 중이면 auto 모드를 켜거나 끈다:
+이미 파이프라인이 진행 중이면 현재 단계부터 자동으로 이어서 실행한다:
 ```bash
-node .vela/cli/vela-engine.js auto
+node .vela/cli/vela-pipeline.js resume
 ```
-- Auto ON → OFF: 수동 모드로 전환. 각 단계를 직접 진행해야 한다.
-- Auto OFF → ON: 자동 모드로 전환. reject 카운터가 초기화된다.
 
 ### 2. 활성 파이프라인이 없을 때 → Auto 모드로 새 파이프라인 시작
 
