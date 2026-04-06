@@ -459,7 +459,7 @@ Gate Keeper와 Gate Guard의 모든 오류 경로는 fail-closed로 동작한다
 ## 산출물 구조
 
 ```
-.vela/artifacts/{date}_{id}_{slug}/
+.vela/artifacts/{YYYYMMDD}T{HHmmss}-{slug}/
 ├── meta.json, pipeline-state.json
 ├── research.md, review-research.md, approval-research.json
 ├── plan.md, review-plan.md, approval-plan.json

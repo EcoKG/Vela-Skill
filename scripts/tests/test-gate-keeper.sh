@@ -42,7 +42,7 @@ setup_sandbox() {
 }
 EOF
 
-  local ARTIFACT_DIR="$PROJECT/.vela/artifacts/2026-01-01_001_test-gk"
+  local ARTIFACT_DIR="$PROJECT/.vela/artifacts/20260101T000000-test-gk"
   mkdir -p "$ARTIFACT_DIR"
   cat > "$ARTIFACT_DIR/pipeline-state.json" <<EOF
 {

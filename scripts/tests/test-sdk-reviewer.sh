@@ -32,6 +32,10 @@
 # Test 20: step='plan' → Architecture Design in prompt
 # Test 21: step='unknown_step' → execute fallback (Layer Separation)
 # Test 22: step='research' → outputFormat schema has source_coverage
+# Test 23: pipelineSlug provided → SDK receives cwd under .vela/worktrees/
+# Test 24: Worktree cleaned up after successful review — no vela worktrees remain
+# Test 25: Worktree cleaned up after SDK error — cleanup despite error
+# Test 26: No worktree when pipelineSlug not provided — cwd unchanged
 # Sweep:   no stale reviewResult.verdict in vela-pipeline.js
 # Sweep:   escalate_to_pm exists in vela-pipeline.js
 # K001:    settingSources present in sdk-reviewer.js source
@@ -47,6 +51,7 @@ MOCK_NM="$MODULE_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
 CAPTURE_FILE=""
 ARTIFACT_DIR=""
 CWD_DIR=""
+WT_TMPDIRS=()
 
 PASS=0
 FAIL=0
@@ -93,6 +98,31 @@ setup_temp_dirs() {
 
 teardown_temp_dirs() {
   rm -rf "$ARTIFACT_DIR" "$CWD_DIR" 2>/dev/null || true
+}
+
+cleanup_wt_tmpdirs() {
+  for d in "${WT_TMPDIRS[@]}"; do
+    if [ -d "$d/.git" ] || [ -f "$d/.git" ]; then
+      git -C "$d" worktree list --porcelain 2>/dev/null | grep '^worktree ' | awk '{print $2}' | while read -r wt; do
+        [ "$wt" != "$d" ] && git -C "$d" worktree remove --force "$wt" 2>/dev/null || true
+      done
+      git -C "$d" worktree prune 2>/dev/null || true
+    fi
+    rm -rf "$d" 2>/dev/null || true
+  done
+}
+
+make_repo() {
+  local tmp
+  tmp="$(mktemp -d)"
+  WT_TMPDIRS+=("$tmp")
+  git -C "$tmp" init -b main >/dev/null 2>&1
+  git -C "$tmp" config user.email "test@test.com"
+  git -C "$tmp" config user.name "Test"
+  echo "init" > "$tmp/README.md"
+  git -C "$tmp" add -A >/dev/null 2>&1
+  git -C "$tmp" commit -m "init" >/dev/null 2>&1
+  echo "$tmp"
 }
 
 # Install mock SDK in sdk-runner.js's own node_modules directory
@@ -168,6 +198,9 @@ function query(args) {
       } else {
         scoreText = 'Haiku borderline review.\n\n## Total: 17/25';
       }
+    } else if (prompt.includes('__sdk_error__')) {
+      // Throw error to test worktree cleanup on SDK failure
+      throw new Error('Mock SDK deliberate error for worktree cleanup test');
     } else if (prompt.includes('__score_25__')) {
       scoreText = 'Mock review \u2014 all dimensions excellent.\n\n## Total: 25/25';
     } else if (prompt.includes('__score_17__')) {
@@ -215,6 +248,7 @@ teardown_mock_sdk() {
 cleanup_all() {
   teardown_mock_sdk
   teardown_temp_dirs
+  cleanup_wt_tmpdirs
 }
 
 # Run node with cache clearing, capture file env, from project root.
@@ -709,6 +743,103 @@ else
   echo "    $stale"
   FAIL=$((FAIL + 1))
 fi
+
+# ── Worktree Isolation Integration Tests ──────────────────────
+# Tests 23-26 use real temp git repos and the mock SDK to verify
+# that sdk-reviewer.js creates/cleans worktrees when pipelineSlug is provided.
+# The mock SDK capture file records the cwd that runReviewStage received.
+
+# ── Test 23: Worktree created for reviewer ──
+echo ""
+echo "📋 Test 23: pipelineSlug provided → SDK receives cwd under .vela/worktrees/"
+WT_REPO1="$(make_repo)"
+WT_ARTIFACT_DIR1="$(mktemp -d)"
+WT_TMPDIRS+=("$WT_ARTIFACT_DIR1")
+WT_CWD_DIR1="$(mktemp -d)"
+mkdir -p "$WT_CWD_DIR1/.vela/state"
+WT_TMPDIRS+=("$WT_CWD_DIR1")
+setup_mock_sdk
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: '__score_25__', artifactDir: '$WT_ARTIFACT_DIR1', cwd: '$WT_REPO1', pipelineSlug: 'test-slug' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const sdkCwd = (captured.options && captured.options.cwd) || '';
+    const isWorktree = sdkCwd.includes('.vela/worktrees/');
+    const notRepoRoot = sdkCwd !== '$WT_REPO1';
+    console.log(isWorktree && notRepoRoot ? 'PASS' : 'FAIL:cwd=' + sdkCwd);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "SDK received cwd under .vela/worktrees/" "PASS" "$result"
+
+# ── Test 24: Worktree cleaned up after successful review ──
+echo ""
+echo "📋 Test 24: Worktree cleaned up after successful review — no vela worktrees remain"
+WT_REPO2="$(make_repo)"
+WT_ARTIFACT_DIR2="$(mktemp -d)"
+WT_TMPDIRS+=("$WT_ARTIFACT_DIR2")
+WT_CWD_DIR2="$(mktemp -d)"
+mkdir -p "$WT_CWD_DIR2/.vela/state"
+WT_TMPDIRS+=("$WT_CWD_DIR2")
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  sdkReview({ step: '__score_25__', artifactDir: '$WT_ARTIFACT_DIR2', cwd: '$WT_REPO2', pipelineSlug: 'clean-slug' }).then(r => {
+    const { execFileSync } = require('child_process');
+    const wtList = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: '$WT_REPO2' }).toString();
+    const hasVelaWt = wtList.includes('.vela/worktrees/');
+    const fs = require('fs');
+    const path = require('path');
+    const wtDir = path.join('$WT_REPO2', '.vela', 'worktrees');
+    const dirEmpty = !fs.existsSync(wtDir) || fs.readdirSync(wtDir).length === 0;
+    console.log(!hasVelaWt && dirEmpty ? 'PASS' : 'FAIL:hasVelaWt=' + hasVelaWt + ',dirEmpty=' + dirEmpty);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "no vela worktrees remain after success" "PASS" "$result"
+
+# ── Test 25: Worktree cleaned up after SDK error ──
+echo ""
+echo "📋 Test 25: Worktree cleaned up after SDK error — cleanup despite error"
+WT_REPO3="$(make_repo)"
+WT_ARTIFACT_DIR3="$(mktemp -d)"
+WT_TMPDIRS+=("$WT_ARTIFACT_DIR3")
+WT_CWD_DIR3="$(mktemp -d)"
+mkdir -p "$WT_CWD_DIR3/.vela/state"
+WT_TMPDIRS+=("$WT_CWD_DIR3")
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  sdkReview({ step: '__sdk_error__', artifactDir: '$WT_ARTIFACT_DIR3', cwd: '$WT_REPO3', pipelineSlug: 'err-slug' }).then(r => {
+    const { execFileSync } = require('child_process');
+    const wtList = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: '$WT_REPO3' }).toString();
+    const hasVelaWt = wtList.includes('.vela/worktrees/');
+    const fs = require('fs');
+    const path = require('path');
+    const wtDir = path.join('$WT_REPO3', '.vela', 'worktrees');
+    const dirEmpty = !fs.existsSync(wtDir) || fs.readdirSync(wtDir).length === 0;
+    console.log(!hasVelaWt && dirEmpty ? 'PASS' : 'FAIL:hasVelaWt=' + hasVelaWt + ',dirEmpty=' + dirEmpty);
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "no vela worktrees remain after SDK error" "PASS" "$result"
+
+# ── Test 26: No worktree when pipelineSlug not provided ──
+echo ""
+echo "📋 Test 26: No worktree when pipelineSlug not provided — cwd unchanged"
+WT_REPO4="$(make_repo)"
+WT_ARTIFACT_DIR4="$(mktemp -d)"
+WT_TMPDIRS+=("$WT_ARTIFACT_DIR4")
+WT_CWD_DIR4="$(mktemp -d)"
+mkdir -p "$WT_CWD_DIR4/.vela/state"
+WT_TMPDIRS+=("$WT_CWD_DIR4")
+result=$(run_reviewer_test "
+  const { sdkReview } = require('$MODULE');
+  const fs = require('fs');
+  sdkReview({ step: '__score_25__', artifactDir: '$WT_ARTIFACT_DIR4', cwd: '$WT_REPO4' }).then(r => {
+    const captured = JSON.parse(fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8'));
+    const sdkCwd = (captured.options && captured.options.cwd) || '';
+    const isOriginal = sdkCwd === '$WT_REPO4';
+    console.log(isOriginal ? 'PASS' : 'FAIL:cwd=' + sdkCwd + ',expected=$WT_REPO4');
+  }).catch(e => console.log('ERROR:' + e.message));
+")
+assert_eq "cwd equals original repo root (no worktree created)" "PASS" "$result"
 
 # ── Results ──
 echo ""

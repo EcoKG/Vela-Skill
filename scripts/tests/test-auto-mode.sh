@@ -88,7 +88,7 @@ read_state_field() {
     const path = require('path');
     const dir = '$PROJECT/.vela/artifacts';
     if (!fs.existsSync(dir)) { process.exit(0); }
-    const dirs = fs.readdirSync(dir).filter(d => /^\d{4}-\d{2}-\d{2}_/.test(d)).sort().reverse();
+    const dirs = fs.readdirSync(dir).filter(d => /^\d{8}T\d{6}-/.test(d)).sort().reverse();
     for (const d of dirs) {
       const sp = path.join(dir, d, 'pipeline-state.json');
       if (!fs.existsSync(sp)) continue;
@@ -118,7 +118,7 @@ get_artifact_dir() {
     const path = require('path');
     const dir = '$PROJECT/.vela/artifacts';
     if (!fs.existsSync(dir)) { process.exit(0); }
-    const dirs = fs.readdirSync(dir).filter(d => /^\d{4}-\d{2}-\d{2}_/.test(d)).sort().reverse();
+    const dirs = fs.readdirSync(dir).filter(d => /^\d{8}T\d{6}-/.test(d)).sort().reverse();
     for (const d of dirs) {
       const sp = path.join(dir, d, 'pipeline-state.json');
       if (!fs.existsSync(sp)) continue;

@@ -72,33 +72,16 @@ const pipelines = [];
 if (fs.existsSync(ARTIFACTS_DIR)) {
   const allDirs = fs.readdirSync(ARTIFACTS_DIR).sort().reverse();
 
-  // Flat structure: {date}_{id}_{slug}/
-  for (const dir of allDirs.filter((d) => /^\d{4}-\d{2}-\d{2}_/.test(d))) {
+  // Flat structure: {YYYYMMDD}T{HHmmss}-{slug}/
+  for (const dir of allDirs.filter((d) => /^\d{8}T\d{6}-/.test(d))) {
     const dirPath = path.join(ARTIFACTS_DIR, dir);
     try {
       if (!fs.statSync(dirPath).isDirectory()) continue;
     } catch {
       continue;
     }
-    const p = extractPipeline(dirPath, dir.split("_")[0], dir);
+    const p = extractPipeline(dirPath, dir.slice(0, 8), dir);
     if (p) pipelines.push(p);
-  }
-
-  // Backward compat: nested {date}/{slug}/
-  for (const dd of allDirs.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) {
-    const dp = path.join(ARTIFACTS_DIR, dd);
-    let slugs;
-    try {
-      slugs = fs
-        .readdirSync(dp)
-        .filter((d) => fs.statSync(path.join(dp, d)).isDirectory());
-    } catch {
-      continue;
-    }
-    for (const s of slugs) {
-      const p = extractPipeline(path.join(dp, s), dd, s);
-      if (p) pipelines.push(p);
-    }
   }
 }
 

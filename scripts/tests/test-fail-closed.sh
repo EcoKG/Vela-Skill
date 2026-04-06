@@ -91,7 +91,7 @@ setup_guard3_sandbox() {
 EOF
 
   # pipeline-state.json — active pipeline at execute step (commits allowed)
-  local ARTIFACT_DIR="$GUARD3_PROJECT/.vela/artifacts/2026-01-01_001_test-guard3"
+  local ARTIFACT_DIR="$GUARD3_PROJECT/.vela/artifacts/20260101T000000-test-guard3"
   mkdir -p "$ARTIFACT_DIR"
   cat > "$ARTIFACT_DIR/pipeline-state.json" <<'EOF'
 {

@@ -32,7 +32,7 @@ setup_sandbox() {
 EOF
 
   # pipeline-state.json — active pipeline
-  local ARTIFACT_DIR="$PROJECT/.vela/artifacts/2026-01-01_001_test-chain-ops"
+  local ARTIFACT_DIR="$PROJECT/.vela/artifacts/20260101T000000-test-chain-ops"
   mkdir -p "$ARTIFACT_DIR"
   cat > "$ARTIFACT_DIR/pipeline-state.json" <<'EOF'
 {

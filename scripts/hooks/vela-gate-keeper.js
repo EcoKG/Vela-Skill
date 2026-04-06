@@ -70,7 +70,7 @@ function readConfig(cwd) {
 
 /**
  * Find the active pipeline state. Returns null if none found.
- * Searches .vela/artifacts/{date}_{id}_{slug}/pipeline-state.json
+ * Searches .vela/artifacts/{YYYYMMDD}T{HHmmss}-{slug}/pipeline-state.json
  */
 function findActivePipeline(cwd) {
   try {
@@ -79,7 +79,7 @@ function findActivePipeline(cwd) {
 
     const dirs = fs
       .readdirSync(artifactsDir)
-      .filter((d) => /^\d{4}-\d{2}-\d{2}_/.test(d))
+      .filter((d) => /^\d{8}T\d{6}-/.test(d))
       .sort()
       .reverse();
 

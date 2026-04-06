@@ -8,7 +8,7 @@
  * Stage 2 (Sonnet): Deep review. Score ≥ 20 → pass, < 20 → Stage 3 (Opus).
  * Stage 3 (Opus):  Final escalation. Score ≥ 20 → approve + escalated:true, < 20 → reject + escalated:true.
  *
- * Exports: sdkReview({ step, artifactDir, cwd, scale? })
+ * Exports: sdkReview({ step, artifactDir, cwd, scale?, pipelineSlug? })
  *
  * Design decisions:
  * - settingSources: [] passed through runSdkAgent (D014 — hook isolation)
@@ -24,6 +24,7 @@ const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
 const { MODEL_VERSIONS } = require("./constants");
+const worktreeManager = require("./worktree-manager");
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
 const PRIMARY_SCORE_REGEX = /(총점|총|total\s*score)[^\d]*(\d+)\s*\/\s*25/i;
@@ -488,6 +489,11 @@ async function runOpusEscalation({ step, cwd, priorReview, scale }) {
  * @param {string} opts.artifactDir - Directory for review artifacts
  * @param {string} opts.cwd - Project root working directory
  * @param {string} [opts.scale] - Optional scale hint ('small'|'medium'|'large') propagated to turn limits
+ * @param {string} [opts.pipelineSlug] - Pipeline identifier for worktree isolation.
+ *   When provided, a git worktree is created before review stages and all stages
+ *   run inside the isolated worktree. The worktree is cleaned up in a finally
+ *   block regardless of success or failure. If worktree creation fails, review
+ *   falls back to the original cwd with a stderr warning.
  * @returns {Promise<Object>} Result:
  *   Success: { ok: true, score, decision: 'approve'|'reject', stage, model, cost, durationMs, escalated? }
  *   Failure: { ok: false, error: string }
@@ -495,18 +501,31 @@ async function runOpusEscalation({ step, cwd, priorReview, scale }) {
 async function sdkReview(opts) {
   if (!opts || typeof opts !== "object" || Array.isArray(opts))
     return { ok: false, error: "invalid_input" };
-  const { step, artifactDir, cwd, scale } = opts;
+  const { step, artifactDir, cwd, scale, pipelineSlug } = opts;
   const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
   const SONNET_MODEL = MODEL_VERSIONS.SONNET;
+
+  // ─── Worktree isolation ───
+  let worktreeInfo = null;
+  let agentCwd = cwd;
+  if (pipelineSlug) {
+    try {
+      worktreeInfo = worktreeManager.create({ cwd, pipelineSlug, role: 'reviewer' });
+      agentCwd = worktreeInfo.path;
+    } catch (err) {
+      process.stderr.write(`[sdk-reviewer] worktree creation failed, running without isolation: ${err.message}\n`);
+    }
+  }
 
   let totalCost = 0;
   let totalDurationMs = 0;
 
+  try {
   // ─── Stage 1: Haiku fast review ───
   const stage1 = await runReviewStage({
     model: HAIKU_MODEL,
     step,
-    cwd,
+    cwd: agentCwd,
     priorReview: null,
     effort: "medium",
   });
@@ -553,7 +572,7 @@ async function sdkReview(opts) {
     // ─── Stage 3: Opus escalation from clear Haiku fail ───
     const opusResult = await runOpusEscalation({
       step,
-      cwd,
+      cwd: agentCwd,
       priorReview: haikuResult,
       scale,
     });
@@ -635,7 +654,7 @@ async function sdkReview(opts) {
   const stage2 = await runReviewStage({
     model: SONNET_MODEL,
     step,
-    cwd,
+    cwd: agentCwd,
     priorReview: haikuResult,
     effort: "high",
   });
@@ -696,7 +715,7 @@ async function sdkReview(opts) {
   // ─── Stage 3: Opus escalation from Sonnet fail ───
   const opusResult = await runOpusEscalation({
     step,
-    cwd,
+    cwd: agentCwd,
     priorReview: sonnetResult,
     scale,
   });
@@ -772,6 +791,15 @@ async function sdkReview(opts) {
     durationMs: totalDurationMs,
     escalated: true,
   };
+  } finally {
+    if (worktreeInfo) {
+      try {
+        worktreeManager.remove({ cwd, worktreePath: worktreeInfo.path, force: true });
+      } catch (err) {
+        process.stderr.write(`[sdk-reviewer] worktree cleanup failed: ${err.message}\n`);
+      }
+    }
+  }
 }
 
 module.exports = { sdkReview };

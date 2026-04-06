@@ -16,6 +16,8 @@
  *   commit [--message TEXT]                        — Commit changes
  *   cancel                                         — Cancel active pipeline
  *   review                                         — Run SDK 2-stage code review
+ *   wave-execute                                    — Run wave-parallel execution of plan.md tasks
+ *   validate                                       — Run SDK code validation (tests, lint, type check)
  *
  * Team coordination uses Claude Code Agent Teams (SendMessage).
  * Approval tracked via file artifacts (approval-{step}.json).
@@ -52,9 +54,11 @@ const commands = {
   "plan-check": cmdPlanCheck,
   research: cmdResearch,
   execute: cmdExecute,
+  "wave-execute": cmdWaveExecute,
   auto: cmdAuto,
   "clean-scan": cmdCleanScan,
   "clean-exec": cmdCleanExec,
+  validate: cmdValidate,
 };
 
 if (require.main === module) {
@@ -162,12 +166,11 @@ function cmdInit() {
   // Ensure Vela files are hidden from git
   ensureGitignore();
 
-  // Create artifact directory AFTER validation passes: {date}_{id}_{slug}
+  // Create artifact directory AFTER validation passes: {YYYYMMDD}T{HHmmss}-{slug}
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
-  const uid = Math.random().toString(36).substring(2, 6);
+  const ts = now.toISOString().replace(/[-:]/g, "").slice(0, 15);
   const slug = slugify(request);
-  const artifactDir = path.join(ARTIFACTS_DIR, `${dateStr}_${uid}_${slug}`);
+  const artifactDir = path.join(ARTIFACTS_DIR, `${ts}-${slug}`);
 
   fs.mkdirSync(artifactDir, { recursive: true });
 
@@ -1084,8 +1087,8 @@ function cmdHistory() {
   try {
     const allDirs = fs.readdirSync(ARTIFACTS_DIR).sort().reverse();
 
-    // Flat: {date}_{id}_{slug}/
-    for (const dir of allDirs.filter((d) => /^\d{4}-\d{2}-\d{2}_/.test(d))) {
+    // Flat: {YYYYMMDD}T{HHmmss}-{slug}/
+    for (const dir of allDirs.filter((d) => /^\d{8}T\d{6}-/.test(d))) {
       const dirPath = path.join(ARTIFACTS_DIR, dir);
       try {
         if (!fs.statSync(dirPath).isDirectory()) continue;
@@ -1097,7 +1100,7 @@ function cmdHistory() {
       try {
         const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
         pipelines.push({
-          date: dir.split("_")[0],
+          date: dir.slice(0, 8),
           slug: dir,
           status: state.status,
           type: state.pipeline_type,
@@ -1111,39 +1114,6 @@ function cmdHistory() {
       } catch (e) {}
     }
 
-    // Backward compat: {date}/{slug}/
-    for (const dateDir of allDirs.filter((d) =>
-      /^\d{4}-\d{2}-\d{2}$/.test(d),
-    )) {
-      const datePath = path.join(ARTIFACTS_DIR, dateDir);
-      let slugDirs;
-      try {
-        slugDirs = fs
-          .readdirSync(datePath)
-          .filter((d) => fs.statSync(path.join(datePath, d)).isDirectory());
-      } catch {
-        continue;
-      }
-      for (const slugDir of slugDirs) {
-        const statePath = path.join(datePath, slugDir, "pipeline-state.json");
-        if (!fs.existsSync(statePath)) continue;
-        try {
-          const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-          pipelines.push({
-            date: dateDir,
-            slug: slugDir,
-            status: state.status,
-            type: state.pipeline_type,
-            request: (state.request || "").substring(0, 60),
-            step: state.current_step,
-            steps_completed: (state.completed_steps || []).length,
-            steps_total: (state.steps || []).length,
-            created: state.created_at,
-            updated: state.updated_at,
-          });
-        } catch (e) {}
-      }
-    }
   } catch (e) {}
 
   output({
@@ -1185,11 +1155,13 @@ async function cmdReview() {
     });
   }
 
+  const pipelineSlug = path.basename(artifactDir);
   const { sdkReview } = require("../shared/sdk-reviewer.js");
   const result = await sdkReview({
     step: state.current_step,
     artifactDir,
     cwd: CWD,
+    pipelineSlug,
   });
 
   output({
@@ -1264,16 +1236,74 @@ async function cmdExecute() {
     });
   }
 
+  const pipelineSlug = path.basename(artifactDir);
   const { sdkExecute } = require("../shared/sdk-executor.js");
   const result = await sdkExecute({
     step: state.current_step,
     artifactDir,
     cwd: CWD,
+    pipelineSlug,
   });
 
   output({
     ok: result.ok,
     command: "execute",
+    ...result,
+  });
+}
+
+async function cmdWaveExecute() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, error: "No active pipeline." });
+  }
+
+  // Validate current step is execute
+  const pipelineDef = loadPipelineDefinition();
+  const steps = resolveSteps(pipelineDef, state.pipeline_type);
+  const currentStepDef = steps.find((s) => s.id === state.current_step);
+
+  if (
+    !currentStepDef ||
+    !currentStepDef.team ||
+    currentStepDef.team.worker_role !== "executor"
+  ) {
+    return output({
+      ok: false,
+      error: "Current step does not have an executor worker role.",
+      current_step: state.current_step,
+    });
+  }
+
+  const artifactDir = state._artifactDir;
+  if (!artifactDir) {
+    return output({
+      ok: false,
+      error: "No artifact directory found for active pipeline.",
+    });
+  }
+
+  // Check plan.md exists
+  const planPath = path.join(artifactDir, "plan.md");
+  if (!fs.existsSync(planPath)) {
+    return output({
+      ok: false,
+      error: "plan.md not found in artifact directory.",
+      artifactDir,
+    });
+  }
+
+  const pipelineSlug = path.basename(artifactDir);
+  const { executeWaves } = require("../shared/wave-executor.js");
+  const result = await executeWaves({
+    artifactDir,
+    cwd: CWD,
+    pipelineSlug,
+  });
+
+  output({
+    ok: result.ok,
+    command: "wave-execute",
     ...result,
   });
 }
@@ -1304,6 +1334,42 @@ async function cmdResearch() {
   });
 }
 
+async function cmdValidate() {
+  const state = findActiveState();
+  if (!state) {
+    return output({ ok: false, error: "No active pipeline." });
+  }
+
+  // Determine step — use current step or 'verify' as default
+  const pipelineDef = loadPipelineDefinition();
+  const steps = resolveSteps(pipelineDef, state.pipeline_type);
+  const currentStepDef = steps.find((s) => s.id === state.current_step);
+  const step = state.current_step || "verify";
+
+  const artifactDir = state._artifactDir;
+  if (!artifactDir) {
+    return output({
+      ok: false,
+      error: "No artifact directory found for active pipeline.",
+    });
+  }
+
+  const pipelineSlug = path.basename(artifactDir);
+  const { sdkValidate } = require("../shared/sdk-validator.js");
+  const result = await sdkValidate({
+    step,
+    artifactDir,
+    cwd: CWD,
+    pipelineSlug,
+  });
+
+  output({
+    ok: result.ok,
+    command: "validate",
+    ...result,
+  });
+}
+
 // ─── Helpers ───
 
 // getOrCreateTeam REMOVED — Agent Teams handles team state via SendMessage.
@@ -1314,8 +1380,8 @@ function findActiveState() {
   try {
     const allDirs = fs.readdirSync(ARTIFACTS_DIR).sort().reverse();
 
-    // Flat: {date}_{id}_{slug}/
-    for (const dir of allDirs.filter((d) => /^\d{4}-\d{2}-\d{2}_/.test(d))) {
+    // Flat: {YYYYMMDD}T{HHmmss}-{slug}/
+    for (const dir of allDirs.filter((d) => /^\d{8}T\d{6}-/.test(d))) {
       const dirPath = path.join(ARTIFACTS_DIR, dir);
       try {
         if (!fs.statSync(dirPath).isDirectory()) continue;
@@ -1341,39 +1407,6 @@ function findActiveState() {
       }
     }
 
-    // Backward compat: {date}/{slug}/
-    for (const dateDir of allDirs.filter((d) =>
-      /^\d{4}-\d{2}-\d{2}$/.test(d),
-    )) {
-      const datePath = path.join(ARTIFACTS_DIR, dateDir);
-      let slugDirs;
-      try {
-        slugDirs = fs
-          .readdirSync(datePath)
-          .filter((d) => fs.statSync(path.join(datePath, d)).isDirectory());
-      } catch {
-        continue;
-      }
-      for (const slugDir of slugDirs) {
-        const statePath = path.join(datePath, slugDir, "pipeline-state.json");
-        if (!fs.existsSync(statePath)) continue;
-        try {
-          const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-          if (state.status === "completed" || state.status === "cancelled")
-            continue;
-          state._path = statePath;
-          state._artifactDir = path.join(datePath, slugDir);
-          // Mark stale if untouched for 24 hours
-          const mtime = fs.statSync(statePath).mtimeMs;
-          if (Date.now() - mtime > 24 * 60 * 60 * 1000) {
-            state._stale = true;
-          }
-          return state;
-        } catch (e) {
-          continue;
-        }
-      }
-    }
   } catch (e) {}
 
   return null;
@@ -1794,8 +1827,8 @@ function cleanupCancelledArtifacts(hoursOld) {
   try {
     const allDirs = fs.readdirSync(ARTIFACTS_DIR);
 
-    // Flat: {date}_{id}_{slug}/
-    for (const dir of allDirs.filter((d) => /^\d{4}-\d{2}-\d{2}_/.test(d))) {
+    // Flat: {YYYYMMDD}T{HHmmss}-{slug}/
+    for (const dir of allDirs.filter((d) => /^\d{8}T\d{6}-/.test(d))) {
       const dirPath = path.join(ARTIFACTS_DIR, dir);
       try {
         if (!fs.statSync(dirPath).isDirectory()) continue;
@@ -1805,27 +1838,6 @@ function cleanupCancelledArtifacts(hoursOld) {
       tryCleanDir(dirPath);
     }
 
-    // Backward compat: {date}/{slug}/
-    for (const dateDir of allDirs.filter((d) =>
-      /^\d{4}-\d{2}-\d{2}$/.test(d),
-    )) {
-      const datePath = path.join(ARTIFACTS_DIR, dateDir);
-      let slugDirs;
-      try {
-        slugDirs = fs
-          .readdirSync(datePath)
-          .filter((d) => fs.statSync(path.join(datePath, d)).isDirectory());
-      } catch {
-        continue;
-      }
-      for (const slugDir of slugDirs) {
-        tryCleanDir(path.join(datePath, slugDir));
-      }
-      // Clean empty date dirs
-      try {
-        if (fs.readdirSync(datePath).length === 0) fs.rmdirSync(datePath);
-      } catch (e) {}
-    }
   } catch (e) {}
 
   return cleaned;

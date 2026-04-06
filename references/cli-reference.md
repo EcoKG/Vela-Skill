@@ -17,6 +17,8 @@ node .vela/cli/vela-engine.js review                             # SDK 3단계 �
 node .vela/cli/vela-engine.js plan-check                         # SDK plan.md 구조 검증 (Haiku)
 node .vela/cli/vela-engine.js research                           # SDK 3-관점 병렬 리서치 (Haiku)
 node .vela/cli/vela-engine.js execute                            # SDK 단일 실행 (Sonnet)
+node .vela/cli/vela-engine.js wave-execute                       # Wave 병렬 실행 (plan.md 태스크를 wave 단위 동시 실행)
+node .vela/cli/vela-engine.js validate                           # SDK 코드 검증 (테스트/린트/타입 체크)
 ```
 
 ## vela-pipeline (SDK 오케스트레이터)

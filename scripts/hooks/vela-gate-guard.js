@@ -74,7 +74,7 @@ function findActivePipeline(cwd) {
 
     const dirs = fs
       .readdirSync(artifactsDir)
-      .filter((d) => /^\d{4}-\d{2}-\d{2}_/.test(d))
+      .filter((d) => /^\d{8}T\d{6}-/.test(d))
       .sort()
       .reverse();
 

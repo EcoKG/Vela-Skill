@@ -11,7 +11,7 @@
           "mode": "read",
           "entry_gate": [],
           "exit_gate": ["artifact_dir_created", "mode_detected", "git_clean"],
-          "artifacts": [".vela/artifacts/{date}_{id}_{slug}/meta.json"],
+          "artifacts": [".vela/artifacts/{YYYYMMDD}T{HHmmss}-{slug}/meta.json"],
           "max_revisions": 1
         },
         {

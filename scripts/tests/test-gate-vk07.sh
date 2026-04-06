@@ -35,7 +35,7 @@ setup_sandbox() {
 EOF
 
   # pipeline-state.json — active non-trivial pipeline (flat structure)
-  local ARTIFACT_DIR="$PROJECT/.vela/artifacts/2026-01-01_001_test-vk07"
+  local ARTIFACT_DIR="$PROJECT/.vela/artifacts/20260101T000000-test-vk07"
   mkdir -p "$ARTIFACT_DIR"
   cat > "$ARTIFACT_DIR/pipeline-state.json" <<'EOF'
 {

@@ -267,9 +267,9 @@ echo "── 4. vela-cost.js flat format artifact search ──"
 
 # Create a temp project with flat-format artifacts
 COST_PROJECT="$TMPDIR_ROOT/cost-project"
-mkdir -p "$COST_PROJECT/.vela/artifacts/2026-01-01_abc_test"
+mkdir -p "$COST_PROJECT/.vela/artifacts/20260101T000000-test"
 
-cat > "$COST_PROJECT/.vela/artifacts/2026-01-01_abc_test/pipeline-state.json" <<'EOF'
+cat > "$COST_PROJECT/.vela/artifacts/20260101T000000-test/pipeline-state.json" <<'EOF'
 {
   "status": "active",
   "pipeline_type": "standard",

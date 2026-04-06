@@ -24,6 +24,7 @@ const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
 const { MODEL_VERSIONS } = require("./constants");
+const worktreeManager = require("./worktree-manager");
 
 // ─── Constants ───
 const SONNET_MODEL = MODEL_VERSIONS.SONNET;
@@ -137,6 +138,11 @@ function writeTaskSummaryArtifact(artifactDir, content) {
  * @param {string} opts.step - Pipeline step name (e.g. 'execute', 'implement')
  * @param {string} opts.artifactDir - Directory containing plan.md, receives task-summary.md
  * @param {string} opts.cwd - Project root working directory
+ * @param {string} [opts.pipelineSlug] - Pipeline identifier for worktree isolation.
+ *   When provided, a git worktree is created before SDK execution and the agent
+ *   runs inside the isolated worktree. The worktree is cleaned up in a finally
+ *   block regardless of success or failure. If worktree creation fails, execution
+ *   falls back to the original cwd with a stderr warning.
  * @returns {Promise<Object>} Result:
  *   Success: { ok: true, step, artifact: 'task-summary.md', cost, model, numTurns, durationMs }
  *   SDK unavailable: { ok: false, error: 'sdk_not_available' }
@@ -145,7 +151,20 @@ function writeTaskSummaryArtifact(artifactDir, content) {
 async function sdkExecute(opts) {
   if (!opts || typeof opts !== "object" || Array.isArray(opts))
     return { ok: false, error: "invalid_input" };
-  const { step, artifactDir, cwd } = opts;
+  const { step, artifactDir, cwd, pipelineSlug } = opts;
+
+  // ─── Worktree isolation ───
+  let worktreeInfo = null;
+  let agentCwd = cwd;
+  if (pipelineSlug) {
+    try {
+      worktreeInfo = worktreeManager.create({ cwd, pipelineSlug, role: 'executor' });
+      agentCwd = worktreeInfo.path;
+    } catch (err) {
+      process.stderr.write(`[sdk-executor] worktree creation failed, running without isolation: ${err.message}\n`);
+    }
+  }
+
   // ─── Build user prompt ───
   const prompt = [
     `파이프라인 단계 "${step}"의 구현을 수행하라.`,
@@ -168,64 +187,74 @@ async function sdkExecute(opts) {
   ].join("\n");
 
   // ─── Call Sonnet via SDK ───
-  const agentResult = await runSdkAgent({
-    prompt,
-    model: SONNET_MODEL,
-    cwd,
-    systemPrompt: EXECUTOR_SYSTEM_PROMPT,
-    permissionMode: "bypassPermissions",
-    effort: "high",
-  });
+  try {
+    const agentResult = await runSdkAgent({
+      prompt,
+      model: SONNET_MODEL,
+      cwd: agentCwd,
+      systemPrompt: EXECUTOR_SYSTEM_PROMPT,
+      permissionMode: "bypassPermissions",
+      effort: "high",
+    });
 
-  // ─── SDK unavailable — return without writing artifacts ───
-  if (agentResult.error === "sdk_not_available") {
-    return { ok: false, error: "sdk_not_available" };
-  }
+    // ─── SDK unavailable — return without writing artifacts ───
+    if (agentResult.error === "sdk_not_available") {
+      return { ok: false, error: "sdk_not_available" };
+    }
 
-  // ─── SDK error — return error details ───
-  if (!agentResult.ok) {
+    // ─── SDK error — return error details ───
+    if (!agentResult.ok) {
+      return {
+        ok: false,
+        error: agentResult.error,
+        details: agentResult.details,
+        cost: agentResult.cost || 0,
+        numTurns: agentResult.numTurns,
+        durationMs: agentResult.durationMs || 0,
+      };
+    }
+
+    // ─── Success — write task-summary.md if agent didn't already ───
+    const summaryPath = path.join(artifactDir, "task-summary.md");
+    if (!fs.existsSync(summaryPath)) {
+      // Agent should have written it, but as a safety net,
+      // write the result text as the summary
+      const fallbackContent = [
+        "# Task Summary",
+        "",
+        `- **Step:** ${step}`,
+        `- **Model:** ${agentResult.model || SONNET_MODEL}`,
+        `- **Cost:** $${(agentResult.cost || 0).toFixed(4)}`,
+        `- **Turns:** ${agentResult.numTurns || "N/A"}`,
+        `- **Duration:** ${agentResult.durationMs || 0}ms`,
+        `- **Timestamp:** ${new Date().toISOString()}`,
+        "",
+        "---",
+        "",
+        agentResult.result || "(no result text)",
+      ].join("\n");
+
+      writeTaskSummaryArtifact(artifactDir, fallbackContent);
+    }
+
     return {
-      ok: false,
-      error: agentResult.error,
-      details: agentResult.details,
+      ok: true,
+      step,
+      artifact: "task-summary.md",
       cost: agentResult.cost || 0,
+      model: agentResult.model || SONNET_MODEL,
       numTurns: agentResult.numTurns,
       durationMs: agentResult.durationMs || 0,
     };
+  } finally {
+    if (worktreeInfo) {
+      try {
+        worktreeManager.remove({ cwd, worktreePath: worktreeInfo.path, force: true });
+      } catch (err) {
+        process.stderr.write(`[sdk-executor] worktree cleanup failed: ${err.message}\n`);
+      }
+    }
   }
-
-  // ─── Success — write task-summary.md if agent didn't already ───
-  const summaryPath = path.join(artifactDir, "task-summary.md");
-  if (!fs.existsSync(summaryPath)) {
-    // Agent should have written it, but as a safety net,
-    // write the result text as the summary
-    const fallbackContent = [
-      "# Task Summary",
-      "",
-      `- **Step:** ${step}`,
-      `- **Model:** ${agentResult.model || SONNET_MODEL}`,
-      `- **Cost:** $${(agentResult.cost || 0).toFixed(4)}`,
-      `- **Turns:** ${agentResult.numTurns || "N/A"}`,
-      `- **Duration:** ${agentResult.durationMs || 0}ms`,
-      `- **Timestamp:** ${new Date().toISOString()}`,
-      "",
-      "---",
-      "",
-      agentResult.result || "(no result text)",
-    ].join("\n");
-
-    writeTaskSummaryArtifact(artifactDir, fallbackContent);
-  }
-
-  return {
-    ok: true,
-    step,
-    artifact: "task-summary.md",
-    cost: agentResult.cost || 0,
-    model: agentResult.model || SONNET_MODEL,
-    numTurns: agentResult.numTurns,
-    durationMs: agentResult.durationMs || 0,
-  };
 }
 
 module.exports = { sdkExecute };

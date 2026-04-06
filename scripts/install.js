@@ -231,6 +231,9 @@ const FILE_MANIFEST = [
   },
   { src: "scripts/shared/sdk-researcher.js", dst: "shared/sdk-researcher.js" },
   { src: "scripts/shared/sdk-executor.js", dst: "shared/sdk-executor.js" },
+  { src: "scripts/shared/wave-executor.js", dst: "shared/wave-executor.js" },
+  { src: "scripts/shared/sdk-validator.js", dst: "shared/sdk-validator.js" },
+  { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
   { src: "scripts/shared/sdk-analyzer.js", dst: "shared/sdk-analyzer.js" },
   {
     src: "scripts/shared/sdk-custom-tools.js",
