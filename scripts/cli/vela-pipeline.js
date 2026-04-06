@@ -594,9 +594,25 @@ const EFFORT_MAP = {
  * @param {string} artifactDir - Path to artifact directory
  * @returns {string} User prompt for the SDK agent
  */
-function buildStepPrompt(stepDef, state, artifactDir) {
+function buildStepPrompt(stepDef, state, artifactDir, reviewFeedback) {
   const request = state.request;
   const stepId = stepDef.id;
+
+  // Review feedback injection — when re-executing after a review rejection,
+  // prepend the reviewer's feedback so the agent knows what to fix.
+  let feedbackBlock = "";
+  if (reviewFeedback) {
+    feedbackBlock = [
+      "",
+      `## ⚠️ 이전 리뷰 피드백 (반드시 반영하라)`,
+      `이전 제출이 리뷰어에 의해 reject 되었다. 아래 피드백을 읽고 지적 사항을 모두 수정하라.`,
+      "",
+      reviewFeedback,
+      "",
+      `---`,
+      "",
+    ].join("\n");
+  }
 
   // Sub-phase context injection — if step defines sub_phases, query engine for current phase
   let subPhaseBlock = "";
@@ -619,6 +635,8 @@ function buildStepPrompt(stepDef, state, artifactDir) {
     }
   }
 
+  let basePrompt;
+
   switch (stepId) {
     case "research": {
       const mode = state.project_mode || "exploratory";
@@ -631,7 +649,7 @@ function buildStepPrompt(stepDef, state, artifactDir) {
           "기존 코드베이스, 변경 범위 넓거나 원인 불명확 — 경쟁가설 디버깅 절차(3~5 가설)를 적용한다.",
       };
       const modeDesc = modeDescriptions[mode] || modeDescriptions.exploratory;
-      return [
+      basePrompt = [
         `## 작업 요청\n${request}`,
         "",
         `## 프로젝트 모드`,
@@ -649,10 +667,11 @@ function buildStepPrompt(stepDef, state, artifactDir) {
         `## 출력`,
         `${artifactDir}/research.md 파일을 작성하라.`,
       ].join("\n");
+      break;
     }
 
     case "plan":
-      return [
+      basePrompt = [
         `## 작업 요청\n${request}`,
         "",
         `## 선행 분석`,
@@ -668,9 +687,10 @@ function buildStepPrompt(stepDef, state, artifactDir) {
         `## 출력`,
         `${artifactDir}/plan.md 파일을 작성하라.`,
       ].join("\n");
+      break;
 
     case "execute":
-      return [
+      basePrompt = [
         `## 작업 요청\n${request}`,
         "",
         `## 구현 계획`,
@@ -685,9 +705,10 @@ function buildStepPrompt(stepDef, state, artifactDir) {
         `- 소스 코드 구현`,
         `- ${artifactDir}/task-summary.md`,
       ].join("\n");
+      break;
 
     case "verify":
-      return [
+      basePrompt = [
         `## 작업 요청\n${request}`,
         "",
         `## 지시사항`,
@@ -699,10 +720,14 @@ function buildStepPrompt(stepDef, state, artifactDir) {
         `## 출력`,
         `${artifactDir}/verification.md 파일을 작성하라.`,
       ].join("\n");
+      break;
 
     default:
-      return `## 작업 요청\n${request}\n\n현재 단계: ${stepDef.name}. 지시에 따라 작업하라.`;
+      basePrompt = `## 작업 요청\n${request}\n\n현재 단계: ${stepDef.name}. 지시에 따라 작업하라.`;
   }
+
+  // Prepend review feedback when re-executing after rejection
+  return feedbackBlock ? feedbackBlock + basePrompt : basePrompt;
 }
 
 /**
@@ -710,9 +735,10 @@ function buildStepPrompt(stepDef, state, artifactDir) {
  *
  * @param {Object} stepDef - Step definition from pipeline.json
  * @param {Object} state - Current pipeline state
+ * @param {string} [reviewFeedback] - Previous review feedback to inject into the prompt (for retry after rejection)
  * @returns {Promise<Object>} Step result { ok, stepId, result?, error?, cost? }
  */
-async function runStep(stepDef, state) {
+async function runStep(stepDef, state, reviewFeedback) {
   const artifactDir = state._artifactDir;
   const mode = stepDef.mode || "read";
   const workerRole =
@@ -724,6 +750,9 @@ async function runStep(stepDef, state) {
   console.log(`\n${"─".repeat(60)}`);
   console.log(`  Step: ${stepDef.name} (${stepDef.id})`);
   console.log(`  Mode: ${mode} | Actor: ${actor}`);
+  if (reviewFeedback) {
+    console.log(`  📋 Review feedback injected (${reviewFeedback.length} chars)`);
+  }
   console.log(`${"─".repeat(60)}\n`);
 
   // Build SDK options from mode. artifactDir is passed so rw-artifact mode
@@ -733,8 +762,8 @@ async function runStep(stepDef, state) {
   // Load system prompt
   const systemPrompt = loadAgentPrompt(actor);
 
-  // Build user prompt
-  const userPrompt = buildStepPrompt(stepDef, state, artifactDir);
+  // Build user prompt — includes review feedback when retrying after rejection
+  const userPrompt = buildStepPrompt(stepDef, state, artifactDir, reviewFeedback);
 
   // Select model and budget
   const model = MODEL_MAP[actor] || MODEL_VERSIONS.SONNET;
@@ -1051,9 +1080,25 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
       };
     }
 
-    // Re-run the execution step before next review
-    console.log(`  🔄 Re-executing step after rejection...`);
-    const rerunResult = await runStep(stepDef, state);
+    // Re-run the execution step with review feedback injected into the prompt.
+    // Read review-{step}.md artifact written by the reviewer — contains the
+    // detailed critique. Fall back to a score-only summary if the file is missing.
+    let feedback = "";
+    try {
+      const reviewPath = path.join(artifactDir, `review-${stepDef.id}.md`);
+      if (fs.existsSync(reviewPath)) {
+        feedback = fs.readFileSync(reviewPath, "utf8").trim();
+      }
+    } catch { /* non-critical — proceed without feedback file */ }
+    if (!feedback && reviewResult.result) {
+      feedback = reviewResult.result;
+    }
+    if (!feedback) {
+      feedback = `리뷰 점수 ${reviewResult.score}/25 — 기준 미달로 reject됨. 품질을 높여 다시 작성하라.`;
+    }
+
+    console.log(`  🔄 Re-executing step with review feedback...`);
+    const rerunResult = await runStep(stepDef, state, feedback);
     if (!rerunResult.ok) {
       return {
         ok: false,
