@@ -33,10 +33,12 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
    - ✦ **large**: standard (full 10-step with research, plan, team review) — 대규모 작업
 
 5. **파이프라인 시작**
+   ⚠️ Bash timeout을 반드시 600000 (10분)으로 설정한다. SDK 에이전트가 순차 실행되므로 수 분이 걸린다.
    ```bash
    node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
    ```
 
-6. **파이프라인 진행**
-   `.vela/agents/vela.md`의 지시사항에 따라 파이프라인 단계를 순서대로 진행한다.
-   오케스트레이터가 모든 단계를 자동 실행한다 — PM이 개별 단계를 직접 제어하지 않는다.
+6. **완료 대기**
+   오케스트레이터가 모든 단계(에이전트 소환, 리뷰, transition)를 자동 처리한다.
+   **PM은 `run` 실행 후 결과가 반환될 때까지 아무것도 하지 않는다.**
+   도중에 에이전트를 직접 소환하거나, vela-engine.js를 호출하거나, 수동으로 개입하면 파이프라인이 꼬인다.

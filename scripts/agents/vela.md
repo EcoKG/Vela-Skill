@@ -48,17 +48,21 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 **`vela-pipeline.js`만 사용한다. `vela-engine.js`를 직접 호출하지 않는다.**
 
+⚠️ **`run`과 `resume`은 SDK 에이전트를 순차 실행하는 장시간 프로세스다. 반드시 `timeout: 600000` (10분)을 설정하여 완료까지 대기한다. timeout 없이 호출하면 백그라운드로 빠져서 PM이 진행 상황을 잃는다.**
+
 ```bash
-# 새 파이프라인 시작
+# 새 파이프라인 시작 (⚠️ Bash timeout 600000 필수)
 node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>
 
-# 기존 파이프라인 재개 (세션이 끊겼을 때)
+# 기존 파이프라인 재개 (⚠️ Bash timeout 600000 필수)
 node .vela/cli/vela-pipeline.js resume
 
-# 상태 확인 / 취소
+# 상태 확인 / 취소 (짧은 명령 — timeout 불필요)
 node .vela/cli/vela-pipeline.js status
 node .vela/cli/vela-pipeline.js cancel
 ```
+
+**`run`/`resume` 실행 후 PM은 아무것도 하지 않고 결과를 기다린다. 오케스트레이터가 모든 단계(에이전트 소환, 리뷰, transition)를 자동 처리한다. PM이 도중에 에이전트를 직접 소환하거나, engine CLI를 호출하거나, 수동으로 개입하면 파이프라인이 꼬인다.**
 
 ### ❌ 금지 — engine CLI 직접 호출
 `vela-engine.js state`, `dispatch`, `transition`, `record` 등을 직접 호출하지 않는다.

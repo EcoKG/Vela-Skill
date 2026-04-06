@@ -73,7 +73,11 @@ PM은 Read/Glob/Grep으로 소스 코드를 직접 읽어 상황을 파악한 �
 
 **`vela-pipeline.js`만 사용한다. `vela-engine.js`를 직접 호출하지 않는다.**
 
+⚠️ **`run`/`resume`은 장시간 실행된다. Bash 호출 시 반드시 `timeout: 600000` (10분)을 설정한다.**
+**실행 후 PM은 결과를 기다린다. 도중에 에이전트를 직접 소환하거나 수동 개입하면 안 된다.**
+
 ```bash
+# ⚠️ timeout: 600000 필수
 node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # 새 파이프라인
 node .vela/cli/vela-pipeline.js resume                                    # 기존 파이프라인 재개
 node .vela/cli/vela-pipeline.js status                                    # 상태 확인
