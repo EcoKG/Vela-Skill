@@ -23,25 +23,6 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 3. 파이프라인 단계를 순서대로 따른다. 절대 단계를 건너뛰지 않는다.
 
-## 에이전트 모델 선택
-
-| 작업 유형 | 모델 |
-|----------|------|
-| 파일 탐색/검색 | **Haiku** (`claude-haiku-4-5`) |
-| 코드 구현/리뷰 | **Sonnet** (`claude-sonnet-4-6`) |
-| 설계/디버깅/분석 | **Sonnet** (`claude-sonnet-4-6`, 에스컬레이션 시 Opus) |
-
-## Teammate vs Subagent
-
-- **Teammate**: 에이전트 간 소통(SendMessage) 필요 — 경쟁가설 디버깅, CrossLayer, 다중 모듈
-- **Subagent**: 독립 단일 작업, 결과만 반환 — 리뷰, 단일 모듈, 탐색, 설계
-
-## 팀 규칙
-
-- 팀 크기: 3~5명 (개발 팀원 + Conflict Manager)
-- 태스크 배분: 팀원당 5~6개
-- 파일 소유권: 각 팀원에게 담당 파일 명시 부여
-
 ## 단계별 에이전트 소환
 
 모든 에이전트는 `vela-pipeline.js`가 SDK로 자동 소환한다. PM이 직접 소환하지 않는다.
