@@ -6,7 +6,7 @@ vela-pipeline.js 오케스트레이터가 각 단계의 모델을 자동 선택�
 
 | 역할 | 기본 모델 | 비고 |
 |------|----------|------|
-| Researcher | Sonnet | 프로젝트 분석 |
+| Researcher | Opus | 3관점 병렬 분석 |
 | Planner | Sonnet | 설계 |
 | Executor | Sonnet | 코드 구현 |
 | Reviewer | Opus | 단일 리뷰 |
