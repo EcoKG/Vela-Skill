@@ -18,6 +18,9 @@
 # Test 6: Options shape — persistSession default (false)
 # Test 7: Result normalization — success path
 # Test 8: Result normalization — error path
+# Test 24: Heartbeat output on stderr
+# Test 25: heartbeat=false suppresses output
+# Test 26: Heartbeat cleanup on error path (no timer leak)
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -176,6 +179,19 @@ function query(args) {
       // Message must match /max.*turns|maximum.*turns/i to classify as max_turns_exceeded.
       yield { type: 'system', subtype: 'init', session_id: 'mock-session-throw' };
       throw new Error('max turns exceeded');
+    } else if (prompt.includes('__heartbeat_test__')) {
+      // Delay 300ms to allow heartbeat timer to fire (test uses 100ms interval)
+      await new Promise(r => setTimeout(r, 300));
+      yield {
+        type: 'result',
+        subtype: 'success',
+        result: 'heartbeat test done',
+        total_cost_usd: 0.001,
+        model: 'mock-model-v1',
+        session_id: 'mock-session-hb',
+        num_turns: 2,
+        duration_ms: 300
+      };
     } else if (prompt.includes('__checkpoint_test__')) {
       // Emit user messages with UUIDs before the result
       yield { type: 'user', uuid: 'ckpt-001' };
@@ -617,6 +633,73 @@ result=$(run_with_mock "
   });
 ")
 assert_eq "catch-block cost preserved" "PASS" "$result"
+
+# ── Test 24: Heartbeat output appears on stderr ──
+echo ""
+echo "📋 Test 24: Heartbeat output appears on stderr (interval 100ms, mock delay 300ms)"
+heartbeat_stderr=$(SDK_CAPTURE_FILE="$CAPTURE_FILE" SDK_CALL_COUNTER_FILE="$COUNTER_FILE" node -e "
+  Object.keys(require.cache).forEach(k => {
+    if (k.includes('sdk-runner') || k.includes('claude-agent-sdk')) delete require.cache[k];
+  });
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__heartbeat_test__', heartbeatIntervalMs: 100 }).then(r => {
+    console.log(r.ok ? 'OK' : 'FAIL');
+  });
+" 2>&1 1>/dev/null)
+TOTAL=$((TOTAL + 1))
+if echo "$heartbeat_stderr" | grep -q '\[sdk-runner\] ❤'; then
+  echo "  ✅ PASS: heartbeat pattern found on stderr"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: heartbeat pattern not found on stderr"
+  echo "    stderr was: $heartbeat_stderr"
+  FAIL=$((FAIL + 1))
+fi
+
+# ── Test 25: heartbeat=false suppresses output ──
+echo ""
+echo "📋 Test 25: heartbeat=false suppresses stderr output"
+heartbeat_stderr_off=$(SDK_CAPTURE_FILE="$CAPTURE_FILE" SDK_CALL_COUNTER_FILE="$COUNTER_FILE" node -e "
+  Object.keys(require.cache).forEach(k => {
+    if (k.includes('sdk-runner') || k.includes('claude-agent-sdk')) delete require.cache[k];
+  });
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__heartbeat_test__', heartbeat: false, heartbeatIntervalMs: 100 }).then(r => {
+    console.log(r.ok ? 'OK' : 'FAIL');
+  });
+" 2>&1 1>/dev/null)
+TOTAL=$((TOTAL + 1))
+if echo "$heartbeat_stderr_off" | grep -q '\[sdk-runner\] ❤'; then
+  echo "  ❌ FAIL: heartbeat pattern found on stderr when heartbeat=false"
+  FAIL=$((FAIL + 1))
+else
+  echo "  ✅ PASS: no heartbeat output when heartbeat=false"
+  PASS=$((PASS + 1))
+fi
+
+# ── Test 26: Heartbeat cleanup on error path (no timer leak) ──
+echo ""
+echo "📋 Test 26: Heartbeat cleanup on error path — timer cleared, process exits cleanly"
+cleanup_result=$(SDK_CAPTURE_FILE="$CAPTURE_FILE" SDK_CALL_COUNTER_FILE="$COUNTER_FILE" timeout 10 node -e "
+  Object.keys(require.cache).forEach(k => {
+    if (k.includes('sdk-runner') || k.includes('claude-agent-sdk')) delete require.cache[k];
+  });
+  const { runSdkAgent } = require('$MODULE');
+  runSdkAgent({ prompt: '__throw_max_turns__', heartbeatIntervalMs: 100 }).then(r => {
+    // If heartbeat timer was properly cleared (unref + clearInterval),
+    // the process should exit without hanging.
+    console.log(r.ok === false && r.error === 'max_turns_exceeded' ? 'PASS' : 'FAIL:' + JSON.stringify(r));
+  });
+" 2>/dev/null)
+exit_code=$?
+TOTAL=$((TOTAL + 1))
+if [ "$exit_code" -eq 0 ] && [ "$cleanup_result" = "PASS" ]; then
+  echo "  ✅ PASS: process exited cleanly (no timer leak)"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: exit_code=$exit_code, result=$cleanup_result"
+  FAIL=$((FAIL + 1))
+fi
 
 # ── Results ──
 echo ""

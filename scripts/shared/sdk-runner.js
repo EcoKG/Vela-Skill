@@ -162,6 +162,8 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  * @param {AbortController} [opts.abortController] - Optional abort controller.
  * @param {number} [opts.maxRetries=3] - Maximum retry attempts on rate limit errors.
  * @param {number} [opts.retryDelayMs=2000] - Base delay for exponential backoff (ms).
+ * @param {boolean} [opts.heartbeat=true] - Emit heartbeat messages to stderr during execution.
+ * @param {number} [opts.heartbeatIntervalMs=10000] - Heartbeat interval in milliseconds.
  * @param {Object} [opts.outputFormat] - JSON schema for structured output (SDK outputFormat).
  * @param {string} [opts.effort] - Effort level ('low'|'medium'|'high') for cost/speed tradeoff.
  * @param {Object} [opts.thinking] - Thinking configuration (e.g. { type: 'enabled', budget_tokens: N }).
@@ -278,34 +280,56 @@ async function runSdkAgent(opts) {
       let resetsAt = null;
       const checkpoints = [];
 
-      for await (const message of generator) {
-        // Capture checkpoint UUIDs from user messages
-        if (message.type === "user" && message.uuid) {
-          checkpoints.push(message.uuid);
-        }
+      // --- Heartbeat timer ---
+      // Emits periodic status to stderr so callers can verify the process is alive
+      // during long-running SDK agent executions.
+      const heartbeatEnabled = opts.heartbeat !== false;
+      const heartbeatMs = opts.heartbeatIntervalMs || 10000;
+      let heartbeatTimer = null;
+      if (heartbeatEnabled) {
+        const model = opts.model || "default";
+        heartbeatTimer = setInterval(() => {
+          const elapsed = Math.round((Date.now() - startMs) / 1000);
+          process.stderr.write(
+            `[sdk-runner] ❤ ${elapsed}s elapsed (model: ${model})\n`,
+          );
+        }, heartbeatMs);
+        heartbeatTimer.unref();
+      }
 
-        // Capture session ID from init message
-        if (
-          message.type === "system" &&
-          message.subtype === "init" &&
-          message.session_id
-        ) {
-          sessionId = message.session_id;
-        }
+      try {
+        for await (const message of generator) {
+          // Capture checkpoint UUIDs from user messages
+          if (message.type === "user" && message.uuid) {
+            checkpoints.push(message.uuid);
+          }
 
-        // Detect rate limit events during execution
-        if (
-          message.type === "rate_limit_event" ||
-          (message.type === "system" && message.subtype === "rate_limit_event")
-        ) {
-          sawRateLimit = true;
-          if (message.resets_at) resetsAt = message.resets_at;
-        }
+          // Capture session ID from init message
+          if (
+            message.type === "system" &&
+            message.subtype === "init" &&
+            message.session_id
+          ) {
+            sessionId = message.session_id;
+          }
 
-        // Capture the final result message
-        if (message.type === "result") {
-          resultMessage = message;
+          // Detect rate limit events during execution
+          if (
+            message.type === "rate_limit_event" ||
+            (message.type === "system" &&
+              message.subtype === "rate_limit_event")
+          ) {
+            sawRateLimit = true;
+            if (message.resets_at) resetsAt = message.resets_at;
+          }
+
+          // Capture the final result message
+          if (message.type === "result") {
+            resultMessage = message;
+          }
         }
+      } finally {
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
       }
 
       const elapsedMs = Date.now() - startMs;
