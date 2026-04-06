@@ -150,7 +150,7 @@ function writeResearchArtifact(artifactDir, content) {
 /**
  * Run 3-perspective parallel SDK research analysis.
  *
- * Launches architecture, security, quality Haiku agents concurrently,
+ * Launches architecture, security, quality Opus agents concurrently,
  * collects results via Promise.allSettled(), merges into research.md.
  *
  * @param {Object} opts
