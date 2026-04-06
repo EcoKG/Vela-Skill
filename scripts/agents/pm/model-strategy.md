@@ -10,6 +10,7 @@ vela-pipeline.js 오케스트레이터가 각 단계의 모델을 자동 선택�
 | Planner | Sonnet | 설계 |
 | Executor | Sonnet | 코드 구현 |
 | Reviewer | Opus | 단일 리뷰 |
+| Diff Summary | Opus | 전체 diff 통합 검토 (5차원 채점) |
 
 ## 리뷰 동작 (관찰용 참고)
 

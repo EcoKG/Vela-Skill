@@ -245,6 +245,7 @@ scripts/shared/
 ├── sdk-researcher.js    ← 3관점 병렬 분석 (architecture/security/quality)
 ├── sdk-executor.js      ← Sonnet TDD 실행 (inlined executor.md + tdd.md)
 ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석 (security/bugs/performance/code-quality/architecture)
+├── sdk-diff-summary.js  ← Opus 전체 diff 통합 검토 (5차원: consistency/completeness/doc-sync/regression/coherence)
 ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리 (3 tools)
 ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석 (SDK 불필요)
 ├── change-surface.js    ← 참조 무결성 검증 (diff 기반 cross-file reference 분석)
@@ -593,6 +594,7 @@ bash scripts/tests/test-gate-vk07.sh        # Gate Keeper 규칙
 bash scripts/tests/test-auto-mode.sh        # Auto 모드 (16 assertions)
 bash scripts/tests/test-wave-poc.sh         # Wave 병렬 그룹화 PoC
 bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성 검증
+bash scripts/tests/test-sdk-diff-summary.sh # 20 assertions — Opus 전체 diff 통합 검토
 ```
 
 ⚠️ SDK 테스트 스위트들은 공유 mock 디렉토리를 사용하므로 **순차 실행** 필수 (병렬 실행 시 mock collision 발생).
