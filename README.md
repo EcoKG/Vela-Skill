@@ -586,7 +586,7 @@ bash scripts/tests/test-researcher-modes.sh     # project_mode 계약 검증
 bash scripts/tests/test-sdk-runner.sh       # 14 assertions — SDK 인프라
 bash scripts/tests/test-sdk-reviewer.sh     # 18 assertions — Opus 단일 리뷰
 bash scripts/tests/test-sdk-plan-checker.sh # 13 assertions — plan.md 검증
-bash scripts/tests/test-sdk-researcher.sh   # 23 assertions — 3관점 분석
+bash scripts/tests/test-sdk-researcher.sh   # 26 assertions — 3관점 분석 (Opus 파라미터 검증 포함)
 bash scripts/tests/test-sdk-executor.sh     # 13 assertions — 코드 실행
 bash scripts/tests/test-sdk-custom-tools.sh # MCP 커스텀 도구 서버 팩토리
 bash scripts/tests/test-gate-vk07.sh        # Gate Keeper 규칙
