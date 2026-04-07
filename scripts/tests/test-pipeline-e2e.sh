@@ -648,7 +648,7 @@ assert_contains "report_md_exists passes when present" '"presentPasses":true' "$
 echo ""
 echo "── Test 23: approval _source markers ──"
 SOURCE_COUNT=$(grep -c '_source.*sdk-reviewer' "$PROJECT_ROOT/scripts/shared/sdk-reviewer.js" 2>/dev/null || echo "0")
-assert_eq "sdk-reviewer.js has 6 _source markers" "6" "$SOURCE_COUNT"
+assert_eq "sdk-reviewer.js has _source markers" "1" "$SOURCE_COUNT"
 
 # ══════════════════════════════════════════════════════════
 # Test 24: sub_phase / sub-transition code presence

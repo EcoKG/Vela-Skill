@@ -14,7 +14,7 @@
  *
  * Guards:
  *   VG-03: Build/test failure check — corrupt signals file blocks git commit
- *   VG-12: PM direct source modification in execute step blocked (trivial exempt)
+ *   VG-12: PM direct source modification in execute step blocked
  */
 
 "use strict";
@@ -177,13 +177,6 @@ async function main() {
     pipelineResult.state.current_step === "execute" &&
     (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit")
   ) {
-    const pipelineType = pipelineResult.state.pipeline_type || "standard";
-
-    // Trivial pipeline is exempt from VG-12
-    if (pipelineType === "trivial") {
-      process.exit(0);
-    }
-
     // Check if the file being written is a source code file
     const filePath =
       (typeof toolInput.file_path === "string" && toolInput.file_path) ||

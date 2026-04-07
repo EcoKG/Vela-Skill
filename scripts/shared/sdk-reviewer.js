@@ -14,7 +14,7 @@
  * - research: Source Coverage / Analysis Depth / Risk Identification /
  *             Technology Assessment / Actionable Findings (unchanged)
  *
- * Exports: sdkReview({ step, artifactDir, cwd, scale?, pipelineSlug? })
+ * Exports: sdkReview({ step, artifactDir, cwd, pipelineSlug? })
  *
  * Design decisions:
  * - settingSources: [] passed through runSdkAgent (D014 — hook isolation)
@@ -443,7 +443,6 @@ async function runReviewStage(opts) {
  * @param {string} opts.step - Pipeline step name (e.g. 'research', 'plan', 'execute')
  * @param {string} opts.artifactDir - Directory for review artifacts
  * @param {string} opts.cwd - Project root working directory
- * @param {string} [opts.scale] - Optional scale hint ('small'|'medium'|'large')
  * @param {string} [opts.pipelineSlug] - Pipeline identifier for worktree isolation.
  *   When provided, a git worktree is created before the review and the review
  *   runs inside the isolated worktree. The worktree is cleaned up in a finally
