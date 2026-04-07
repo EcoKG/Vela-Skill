@@ -209,6 +209,7 @@ function createSprint({ title, request, slices }) {
   const normalizedSlices = slices.map((s) => ({
     id: s.id,
     title: s.title || s.id,
+    request: s.request || s.description || '',
     status: 'planned',
     depends_on: Array.isArray(s.depends_on) ? s.depends_on : [],
     artifact_dir: null,
