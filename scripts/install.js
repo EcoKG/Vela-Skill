@@ -226,6 +226,7 @@ const FILE_MANIFEST = [
   // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
   { src: "scripts/shared/sdk-runner.js", dst: "shared/sdk-runner.js" },
   { src: "scripts/shared/sdk-reviewer.js", dst: "shared/sdk-reviewer.js" },
+  { src: "scripts/shared/sdk-diff-summary.js", dst: "shared/sdk-diff-summary.js" },
   { src: "scripts/shared/sdk-learning.js", dst: "shared/sdk-learning.js" },
   {
     src: "scripts/shared/sdk-plan-checker.js",

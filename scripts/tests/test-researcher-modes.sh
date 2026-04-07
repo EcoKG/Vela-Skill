@@ -101,17 +101,17 @@ MODE_EMPTY=$(node -e "
 assert_eq "empty dir + scale=large → 'bootstrap'" "bootstrap" "$MODE_EMPTY"
 
 # ══════════════════════════════════════════════════════════
-# Test 2: detectProjectMode(project root, 'small') → 'targeted'
-#   fileCount>0 + scale=small routes to targeted
+# Test 2: detectProjectMode(project root) → 'exploratory'
+#   fileCount>0 → exploratory (binary mode: bootstrap/exploratory)
 # ══════════════════════════════════════════════════════════
 echo ""
-echo "── Test 2: detectProjectMode — project root + small → targeted ──"
+echo "── Test 2: detectProjectMode — project root → exploratory ──"
 MODE_SMALL=$(node -e "
   const { detectProjectMode } = require('$PIPELINE_MODULE');
-  const mode = detectProjectMode('$PROJECT_ROOT', 'small');
+  const mode = detectProjectMode('$PROJECT_ROOT');
   console.log(mode);
 " 2>/dev/null | tail -1)
-assert_eq "project root + scale=small → 'targeted'" "targeted" "$MODE_SMALL"
+assert_eq "project root → 'exploratory'" "exploratory" "$MODE_SMALL"
 
 # ══════════════════════════════════════════════════════════
 # Test 3: detectProjectMode(project root, 'large') → 'exploratory'
@@ -160,7 +160,7 @@ for file_path in "$RESEARCHER_MD" "$RESEARCHER_INDEX" "$RESEARCHER_HYPOTHESIS"; 
   rel="${file_path#$PROJECT_ROOT/}"
   TOTAL=$((TOTAL + 1))
   missing=""
-  for kw in bootstrap targeted exploratory; do
+  for kw in bootstrap exploratory; do
     if ! grep -q "$kw" "$file_path"; then
       missing="$missing $kw"
     fi

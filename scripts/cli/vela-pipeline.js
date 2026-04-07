@@ -698,7 +698,7 @@ function buildStepPrompt(stepDef, state, artifactDir, reviewFeedback) {
         targeted:
           "기존 코드베이스, 변경 범위 좁음 — 작업 관련 파일/함수만 파악하고 가설은 필요할 때만 1~2개.",
         exploratory:
-          "기존 코드베이스, 변경 범위 넓거나 원인 불명확 — 경쟁가설 디버깅 절차(3~5 가설)를 적용한다.",
+          "기존 코드베이스 — 작업 요청의 범위에 비례하여 분석한다. 특정 파일/클래스 정리 요청이면 해당 파일과 직접 의존성만 분석한다. 전체 아키텍처 변경이나 원인 불명 버그일 때만 경쟁가설 디버깅 절차(3~5 가설)를 적용한다.",
       };
       const modeDesc = modeDescriptions[mode] || modeDescriptions.exploratory;
       basePrompt = [
@@ -1798,10 +1798,11 @@ function output(data) {
 // ═══════════════════════════════════════════════════════════
 
 async function cmdRun() {
-  const request = args[1];
+  // Find first non-flag argument after 'run' as the request
+  const request = args.slice(1).find(a => !a.startsWith("--"));
   if (!request) {
     console.error(
-      "Usage: vela-pipeline run <request> [--type <type>]",
+      "Usage: vela-pipeline run <request> [--type <type>] [--force]",
     );
     process.exit(1);
   }

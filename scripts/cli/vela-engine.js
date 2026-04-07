@@ -1776,7 +1776,9 @@ function snapshotGitState() {
 
   try {
     const currentBranch = gitExec("rev-parse", "--abbrev-ref", "HEAD").trim();
-    const status = gitExec("status", "--porcelain").trim();
+    // -uno: exclude untracked files from dirty check — untracked files
+    // (e.g. .bg-shell/, src/test/) should not block pipeline init
+    const status = gitExec("status", "--porcelain", "-uno").trim();
     const headHash = gitExec("rev-parse", "HEAD").trim();
 
     let remote = null;

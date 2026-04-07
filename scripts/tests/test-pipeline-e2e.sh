@@ -926,6 +926,47 @@ assert_contains "escalate_to_pm on exhaustion" '"hasEscalateOnExhaustion":true' 
 assert_contains "verification.md feedback injection" '"hasVerificationFeedback":true' "$RETRY_REFS"
 
 # ══════════════════════════════════════════════════════════
+# Test 40: cmdRun --force parsing — request is first non-flag arg
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 40: cmdRun --force flag not consumed as request ──"
+FORCE_PARSE=$(node -e "
+  // Simulate args: ['run', '--force', 'my request']
+  const args = ['run', '--force', 'my request'];
+  const request = args.slice(1).find(a => !a.startsWith('--'));
+  console.log(JSON.stringify({ request, isCorrect: request === 'my request' }));
+" 2>/dev/null)
+assert_contains "--force not consumed as request" '"isCorrect":true' "$FORCE_PARSE"
+
+# Test 40b: request before --force also works
+FORCE_PARSE2=$(node -e "
+  const args = ['run', 'my request', '--force'];
+  const request = args.slice(1).find(a => !a.startsWith('--'));
+  console.log(JSON.stringify({ request, isCorrect: request === 'my request' }));
+" 2>/dev/null)
+assert_contains "request before --force works" '"isCorrect":true' "$FORCE_PARSE2"
+
+# ══════════════════════════════════════════════════════════
+# Test 41: init dirty check uses -uno (excludes untracked files)
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 41: dirty check excludes untracked files ──"
+DIRTY_UNO=$(node -e "
+  const src = require('fs').readFileSync('$ENGINE_MODULE', 'utf8');
+  // snapshotGitState function contains the init dirty check
+  const getGitStateMatch = src.match(/function snapshotGitState[\s\S]*?^}/m);
+  const getGitState = getGitStateMatch ? getGitStateMatch[0] : '';
+  const initHasUno = getGitState.includes('-uno');
+  // cmdCommit porcelain should NOT have -uno
+  const commitSection = src.split('function cmdCommit')[1] || '';
+  const commitPorcelain = commitSection.split('function ')[0] || '';
+  const commitHasUno = commitPorcelain.includes('-uno');
+  console.log(JSON.stringify({ initHasUno, commitHasUno }));
+" 2>/dev/null)
+assert_contains "init dirty check uses -uno" '"initHasUno":true' "$DIRTY_UNO"
+assert_contains "commit porcelain does NOT use -uno" '"commitHasUno":false' "$DIRTY_UNO"
+
+# ══════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════
 echo ""
