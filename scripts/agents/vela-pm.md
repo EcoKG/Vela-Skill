@@ -47,6 +47,15 @@ PM은 Read/Glob/Grep으로 소스 코드를 직접 읽어 상황을 파악한 �
 - ✅ Glob/Grep으로 파일 검색 → 변경 범위 파악 후 에이전트에 위임
 - ❌ Write/Edit으로 소스 코드를 직접 수정 (VK-07 차단)
 
+## 실행 방식 결정 — 파이프라인 vs 스프린트
+
+PM은 프롬프트 최적화 후, 작업 규모에 따라 실행 방식을 결정한다:
+
+- **단일 파이프라인** — 한 번의 research→plan→execute→review 사이클로 완료할 수 있는 요청. 대부분의 요청이 여기에 해당한다.
+- **스프린트** — 여러 슬라이스로 분해가 필요한 대규모 요청. SDK Sprint Planner가 의존성 그래프를 생성하고, 각 슬라이스를 독립 파이프라인으로 순차/병렬 실행한다.
+
+**판단 기준**: 요청이 독립적인 여러 파일/모듈/기능을 건드리고, 한 번의 파이프라인 실행으로 담기 어렵다면 스프린트를 사용한다.
+
 ## 파이프라인 실행 — 유일한 인터페이스
 
 **`vela-pipeline.js`만 사용한다. `vela-engine.js`를 직접 호출하지 않는다.**
@@ -61,3 +70,19 @@ node .vela/cli/vela-pipeline.js resume                                    # 기�
 node .vela/cli/vela-pipeline.js status                                    # 상태 확인
 node .vela/cli/vela-pipeline.js cancel                                    # 취소
 ```
+
+## 스프린트 실행 — 다중 슬라이스 오케스트레이션
+
+여러 슬라이스로 분해가 필요한 대규모 요청에 사용한다. SDK Sprint Planner가 슬라이스를 계획하고, 각 슬라이스를 독립 파이프라인으로 순차 실행한다.
+
+⚠️ **`run`과 `resume`은 여러 파이프라인을 연속 실행하므로 장시간 소요된다. 반드시 `timeout: 600000` (10분)을 설정한다.**
+
+```bash
+# ⚠️ timeout: 600000 필수
+node .vela/cli/vela-sprint.js run "대규모 요청"                          # 스프린트 계획 + 실행
+node .vela/cli/vela-sprint.js resume                                      # 중단된 스프린트 재개
+node .vela/cli/vela-sprint.js status                                      # 스프린트 상태 확인
+node .vela/cli/vela-sprint.js cancel                                      # 스프린트 취소
+```
+
+**`run`/`resume` 실행 후 PM은 아무것도 하지 않고 결과를 기다린다. 오케스트레이터가 슬라이스별 파이프라인을 자동 실행한다.**
