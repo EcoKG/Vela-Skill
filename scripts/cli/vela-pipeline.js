@@ -50,6 +50,10 @@ const {
 // ─── SDK runner ───
 const { runSdkAgent } = require("../shared/sdk-runner");
 
+// ─── SDK diff-summary & learning ───
+const { sdkDiffSummary } = require("../shared/sdk-diff-summary");
+const { sdkLearning } = require("../shared/sdk-learning");
+
 // ─── TreeNode cache — path collector ───
 const { appendPaths } = require("../cache/treenode");
 
@@ -1008,6 +1012,14 @@ function checkLocalGate(stepDef, artifactDir) {
           missing.push(gate);
         }
         break;
+      case "diff_summary_exists":
+        if (!fs.existsSync(path.join(artifactDir, "diff-summary.md")))
+          missing.push(gate);
+        break;
+      case "learning_md_exists":
+        if (!fs.existsSync(path.join(artifactDir, "learning.md")))
+          missing.push(gate);
+        break;
       case "report_md_exists":
         if (!fs.existsSync(path.join(artifactDir, "report.md")))
           missing.push(gate);
@@ -1383,6 +1395,60 @@ async function executeStepLoop(steps, stepResults, totalCost) {
       // Generic PM step — record and advance
       engine(["record", "pass", "--summary", `Auto-advanced: ${stepDef.name}`]);
       engine(["transition"]);
+      continue;
+    }
+
+    // ─── diff-summary / learning — dedicated SDK module calls (non-fatal) ───
+    if (stepDef.id === "diff-summary" || stepDef.id === "learning") {
+      const artifactDir = state._artifactDir;
+      const pipelineSlug = state.pipeline_slug;
+      const stepLabel = stepDef.id === "diff-summary" ? "Diff Summary" : "Learning";
+
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`  Step: ${stepLabel} (${stepDef.id})`);
+      console.log(`  Mode: ${stepDef.mode} | Actor: ${stepDef.actor}`);
+      console.log(`${"─".repeat(60)}\n`);
+
+      try {
+        const sdkFn = stepDef.id === "diff-summary" ? sdkDiffSummary : sdkLearning;
+        const sdkResult = await sdkFn({ artifactDir, cwd: CWD, pipelineSlug });
+
+        const stepCost = sdkResult.cost || 0;
+        totalCost += stepCost;
+        stepResults.push({
+          step: stepDef.id,
+          ok: sdkResult.ok,
+          cost: stepCost,
+          durationMs: sdkResult.durationMs || 0,
+          numTurns: sdkResult.numTurns,
+          error: sdkResult.error,
+        });
+
+        if (sdkResult.ok) {
+          console.log(`  ✅ ${stepLabel} completed (cost: $${stepCost.toFixed(4)})`);
+        } else {
+          // Non-fatal — warn and continue
+          console.warn(`  ⚠️ ${stepLabel} failed: ${sdkResult.error || "unknown"} — continuing (non-fatal)`);
+        }
+      } catch (err) {
+        // Non-fatal — catch unexpected errors
+        console.warn(`  ⚠️ ${stepLabel} error: ${err.message} — continuing (non-fatal)`);
+        stepResults.push({
+          step: stepDef.id,
+          ok: false,
+          cost: 0,
+          durationMs: 0,
+          error: err.message,
+        });
+      }
+
+      // Always record pass and transition (non-fatal step)
+      engine(["record", "pass", "--summary", `${stepLabel}: completed`]);
+      const transResult = engine(["transition"]);
+      if (transResult.completed) {
+        console.log("\n✅ Pipeline completed successfully!");
+        break;
+      }
       continue;
     }
 
