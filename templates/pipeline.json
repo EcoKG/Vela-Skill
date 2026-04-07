@@ -170,66 +170,6 @@
           }
         }
       ]
-    },
-    "quick": {
-      "description": "Simplified pipeline for small, clear tasks",
-      "inherits": "standard",
-      "steps_only": ["init", "plan", "execute", "verify", "commit", "finalize"],
-      "conditions": {
-        "max_files": 3,
-        "max_lines": 100,
-        "no_api_changes": true
-      }
-    },
-    "ralph": {
-      "description": "Auto-retry until tests pass. Iterate execute→verify until success.",
-      "inherits": "standard",
-      "steps_only": ["init", "execute", "verify", "commit", "finalize"],
-      "overrides": {
-        "execute": {
-          "max_revisions": 10
-        }
-      },
-      "ralph_mode": true,
-      "max_iterations": 10
-    },
-    "trivial": {
-      "description": "Minimal pipeline for single-line fixes",
-      "inherits": "standard",
-      "steps_only": ["init", "execute", "commit", "finalize"],
-      "conditions": {
-        "max_files": 1,
-        "max_lines": 10
-      },
-      "overrides": {
-        "execute": {
-          "max_revisions": 1,
-          "exit_gate": []
-        },
-        "commit": {
-          "exit_gate": []
-        },
-        "finalize": {
-          "exit_gate": [],
-          "artifacts": []
-        }
-      }
-    },
-    "hotfix": {
-      "description": "Minimal pipeline for non-source changes (docs, config, readme). Skips review.",
-      "inherits": "standard",
-      "steps_only": ["init", "execute", "commit"],
-      "overrides": {
-        "execute": {
-          "max_revisions": 1,
-          "mode": "readwrite",
-          "exit_gate": []
-        },
-        "commit": {
-          "exit_gate": []
-        }
-      },
-      "hotfix_mode": true
     }
   },
   "modes": {
@@ -257,23 +197,6 @@
       "bash_policy": "read_only",
       "treenode_cache": true,
       "artifact_write_only": true
-    }
-  },
-  "scale_detection": {
-    "small": {
-      "max_files": 1,
-      "max_lines": 50,
-      "pipeline": "trivial"
-    },
-    "medium": {
-      "max_files": 5,
-      "max_lines": 300,
-      "pipeline": "quick"
-    },
-    "large": {
-      "min_files": 6,
-      "min_lines": 300,
-      "pipeline": "standard"
     }
   },
   "git": {
