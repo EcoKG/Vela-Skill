@@ -4,12 +4,15 @@
  * TypeScript port of:
  *   - scripts/shared/constants.js   (guard patterns)
  *   - scripts/hooks/vela-gate-keeper.js  (VK-01 through VK-08 rules)
+ *   - references/gates-and-guards.md    (VG-00 through VG-12 rules)
  *
  * All logic runs synchronously inside the Pi SDK tool_call event handler,
  * replacing the old Claude Code Hook subprocess with a deterministic function.
  */
 
-import type { PipelineMode } from "./pipeline.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import type { PipelineMode, PipelineState } from "./pipeline.js";
 
 // ─── Guard Patterns (ported from constants.js) ────────────────────────────────
 
@@ -89,12 +92,17 @@ export interface GuardResult {
  * Evaluate all applicable gate rules for a tool call.
  *
  * Returns { blocked: false } to allow, or { blocked: true, reason, code } to deny.
- * Implements VK-01 through VK-08 from gates-and-guards.md.
+ * Implements VK-01 through VK-08 (mode-based) and VG-00 through VG-12 (pipeline-state-based).
+ *
+ * @param state - Full pipeline state for VG-series gate checks (optional; VK-only if absent)
+ * @param cwd   - Project working directory for delegation.json lookup (optional)
  */
 export function checkToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
-  mode: PipelineMode
+  mode: PipelineMode,
+  state?: PipelineState | null,
+  cwd?: string
 ): GuardResult {
   // ── VK-01 / VK-02: Bash enforcement ──────────────────────────────────────
   if (toolName === "Bash") {
@@ -217,6 +225,170 @@ export function checkToolCall(
   // ── VK-07: PM mode — Read/Glob/Grep only ──────────────────────────────────
   // Note: PM mode is enforced separately by the pipeline dispatcher (Phase 3).
   // Included here as a no-op placeholder for future integration.
+
+  // ══ VG-SERIES: Pipeline-state-based guards (require state context) ══════════
+  if (state) {
+    const vgResult = checkGateGuard(toolName, toolInput, state, cwd);
+    if (vgResult.blocked) return vgResult;
+  }
+
+  return { blocked: false };
+}
+
+// ─── VG-Series Gate Guards ───────────────────────────────────────────────────
+
+/**
+ * Pipeline-state-based gate guards (VG-00 through VG-12).
+ * These require the full PipelineState to evaluate.
+ */
+function checkGateGuard(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  state: PipelineState,
+  cwd?: string
+): GuardResult {
+  const currentStep = state.current_step;
+  const completedSteps = state.completed_steps ?? [];
+
+  // ── VG-00: Block task management tools during active pipeline ──────────────
+  const BLOCKED_TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate", "TaskList", "TodoWrite"]);
+  if (BLOCKED_TASK_TOOLS.has(toolName)) {
+    return {
+      blocked: true,
+      reason: `[Vela VG-00] ${toolName} is blocked during an active pipeline. Use /vela status instead.`,
+      code: "VG-00",
+    };
+  }
+
+  // ── VG-05: pipeline-state.json direct write protection ────────────────────
+  if (WRITE_TOOLS.has(toolName)) {
+    const filePath =
+      typeof toolInput.file_path === "string"
+        ? toolInput.file_path
+        : typeof toolInput.path === "string"
+          ? toolInput.path
+          : "";
+
+    if (filePath && filePath.includes("pipeline-state.json")) {
+      return {
+        blocked: true,
+        reason: `[Vela VG-05] Direct writes to pipeline-state.json are blocked. Use /vela transition, /vela record, or /vela cancel.`,
+        code: "VG-05",
+      };
+    }
+
+    // ── VG-02: Source code writes before execute step ────────────────────────
+    const PRE_EXECUTE_STEPS = new Set(["init", "research", "plan", "plan-check", "checkpoint", "branch"]);
+    if (PRE_EXECUTE_STEPS.has(currentStep) && filePath) {
+      const normalized = filePath.replace(/\\/g, "/");
+      const isVelaWrite =
+        normalized.includes("/.vela/artifacts/") ||
+        normalized.includes("/.vela/templates/") ||
+        normalized.includes("/.vela/");
+      if (!isVelaWrite) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-02] Source code modification blocked in step "${currentStep}". Source writes only allowed from the execute step onward.`,
+          code: "VG-02",
+        };
+      }
+    }
+
+    // ── VG-04: report.md requires verification.md ───────────────────────────
+    if (filePath && (filePath.endsWith("report.md") || filePath.endsWith("/report.md"))) {
+      const artifactDir = state._artifactDir ?? state.artifact_dir;
+      if (artifactDir) {
+        const verifyExists =
+          existsSync(join(artifactDir, "verification.md")) ||
+          existsSync(join(artifactDir, "verify.md"));
+        if (!verifyExists) {
+          return {
+            blocked: true,
+            reason: `[Vela VG-04] report.md cannot be written before verification.md exists. Complete the verify step first.`,
+            code: "VG-04",
+          };
+        }
+      }
+    }
+
+    // ── VG-11: approval/review files only in team steps ─────────────────────
+    const TEAM_STEPS = new Set(["research", "plan", "execute"]);
+    if (filePath) {
+      const basename = filePath.split("/").pop() ?? "";
+      if ((/^approval-/.test(basename) || /^review-/.test(basename)) && !TEAM_STEPS.has(currentStep)) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-11] ${basename} can only be written during team steps (research/plan/execute). Current: ${currentStep}.`,
+          code: "VG-11",
+        };
+      }
+    }
+
+    // ── VG-12: execute step — delegation.json must exist ────────────────────
+    if (currentStep === "execute" && cwd && filePath && !filePath.includes("/.vela/")) {
+      const delegationPath = join(cwd, ".vela", "state", "delegation.json");
+      if (!existsSync(delegationPath)) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-12] Direct source writes in execute step require delegation.json. ` +
+            `Use /vela dispatch to delegate to an executor agent.`,
+          code: "VG-12",
+        };
+      }
+    }
+  }
+
+  // ── VG-07/VG-08: Git command step restrictions ────────────────────────────
+  if (toolName === "Bash") {
+    const cmd = typeof toolInput.command === "string" ? toolInput.command : "";
+
+    // VG-07: git commit only in execute/commit/finalize
+    if (/\bgit\s+commit\b/.test(cmd)) {
+      const GIT_COMMIT_STEPS = new Set(["execute", "commit", "finalize"]);
+      if (!GIT_COMMIT_STEPS.has(currentStep)) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-07] git commit is only allowed in execute/commit/finalize steps. Current: ${currentStep}.`,
+          code: "VG-07",
+        };
+      }
+    }
+
+    // VG-08: git push requires verify step to be completed
+    if (/\bgit\s+push\b/.test(cmd)) {
+      if (!completedSteps.includes("verify")) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-08] git push is blocked until the verify step is completed.`,
+          code: "VG-08",
+        };
+      }
+      // Always block --force
+      if (/--force\b|-f\b/.test(cmd)) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-08] git push --force is always blocked during a Vela pipeline.`,
+          code: "VG-08",
+        };
+      }
+    }
+
+    // VG-DESTROY: block obviously destructive commands
+    if (/\bgit\s+reset\s+--hard\b/.test(cmd)) {
+      return {
+        blocked: true,
+        reason: `[Vela] git reset --hard is blocked during an active pipeline.`,
+        code: "VG-DESTROY",
+      };
+    }
+    if (/\brm\s+-rf?\b/.test(cmd) && !cmd.includes(".vela/")) {
+      return {
+        blocked: true,
+        reason: `[Vela] rm -rf is blocked during an active pipeline.`,
+        code: "VG-DESTROY",
+      };
+    }
+  }
 
   return { blocked: false };
 }

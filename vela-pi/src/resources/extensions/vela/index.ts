@@ -79,7 +79,9 @@ export default async function registerExtension(
       const result = checkToolCall(
         event.toolName,
         event.input as Record<string, unknown>,
-        mode
+        mode,
+        state,
+        ctx.cwd
       );
 
       if (result.blocked) {
