@@ -1,11 +1,17 @@
 /**
- * Vela Slash Commands
+ * Vela Slash Commands — Phase 2
  *
- * Registers /vela with sub-command routing:
- *   /vela start "<request>"  — initialise a new pipeline
- *   /vela status             — show current pipeline state
- *   /vela cancel             — cancel the active pipeline
- *   /vela help               — show usage
+ * /vela start "<request>"        — initialise a new pipeline
+ * /vela status                   — show current pipeline state
+ * /vela transition               — advance to next step
+ * /vela record <pass|fail|reject> [--summary TEXT]  — record step verdict
+ * /vela sub-transition           — advance TDD sub-phase
+ * /vela branch [--mode auto|prompt|none]            — create feature branch
+ * /vela commit [--message TEXT]  — commit pipeline changes
+ * /vela history                  — list pipeline history
+ * /vela auto                     — toggle auto mode
+ * /vela cancel                   — cancel the active pipeline
+ * /vela help                     — show usage
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -15,10 +21,19 @@ import type {
   ExtensionCommandContext,
 } from "@gsd/pi-coding-agent";
 import {
+  cleanupCancelledArtifacts,
+  commitPipeline,
+  createPipelineBranch,
   findActivePipelineState,
   formatTimestamp,
+  listPipelineHistory,
   loadPipelineDefinition,
+  recordStep,
+  resolveSteps,
   slugify,
+  snapshotGitState,
+  subTransitionPipeline,
+  transitionPipeline,
   writeJSON,
   type PipelineState,
 } from "./pipeline.js";
@@ -27,8 +42,7 @@ import {
 
 export function registerVelaCommands(pi: ExtensionAPI): void {
   pi.registerCommand("vela", {
-    description:
-      "Vela pipeline engine — /vela start|status|cancel|help",
+    description: "Vela pipeline engine — /vela start|status|transition|record|branch|commit|history|auto|cancel|help",
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const parts = args.trim().split(/\s+/);
       const sub = parts[0]?.toLowerCase();
@@ -39,6 +53,27 @@ export function registerVelaCommands(pi: ExtensionAPI): void {
           break;
         case "status":
           await cmdStatus(ctx);
+          break;
+        case "transition":
+          await cmdTransition(ctx);
+          break;
+        case "record":
+          await cmdRecord(parts.slice(1), ctx);
+          break;
+        case "sub-transition":
+          await cmdSubTransition(ctx);
+          break;
+        case "branch":
+          await cmdBranch(parts.slice(1), ctx);
+          break;
+        case "commit":
+          await cmdCommit(parts.slice(1), ctx);
+          break;
+        case "history":
+          await cmdHistory(ctx);
+          break;
+        case "auto":
+          await cmdAuto(ctx);
           break;
         case "cancel":
           await cmdCancel(ctx);
@@ -58,13 +93,9 @@ async function cmdStart(
 ): Promise<void> {
   const cwd = ctx.cwd;
 
-  // Strip surrounding quotes if present
   const cleanRequest = request.replace(/^["']|["']$/g, "").trim();
   if (!cleanRequest) {
-    ctx.ui.notify(
-      "Usage: /vela start \"<task description>\"",
-      "warning"
-    );
+    ctx.ui.notify('Usage: /vela start "<task description>"', "warning");
     return;
   }
 
@@ -79,35 +110,80 @@ async function cmdStart(
     return;
   }
 
-  // Detect task type from request heuristics
-  const taskType = detectTaskType(cleanRequest);
+  // Clean up old cancelled artifacts
+  const cleaned = cleanupCancelledArtifacts(cwd, 24);
 
-  // Generate artifact directory name
-  const ts = formatTimestamp();
-  const slug = slugify(cleanRequest);
-  const artifactDirName = `${ts}-${slug}`;
-  const artifactDir = join(cwd, ".vela", "artifacts", artifactDirName);
+  // Load pipeline definition
+  const def = loadPipelineDefinition(cwd);
+  if (!def) {
+    ensurePipelineTemplate(cwd, ctx);
+  }
+
+  const taskType = detectTaskType(cleanRequest);
+  const pipelineType = "standard";
+
+  // Git state snapshot
+  const gitState = snapshotGitState(cwd);
+
+  // Block on dirty working tree
+  if (gitState.is_repo && !gitState.is_clean) {
+    ctx.ui.notify(
+      "[Vela] Working tree is dirty. Commit or stash changes before starting a pipeline.\n" +
+        `  Dirty files: ${gitState.dirty_files}\n` +
+        "  Run: git stash",
+      "warning"
+    );
+    return;
+  }
 
   // Ensure .vela/templates/pipeline.json is present
   ensurePipelineTemplate(cwd, ctx);
 
-  // Create artifact directory + pipeline-state.json + meta.json
+  // Resolve steps from definition (for init)
+  const pipelineDef = loadPipelineDefinition(cwd);
+  const steps = pipelineDef ? resolveSteps(pipelineDef, pipelineType) : [];
+  const firstStep = steps[0];
+
+  // Create artifact directory
+  const ts = formatTimestamp();
+  const slug = slugify(cleanRequest);
+  const artifactDirName = `${ts}-${slug}`;
+  const artifactDir = join(cwd, ".vela", "artifacts", artifactDirName);
   mkdirSync(artifactDir, { recursive: true });
 
   const pipelineId = `${ts}-${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
 
   const state: PipelineState = {
+    version: "1.1",
     pipeline_id: pipelineId,
-    pipeline_type: "standard",
+    pipeline_type: pipelineType,
     status: "active",
-    current_step: "init",
+    current_step: firstStep?.id ?? "init",
+    current_step_index: 0,
     request: cleanRequest,
     task_type: taskType,
+    type: taskType,
+    scale: "standard",
+    steps: steps.map((s) => s.id),
+    completed_steps: [],
+    revisions: {},
+    git: gitState.is_repo
+      ? {
+          is_repo: true,
+          base_branch: gitState.current_branch,
+          current_branch: gitState.current_branch,
+          pipeline_branch: null,
+          checkpoint_hash: gitState.head_hash,
+          commit_hash: null,
+          stash_ref: gitState.stash_ref ?? null,
+          remote: gitState.remote ?? null,
+        }
+      : undefined,
+    baseline_sha: gitState.is_repo ? gitState.head_hash : null,
     artifact_dir: artifactDir,
     created_at: now,
     updated_at: now,
-    revisions: 0,
   };
 
   writeJSON(join(artifactDir, "pipeline-state.json"), state);
@@ -119,14 +195,16 @@ async function cmdStart(
     vela_version: "1.0.0",
   });
 
-  // Ensure .gitignore entries exist
   ensureGitignore(cwd);
+
+  const stepList = steps.map((s) => s.id).join(" → ");
 
   ctx.ui.notify(
     `[Vela] Pipeline initialised (${taskType}).\n` +
-      `  Step: init → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize\n` +
-      `  Artifact dir: .vela/artifacts/${artifactDirName}\n\n` +
-      `Run /vela status to check state. The PM agent will drive the pipeline steps.`,
+      `  Step: ${stepList}\n` +
+      `  Artifact dir: .vela/artifacts/${artifactDirName}\n` +
+      (cleaned > 0 ? `  Cleaned ${cleaned} old cancelled artifact(s).\n` : "") +
+      "\nRun /vela status to check state.",
     "success"
   );
 }
@@ -141,28 +219,286 @@ async function cmdStatus(ctx: ExtensionCommandContext): Promise<void> {
   }
 
   const def = loadPipelineDefinition(cwd);
-  const pipeline = def?.pipelines[state.pipeline_type];
-  const steps = pipeline?.steps ?? [];
+  const steps = def ? resolveSteps(def, state.pipeline_type) : [];
   const stepIdx = steps.findIndex((s) => s.id === state.current_step);
   const currentStep = steps[stepIdx];
 
   const lines = [
     `[Vela] Pipeline status`,
-    `  ID:       ${state.pipeline_id}`,
+    `  ID:       ${state.pipeline_id ?? "—"}`,
     `  Request:  ${state.request}`,
-    `  Type:     ${state.task_type}`,
+    `  Type:     ${state.task_type ?? state.type ?? "—"}`,
     `  Status:   ${state.status}`,
     `  Step:     ${state.current_step} (${stepIdx + 1}/${steps.length})`,
     `  Mode:     ${currentStep?.mode ?? "unknown"}`,
     `  Actor:    ${currentStep?.actor ?? "unknown"}`,
-    `  Artifact: .vela/artifacts/${state.artifact_dir.split("/").pop()}`,
+    `  Artifact: .vela/artifacts/${state._artifactDir?.split("/").pop() ?? state.artifact_dir.split("/").pop()}`,
   ];
 
-  if (state.sub_phase) {
-    lines.push(`  Sub-phase: ${state.sub_phase}`);
+  if (state.auto) lines.push(`  Auto:     ON`);
+
+  const revisions = state.revisions ?? {};
+  if (revisions[state.current_step]) {
+    lines.push(`  Revisions: ${revisions[state.current_step]}`);
+  }
+
+  const sp = state.sub_phases?.[state.current_step];
+  if (sp) {
+    lines.push(`  Sub-phase: ${sp.current_phase} (${sp.current_index + 1}/${sp.phases.length})`);
+  }
+
+  if (state.git?.pipeline_branch) {
+    lines.push(`  Branch:   ${state.git.pipeline_branch}`);
+  }
+
+  if (state._stale) {
+    lines.push(`  ⚠ Pipeline is stale (no activity for >24h)`);
   }
 
   ctx.ui.notify(lines.join("\n"), "info");
+}
+
+async function cmdTransition(ctx: ExtensionCommandContext): Promise<void> {
+  const cwd = ctx.cwd;
+  const state = findActivePipelineState(cwd);
+
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline to transition.", "warning");
+    return;
+  }
+
+  const def = loadPipelineDefinition(cwd);
+  if (!def) {
+    ctx.ui.notify("[Vela] Pipeline definition not found.", "error" as Parameters<typeof ctx.ui.notify>[1]);
+    return;
+  }
+
+  const result = transitionPipeline(state, def);
+
+  if (!result.ok) {
+    const missingList = result.missing?.join("\n    ") ?? "";
+    ctx.ui.notify(
+      `[Vela] Cannot transition: ${result.error}\n` +
+        (missingList ? `  Missing:\n    ${missingList}` : ""),
+      "warning"
+    );
+    return;
+  }
+
+  if (result.completed) {
+    ctx.ui.notify("[Vela] Pipeline completed successfully! 🎉", "success");
+    return;
+  }
+
+  ctx.ui.notify(
+    `[Vela] Advanced: ${result.previous_step} → ${result.current_step}\n` +
+      `  Step: ${result.current_step_name}\n` +
+      `  Mode: ${result.current_mode}`,
+    "success"
+  );
+}
+
+async function cmdRecord(
+  parts: string[],
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  const state = findActivePipelineState(ctx.cwd);
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+    return;
+  }
+
+  const verdict = parts[0];
+  if (!verdict) {
+    ctx.ui.notify("Usage: /vela record <pass|fail|reject> [--summary TEXT]", "warning");
+    return;
+  }
+
+  // Extract --summary flag
+  const summaryIdx = parts.indexOf("--summary");
+  const summary = summaryIdx >= 0 ? parts.slice(summaryIdx + 1).join(" ") : undefined;
+
+  const result = recordStep(state, verdict, summary);
+  if (!result.ok) {
+    ctx.ui.notify(`[Vela] ${result.error}`, "warning");
+    return;
+  }
+
+  const autoNote = result.auto_disabled
+    ? "\n  ⚠ Auto mode disabled: 2 consecutive rejects."
+    : "";
+
+  ctx.ui.notify(
+    `[Vela] Recorded ${result.verdict} for step "${result.step}" (revision ${result.revision}).${autoNote}`,
+    "success"
+  );
+}
+
+async function cmdSubTransition(ctx: ExtensionCommandContext): Promise<void> {
+  const state = findActivePipelineState(ctx.cwd);
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+    return;
+  }
+
+  const result = subTransitionPipeline(state);
+  if (!result.ok) {
+    ctx.ui.notify(`[Vela] ${result.error}`, "warning");
+    return;
+  }
+
+  if (result.completed) {
+    ctx.ui.notify(
+      `[Vela] All sub-phases completed for "${state.current_step}".`,
+      "success"
+    );
+    return;
+  }
+
+  ctx.ui.notify(
+    `[Vela] Sub-phase: ${result.previous_phase} → ${result.current_phase}\n` +
+      (result.remaining?.length
+        ? `  Remaining: ${result.remaining.join(", ")}`
+        : "  (last sub-phase)"),
+    "success"
+  );
+}
+
+async function cmdBranch(
+  parts: string[],
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  const cwd = ctx.cwd;
+  const state = findActivePipelineState(cwd);
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+    return;
+  }
+
+  const modeIdx = parts.indexOf("--mode");
+  const rawMode = modeIdx >= 0 ? parts[modeIdx + 1] : "auto";
+  const mode = (["auto", "prompt", "none"].includes(rawMode ?? "")
+    ? rawMode
+    : "auto") as "auto" | "prompt" | "none";
+
+  const result = createPipelineBranch(cwd, state, mode);
+
+  if (!result.ok) {
+    ctx.ui.notify(`[Vela] Branch error: ${result.error}`, "warning");
+    return;
+  }
+
+  switch (result.action) {
+    case "skipped":
+      ctx.ui.notify("[Vela] Not a git repository. Branch step skipped.", "info");
+      break;
+    case "existing":
+      ctx.ui.notify(
+        `[Vela] Already on non-protected branch "${result.branch}". Using as pipeline branch.`,
+        "info"
+      );
+      break;
+    case "none":
+      ctx.ui.notify(`[Vela] Branch creation skipped (mode: none).`, "info");
+      break;
+    case "prompt":
+      ctx.ui.notify(
+        `[Vela] Run this command to create the pipeline branch:\n  ${result.suggested_command}`,
+        "info"
+      );
+      break;
+    case "created":
+      ctx.ui.notify(`[Vela] Branch "${result.branch}" created.`, "success");
+      break;
+  }
+}
+
+async function cmdCommit(
+  parts: string[],
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  const cwd = ctx.cwd;
+  const state = findActivePipelineState(cwd);
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+    return;
+  }
+
+  const msgIdx = parts.indexOf("--message");
+  const messageOverride = msgIdx >= 0 ? parts.slice(msgIdx + 1).join(" ") : undefined;
+
+  const def = loadPipelineDefinition(cwd);
+  const result = commitPipeline(cwd, state, def, messageOverride);
+
+  if (!result.ok) {
+    ctx.ui.notify(`[Vela] Commit failed: ${result.error}`, "warning");
+    return;
+  }
+
+  switch (result.action) {
+    case "skipped":
+      ctx.ui.notify("[Vela] Not a git repository. Commit skipped.", "info");
+      break;
+    case "no_changes":
+      ctx.ui.notify("[Vela] No changes to commit.", "info");
+      break;
+    case "committed":
+      ctx.ui.notify(
+        `[Vela] Committed: ${result.commit_message}\n  Hash: ${result.hash?.substring(0, 7)}`,
+        "success"
+      );
+      break;
+  }
+}
+
+async function cmdHistory(ctx: ExtensionCommandContext): Promise<void> {
+  const pipelines = listPipelineHistory(ctx.cwd);
+
+  if (pipelines.length === 0) {
+    ctx.ui.notify("[Vela] No pipeline history.", "info");
+    return;
+  }
+
+  const lines = ["[Vela] Pipeline history:"];
+  for (const p of pipelines.slice(0, 20)) {
+    const icon =
+      p.status === "completed" ? "✅" : p.status === "cancelled" ? "❌" : "🔄";
+    lines.push(
+      `  ${icon} ${p.date} ${p.slug.split("-").slice(2).join("-").substring(0, 25).padEnd(25)} ` +
+        `${p.status.padEnd(10)} step:${p.step}`
+    );
+  }
+
+  ctx.ui.notify(lines.join("\n"), "info");
+}
+
+async function cmdAuto(ctx: ExtensionCommandContext): Promise<void> {
+  const state = findActivePipelineState(ctx.cwd);
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+    return;
+  }
+
+  const wasAuto = state.auto === true;
+  state.auto = !wasAuto;
+  if (state.auto) state.auto_reject_count = 0;
+  state.updated_at = new Date().toISOString();
+
+  if (state._path) {
+    const clean = { ...state };
+    delete clean._path;
+    delete clean._artifactDir;
+    delete clean._stale;
+    const { writeJSON: wj } = await import("./pipeline.js");
+    wj(state._path, clean);
+  }
+
+  ctx.ui.notify(
+    state.auto
+      ? "[Vela] ⚡ Auto mode ON — pipeline will advance automatically."
+      : "[Vela] ⏸ Auto mode OFF — manual mode.",
+    "info"
+  );
 }
 
 async function cmdCancel(ctx: ExtensionCommandContext): Promise<void> {
@@ -174,18 +510,32 @@ async function cmdCancel(ctx: ExtensionCommandContext): Promise<void> {
     return;
   }
 
-  const statePath = join(state.artifact_dir, "pipeline-state.json");
-  const updated: PipelineState = {
-    ...state,
-    status: "cancelled",
-    updated_at: new Date().toISOString(),
-  };
+  state.status = "cancelled";
+  state.updated_at = new Date().toISOString();
 
-  writeJSON(statePath, updated);
+  if (state._path) {
+    const clean = { ...state };
+    delete clean._path;
+    delete clean._artifactDir;
+    delete clean._stale;
+    writeJSON(state._path, clean);
+  }
+
+  const hints: string[] = [];
+  if (state.git?.is_repo) {
+    if (state.git.pipeline_branch) {
+      hints.push(
+        `To discard pipeline branch: git checkout ${state.git.base_branch} && git branch -d ${state.git.pipeline_branch}`
+      );
+    } else if (state.git.checkpoint_hash) {
+      hints.push(`To see pipeline changes: git diff ${state.git.checkpoint_hash}..HEAD`);
+    }
+  }
 
   ctx.ui.notify(
     `[Vela] Pipeline cancelled at step "${state.current_step}".\n` +
-      `  Artifact: .vela/artifacts/${state.artifact_dir.split("/").pop()}`,
+      `  Artifact: .vela/artifacts/${state._artifactDir?.split("/").pop() ?? ""}` +
+      (hints.length ? "\n  " + hints.join("\n  ") : ""),
     "info"
   );
 }
@@ -194,12 +544,21 @@ function cmdHelp(ctx: ExtensionCommandContext): void {
   ctx.ui.notify(
     [
       "[Vela] Pipeline commands:",
-      "  /vela start \"<request>\"  — start a new pipeline for the given task",
-      "  /vela status             — show current pipeline state and step",
-      "  /vela cancel             — cancel the active pipeline",
-      "  /vela help               — show this help",
+      "  /vela start \"<request>\"        — start a new pipeline",
+      "  /vela status                   — show current step and state",
+      "  /vela transition               — advance to next step (checks exit gate)",
+      "  /vela record <pass|fail|reject> [--summary TEXT]",
+      "                                 — record step verdict",
+      "  /vela sub-transition           — advance TDD sub-phase (execute step)",
+      "  /vela branch [--mode auto|prompt|none]",
+      "                                 — create feature branch",
+      "  /vela commit [--message TEXT]  — commit pipeline changes",
+      "  /vela history                  — show pipeline history",
+      "  /vela auto                     — toggle auto-advance mode",
+      "  /vela cancel                   — cancel the active pipeline",
+      "  /vela help                     — show this help",
       "",
-      "The PM agent drives the 12-step pipeline automatically:",
+      "12-step pipeline:",
       "  init → research → plan → plan-check → checkpoint →",
       "  branch → execute → verify → diff-summary → learning → commit → finalize",
     ].join("\n"),
@@ -211,14 +570,10 @@ function cmdHelp(ctx: ExtensionCommandContext): void {
 
 function detectTaskType(request: string): string {
   const lower = request.toLowerCase();
-  if (/\b(fix|bug|error|crash|broken|regression)\b/.test(lower))
-    return "code-bug";
-  if (/\b(refactor|cleanup|clean up|restructure|reorganize)\b/.test(lower))
-    return "code-refactor";
-  if (/\b(doc|docs|documentation|readme|comment|jsdoc)\b/.test(lower))
-    return "docs";
-  if (/\b(analyze|analyse|analysis|report|audit)\b/.test(lower))
-    return "analysis";
+  if (/\b(fix|bug|error|crash|broken|regression)\b/.test(lower)) return "code-bug";
+  if (/\b(refactor|cleanup|clean up|restructure|reorganize)\b/.test(lower)) return "code-refactor";
+  if (/\b(doc|docs|documentation|readme|comment|jsdoc)\b/.test(lower)) return "docs";
+  if (/\b(analyze|analyse|analysis|report|audit)\b/.test(lower)) return "analysis";
   return "code";
 }
 
@@ -226,22 +581,15 @@ function ensurePipelineTemplate(cwd: string, ctx: ExtensionCommandContext): void
   const dest = join(cwd, ".vela", "templates", "pipeline.json");
   if (existsSync(dest)) return;
 
-  // Look for pipeline.json bundled with the extension
   const candidates = [
-    // Development: running from source
     new URL("./templates/pipeline.json", import.meta.url).pathname,
-    // Production: running from dist/
-    join(
-      new URL(".", import.meta.url).pathname,
-      "templates",
-      "pipeline.json"
-    ),
+    join(new URL(".", import.meta.url).pathname, "templates", "pipeline.json"),
   ];
 
   const src = candidates.find((p) => existsSync(p));
   if (!src) {
     ctx.ui.notify(
-      "[Vela] Warning: pipeline.json template not found. Pipeline step validation will be limited.",
+      "[Vela] Warning: pipeline.json template not found. Step validation will be limited.",
       "warning"
     );
     return;
@@ -263,17 +611,12 @@ function ensureGitignore(cwd: string): void {
     "*.vela-tmp",
   ];
 
-  let content = existsSync(gitignorePath)
-    ? readFileSync(gitignorePath, "utf8")
-    : "";
+  let content = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
 
   const missing = entries.filter((e) => !content.includes(e));
   if (missing.length > 0) {
     const addition =
-      (content.endsWith("\n") ? "" : "\n") +
-      "# Vela\n" +
-      missing.join("\n") +
-      "\n";
+      (content.endsWith("\n") ? "" : "\n") + "# Vela\n" + missing.join("\n") + "\n";
     writeFileSync(gitignorePath, content + addition);
   }
 }
