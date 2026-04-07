@@ -447,9 +447,7 @@ Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계�
 
 ```
 엔진이 SDK Review 직접 실행 (review 커맨드)
-  → Stage 1 (Haiku): 빠른 초기 리뷰, 점수 ≥ 20 → pass
-  → Stage 2 (Sonnet): 심층 리뷰 (점수 15-19일 때 에스컬레이션)
-  → Stage 3 (Opus): 최종 에스컬레이션 (점수 < 15)
+  → Opus 단일 리뷰: 점수 ≥ 20 → approve, < 20 → reject
   → review-{step}.md 작성 → approval-{step}.json 자동 생성
      ├─ approve → transition 호출
      └─ reject → Worker에게 피드백 전달 → 재작업
@@ -589,7 +587,7 @@ node .vela/cli/vela-engine.js commit --message "custom message"
 |----------|------|------|
 | 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
 | 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
-| 설계/디버깅/분석 | **Sonnet** (에스컬레이션 시 Opus) | Researcher, Planner |
+| 설계/디버깅/분석 | **Opus** | Researcher, Planner |
 
 ## Teammate vs Subagent 구분
 
@@ -645,7 +643,7 @@ Teammate "conflict-manager" (Sonnet) — 인터페이스 감시 + 병합
 
 Research 단계에서 Subagent(Sonnet)가 단독으로 프로젝트 분석을 수행한다:
 요구사항 파악 → 코드베이스 탐색 → 의존성/제약 분석 → 결론.
-에스컬레이션 조건 충족 시 Opus로 자동 전환 (model-strategy.md 참조).
+Opus + effort:high + thinking:adaptive로 직접 분석 (model-strategy.md 참조).
 
 ### 승인/거부 — 파일 기반
 

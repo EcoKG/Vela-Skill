@@ -271,14 +271,10 @@ scripts/shared/
 - SDK 미설치 시 `{ ok: false, error: 'sdk_not_available' }` 반환 — graceful fallback
 - Rate limit 발생 시 exponential backoff 자동 재시도 (maxRetries: 3)
 
-### 에스컬레이션
+### 리뷰 판정
 
-리뷰 점수 기반 자동 에스컬레이션:
-- Haiku 점수 ≥ 20 → 즉시 pass (단일 모델, ~$0.05)
-- Haiku 점수 15-19 → Sonnet 심층 리뷰 (~$0.15)
-- Haiku 점수 < 15 → Opus rescue (~$0.30)
-- Sonnet 점수 < 20 → Opus rescue
-- Opus도 실패 → reject + escalation.json
+Opus 단일 리뷰 — 점수 ≥ 20 → approve, < 20 → reject.
+reject 시 피드백을 Worker에게 전달하여 재작업. max_revisions 소진 시 `escalate_to_pm`으로 파이프라인 중단.
 
 ---
 
@@ -332,7 +328,7 @@ Playwright HTML→PDF로 생성. 타이틀 페이지, severity별 색상 코딩(
 |----------|------|------|
 | 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
 | 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
-| 설계/디버깅/분석 | **Sonnet** (기본) | Researcher, Planner (에스컬레이션 시 Opus) |
+| 설계/디버깅/분석 | **Opus** | Researcher, Planner |
 
 ### Teammate vs Subagent
 
@@ -343,7 +339,7 @@ Playwright HTML→PDF로 생성. 타이틀 페이지, severity별 색상 코딩(
 | 독립 리뷰/점검 | **Subagent** | `"sonnet"` |
 | 단일 모듈 수정 | **Subagent** | `"sonnet"` |
 | 파일 탐색 | **Subagent** | `"haiku"` |
-| 설계/분석 | **Subagent** | `"sonnet"` → 에스컬레이션 시 `"opus"` |
+| 설계/분석 | **Subagent** | `"opus"` |
 
 ### 팀 규칙
 
@@ -480,7 +476,8 @@ Gate Keeper와 Gate Guard의 모든 오류 경로는 fail-closed로 동작한다
 ├── plan-check.md
 ├── review-execute.md, approval-execute.json
 ├── verification.md, report.md, diff.patch, trace.jsonl
-├── escalation.json (에스컬레이션 발생 시, 일회성)
+├── diff-summary.md, approval-diff-summary.json
+├── learning.md
 ```
 
 ---
