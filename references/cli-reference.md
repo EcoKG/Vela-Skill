@@ -13,7 +13,7 @@ node .vela/cli/vela-engine.js commit [--message TEXT]
 node .vela/cli/vela-engine.js cancel
 node .vela/cli/vela-engine.js history
 node .vela/cli/vela-engine.js auto                                # Auto 모드 토글 (ON↔OFF)
-node .vela/cli/vela-engine.js review                             # SDK 3단계 리뷰 (Haiku→Sonnet→Opus)
+node .vela/cli/vela-engine.js review                             # SDK Opus 단일 리뷰
 node .vela/cli/vela-engine.js plan-check                         # SDK plan.md 구조 검증 (Haiku)
 node .vela/cli/vela-engine.js research                           # SDK 3-관점 병렬 리서치 (Haiku)
 node .vela/cli/vela-engine.js execute                            # SDK 단일 실행 (Sonnet)

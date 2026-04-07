@@ -50,6 +50,10 @@ const {
 // ─── SDK runner ───
 const { runSdkAgent } = require("../shared/sdk-runner");
 
+// ─── SDK diff-summary & learning ───
+const { sdkDiffSummary } = require("../shared/sdk-diff-summary");
+const { sdkLearning } = require("../shared/sdk-learning");
+
 // ─── TreeNode cache — path collector ───
 const { appendPaths } = require("../cache/treenode");
 
@@ -1008,6 +1012,14 @@ function checkLocalGate(stepDef, artifactDir) {
           missing.push(gate);
         }
         break;
+      case "diff_summary_exists":
+        if (!fs.existsSync(path.join(artifactDir, "diff-summary.md")))
+          missing.push(gate);
+        break;
+      case "learning_md_exists":
+        if (!fs.existsSync(path.join(artifactDir, "learning.md")))
+          missing.push(gate);
+        break;
       case "report_md_exists":
         if (!fs.existsSync(path.join(artifactDir, "report.md")))
           missing.push(gate);
@@ -1111,7 +1123,7 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
 
     if (reviewResult.decision === "approve") {
       // sdkReview() already writes approval-{step}.json with richer data
-      // (escalated, escalation_model, threshold) — no duplicate write needed
+      // (score, threshold, stage, model) — no duplicate write needed
       console.log(`  ✅ Approved (score: ${reviewResult.score}/25)`);
 
       return {
@@ -1176,6 +1188,105 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
     score: lastReviewScore,
     attempts: maxRevisions,
     step: stepDef.id,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Verify Retry Loop — execute→code-review→verify cycle
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Retry loop for verify failures: re-execute with verification feedback,
+ * then code-review, then re-verify. Repeats up to maxRevisions times.
+ *
+ * When verify fails, reads verification.md for failure details, re-runs
+ * execute with that feedback injected, runs code-review via runReviewLoop
+ * if the execute step has a reviewer, then re-runs verify.
+ *
+ * @param {Array} steps - Full step definitions array (to find execute/verify dynamically)
+ * @param {Object} state - Current pipeline state
+ * @param {number} maxRevisions - Maximum retry iterations
+ * @returns {Promise<Object>} { ok, attempts, cost, decision? }
+ */
+async function runVerifyRetryLoop(steps, state, maxRevisions) {
+  const artifactDir = state._artifactDir;
+
+  // Dynamically find execute and verify step definitions — no hardcoding
+  const executeDef = steps.find((s) => s.id === "execute");
+  const verifyDef = steps.find((s) => s.id === "verify");
+
+  if (!executeDef || !verifyDef) {
+    return { ok: false, error: "missing_step_defs", attempts: 0, cost: 0 };
+  }
+
+  let totalCost = 0;
+
+  for (let attempt = 1; attempt <= maxRevisions; attempt++) {
+    console.log(`\n  🔄 Verify retry attempt ${attempt}/${maxRevisions}`);
+
+    // (a) Read verification failure content for feedback
+    let verifyFeedback = "";
+    try {
+      const verifyPath = path.join(artifactDir, "verification.md");
+      if (fs.existsSync(verifyPath)) {
+        verifyFeedback = fs.readFileSync(verifyPath, "utf8").trim();
+      }
+    } catch {
+      /* non-critical — proceed without feedback file */
+    }
+
+    if (!verifyFeedback) {
+      verifyFeedback =
+        "Verification 실패. 코드를 검토하고 테스트를 통과하도록 수정하라.";
+    }
+
+    // (b) Re-execute with verification feedback
+    console.log(
+      `  📋 Re-executing with verification feedback (${verifyFeedback.length} chars)`,
+    );
+    const executeResult = await runStep(executeDef, state, verifyFeedback);
+    totalCost += executeResult.cost || 0;
+
+    if (!executeResult.ok) {
+      console.log(`  ❌ Re-execution failed: ${executeResult.error}`);
+      continue; // Try next attempt
+    }
+
+    // (c) Run code-review via runReviewLoop if execute step has a reviewer
+    if (executeDef.team && executeDef.team.reviewer_role) {
+      const reviewMaxRev = executeDef.max_revisions || 3;
+      console.log("  📝 Running code-review after re-execution...");
+      const reviewResult = await runReviewLoop(executeDef, state, reviewMaxRev);
+      totalCost += reviewResult.cost || 0;
+
+      if (!reviewResult.ok) {
+        console.log(
+          `  ⚠️ Code-review failed in verify retry: ${reviewResult.error || reviewResult.decision}`,
+        );
+        continue; // Try next verify retry attempt
+      }
+    }
+
+    // (d) Re-verify
+    console.log("  🔍 Re-running verification...");
+    const verifyResult = await runStep(verifyDef, state);
+    totalCost += verifyResult.cost || 0;
+
+    if (verifyResult.ok) {
+      console.log(`  ✅ Verification passed on retry attempt ${attempt}`);
+      return { ok: true, attempts: attempt, cost: totalCost };
+    }
+
+    console.log(`  ❌ Verification still failing on attempt ${attempt}`);
+  }
+
+  // Max revisions exceeded
+  console.log(`\n  🚨 Verify retry exhausted (${maxRevisions} attempts)`);
+  return {
+    ok: false,
+    decision: "escalate_to_pm",
+    attempts: maxRevisions,
+    cost: totalCost,
   };
 }
 
@@ -1386,6 +1497,60 @@ async function executeStepLoop(steps, stepResults, totalCost) {
       continue;
     }
 
+    // ─── diff-summary / learning — dedicated SDK module calls (non-fatal) ───
+    if (stepDef.id === "diff-summary" || stepDef.id === "learning") {
+      const artifactDir = state._artifactDir;
+      const pipelineSlug = state.pipeline_slug;
+      const stepLabel = stepDef.id === "diff-summary" ? "Diff Summary" : "Learning";
+
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`  Step: ${stepLabel} (${stepDef.id})`);
+      console.log(`  Mode: ${stepDef.mode} | Actor: ${stepDef.actor}`);
+      console.log(`${"─".repeat(60)}\n`);
+
+      try {
+        const sdkFn = stepDef.id === "diff-summary" ? sdkDiffSummary : sdkLearning;
+        const sdkResult = await sdkFn({ artifactDir, cwd: CWD, pipelineSlug });
+
+        const stepCost = sdkResult.cost || 0;
+        totalCost += stepCost;
+        stepResults.push({
+          step: stepDef.id,
+          ok: sdkResult.ok,
+          cost: stepCost,
+          durationMs: sdkResult.durationMs || 0,
+          numTurns: sdkResult.numTurns,
+          error: sdkResult.error,
+        });
+
+        if (sdkResult.ok) {
+          console.log(`  ✅ ${stepLabel} completed (cost: $${stepCost.toFixed(4)})`);
+        } else {
+          // Non-fatal — warn and continue
+          console.warn(`  ⚠️ ${stepLabel} failed: ${sdkResult.error || "unknown"} — continuing (non-fatal)`);
+        }
+      } catch (err) {
+        // Non-fatal — catch unexpected errors
+        console.warn(`  ⚠️ ${stepLabel} error: ${err.message} — continuing (non-fatal)`);
+        stepResults.push({
+          step: stepDef.id,
+          ok: false,
+          cost: 0,
+          durationMs: 0,
+          error: err.message,
+        });
+      }
+
+      // Always record pass and transition (non-fatal step)
+      engine(["record", "pass", "--summary", `${stepLabel}: completed`]);
+      const transResult = engine(["transition"]);
+      if (transResult.completed) {
+        console.log("\n✅ Pipeline completed successfully!");
+        break;
+      }
+      continue;
+    }
+
     // Agent steps — run SDK query
     try {
       const stepResult = await runStep(stepDef, state);
@@ -1393,6 +1558,39 @@ async function executeStepLoop(steps, stepResults, totalCost) {
       totalCost += stepResult.cost;
 
       if (!stepResult.ok) {
+        // Verify step failure → enter retry loop (execute→code-review→verify)
+        if (stepDef.id === "verify") {
+          const maxRev = stepDef.max_revisions || 3;
+          console.log(`\n  🔄 Verify failed — entering retry loop (max ${maxRev} attempts)`);
+          const retryResult = await runVerifyRetryLoop(steps, state, maxRev);
+          totalCost += retryResult.cost || 0;
+
+          if (retryResult.ok) {
+            // Retry succeeded — record pass and advance
+            engine(["record", "pass", "--summary", `Verify passed after ${retryResult.attempts} retry(s)`]);
+            // Skip the review/gate/transition below — jump straight to transition
+            const transResult = engine(["transition"]);
+            if (transResult.completed) {
+              console.log("\n✅ Pipeline completed successfully!");
+              break;
+            }
+            continue;
+          }
+
+          // Retry exhausted — escalate_to_pm
+          console.error(
+            `\n🚨 Verify retry exhausted: escalate_to_pm (${retryResult.attempts} attempts)`,
+          );
+          engine([
+            "record",
+            "fail",
+            "--summary",
+            `Verify retry exhausted: escalate_to_pm (${retryResult.attempts} attempts)`,
+          ]);
+          break; // escalate_to_pm — graceful exit from step loop
+        }
+
+        // Generic step failure — record and continue
         console.error(
           `\n❌ Step "${stepDef.name}" failed: ${stepResult.error}`,
         );
@@ -1752,6 +1950,7 @@ module.exports = {
   checkLocalGate,
   runStep,
   runReviewLoop,
+  runVerifyRetryLoop,
   generateReport,
   detectProjectMode,
 };

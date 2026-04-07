@@ -1,6 +1,6 @@
 /**
  * Vela SDK Researcher
- * 3-perspective parallel research module using Haiku agents.
+ * 3-perspective parallel research module using Opus agents.
  * Runs architecture, security, quality analysis concurrently via Promise.allSettled()
  * and merges results into research.md.
  *
@@ -30,7 +30,7 @@ const { runSdkAgent } = require("./sdk-runner");
 const { MODEL_VERSIONS } = require("./constants");
 
 // ─── Constants ───
-const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
+const OPUS_MODEL = MODEL_VERSIONS.OPUS;
 // ─── Hypothesis prefix — prepended to all perspective prompts ───
 // Enforces competing-hypothesis debugging procedure for structured analysis.
 // Source: scripts/agents/researcher/hypothesis.md (inlined for SDK isolation)
@@ -150,7 +150,7 @@ function writeResearchArtifact(artifactDir, content) {
 /**
  * Run 3-perspective parallel SDK research analysis.
  *
- * Launches architecture, security, quality Haiku agents concurrently,
+ * Launches architecture, security, quality Opus agents concurrently,
  * collects results via Promise.allSettled(), merges into research.md.
  *
  * @param {Object} opts
@@ -178,10 +178,11 @@ async function sdkResearch(opts) {
 
     return runSdkAgent({
       prompt: userPrompt,
-      model: HAIKU_MODEL,
+      model: OPUS_MODEL,
       cwd,
       systemPrompt: prompt,
-      effort: "low",
+      effort: "high",
+      thinking: { type: "adaptive" },
     });
   });
 

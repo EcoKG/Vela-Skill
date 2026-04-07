@@ -111,14 +111,34 @@
           "entry_gate": ["implementation_complete"],
           "exit_gate": ["verification_md_exists", "ref_integrity"],
           "artifacts": ["verification.md"],
-          "max_revisions": 2
+          "max_revisions": 3
+        },
+        {
+          "id": "diff-summary",
+          "name": "Diff Summary Review",
+          "actor": "agent",
+          "mode": "rw-artifact",
+          "entry_gate": ["verification_md_exists"],
+          "exit_gate": ["diff_summary_exists"],
+          "artifacts": ["diff-summary.md", "approval-diff-summary.json"],
+          "max_revisions": 1
+        },
+        {
+          "id": "learning",
+          "name": "Learning Extraction",
+          "actor": "agent",
+          "mode": "rw-artifact",
+          "entry_gate": ["diff_summary_exists"],
+          "exit_gate": ["learning_md_exists"],
+          "artifacts": ["learning.md"],
+          "max_revisions": 1
         },
         {
           "id": "commit",
           "name": "Commit Changes",
           "actor": "pm",
           "mode": "read",
-          "entry_gate": ["verification_md_exists"],
+          "entry_gate": ["learning_md_exists"],
           "exit_gate": ["changes_committed"],
           "artifacts": ["diff.patch"],
           "max_revisions": 1,

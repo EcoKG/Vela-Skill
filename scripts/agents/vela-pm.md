@@ -17,7 +17,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 1. 파이프라인 규모 선택:
    - small: trivial (init → execute → commit → finalize)
    - medium: quick (init → plan → execute → verify → commit → finalize)
-   - large: standard (full 10-step with research, plan, team review)
+   - large: standard (full 12-step with research, plan, team review)
 
 2. `node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large>`
 
@@ -30,7 +30,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 - **Research**: SDK Researcher agent (Sonnet) — 프로젝트 분석
 - **Plan**: SDK Planner agent (Sonnet) — 독립 설계
 - **Execute**: SDK Executor agent (Sonnet) — 코드 구현
-- **Review**: SDK Reviewer가 자동 리뷰 (Haiku→Sonnet→Opus 3단계 에스컬레이션)
+- **Review**: SDK Reviewer가 자동 리뷰 (Opus 단일)
 - reject 시 오케스트레이터가 리뷰 피드백을 주입하여 자동 재실행
 
 ## 절대 하지 않을 것

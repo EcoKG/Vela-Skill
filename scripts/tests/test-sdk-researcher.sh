@@ -4,7 +4,7 @@
 #
 # Contract-level verification — module exports, 3-perspective
 # parallel research with PERSPECTIVE markers, SDK fallback,
-# partial/total failure, hook isolation.
+# partial/total failure, hook isolation, Opus parameters.
 #
 # Tests run with a mock SDK module (no real API calls).
 # Mock SDK placed in scripts/shared/node_modules/ (temporary)
@@ -21,6 +21,7 @@
 # Test 6:  All perspectives fail — research.md still written with error content
 # Test 7:  settingSources isolation — captured SDK options include settingSources: []
 # Test 8:  Perspective markers present in system prompts (grep source)
+# Test 9:  Opus parameters — model contains 'opus', effort:'high', thinking.type:'adaptive'
 # K001:    settingSources present in sdk-researcher.js source
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -130,7 +131,7 @@ function query(args) {
         subtype: 'error_during_execution',
         result: 'Simulated failure for ' + perspective,
         total_cost_usd: 0.0001,
-        model: 'mock-haiku',
+        model: 'mock-opus',
         session_id: 'mock-researcher-' + perspective,
         num_turns: 1,
         duration_ms: 50
@@ -141,7 +142,7 @@ function query(args) {
         subtype: 'success',
         result: '# ' + perspective + ' analysis result\n\n## Hypotheses\n- H1: Test hypothesis\n\n## Evidence\n- Code analysis complete\n\n## Conclusion\n' + perspective + ' perspective analysis complete',
         total_cost_usd: 0.001,
-        model: 'mock-haiku',
+        model: 'mock-opus',
         session_id: 'mock-researcher-' + perspective,
         num_turns: 2,
         duration_ms: 150
@@ -350,6 +351,28 @@ else
   echo "  ❌ FAIL: Missing perspective markers — arch:$arch_marker sec:$sec_marker qual:$qual_marker"
   FAIL=$((FAIL + 1))
 fi
+
+# ── Test 9: Opus parameters — model, effort, thinking ──
+echo ""
+echo "📋 Test 9: Opus parameters — model contains 'opus', effort:'high', thinking.type:'adaptive'"
+rm -f "$ARTIFACT_DIR"/* 2>/dev/null || true
+> "$CAPTURE_FILE"
+result=$(run_researcher_test "
+  const { sdkResearch } = require('$MODULE');
+  sdkResearch({ step: { name: 'opus-params-test' }, artifactDir: '$ARTIFACT_DIR', cwd: '$CWD_DIR' }).then(r => {
+    const fs = require('fs');
+    const lines = fs.readFileSync(process.env.SDK_CAPTURE_FILE, 'utf8').trim().split('\n');
+    const entries = lines.map(l => JSON.parse(l));
+    const allOpus = entries.every(e => e.options && typeof e.options.model === 'string' && e.options.model.toLowerCase().includes('opus'));
+    const allEffortHigh = entries.every(e => e.options && e.options.effort === 'high');
+    const allThinkingAdaptive = entries.every(e => e.options && e.options.thinking && e.options.thinking.type === 'adaptive');
+    const count = entries.length;
+    console.log(JSON.stringify({ allOpus, allEffortHigh, allThinkingAdaptive, count }));
+  }).catch(e => console.log(JSON.stringify({ crashed: true, error: e.message })));
+")
+assert_contains "all calls use Opus model" '"allOpus":true' "$result"
+assert_contains "all calls use effort:high" '"allEffortHigh":true' "$result"
+assert_contains "all calls use thinking.type:adaptive" '"allThinkingAdaptive":true' "$result"
 
 # ── K001 cross-file sweep: settingSources in source ──
 echo ""

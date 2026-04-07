@@ -156,7 +156,7 @@ ANTHROPIC_API_KEY=sk-... npx tsx app.tsx
 Vela는 이미 이 방식을 구현했다:
 - SDK query()를 감싸서 research → plan → execute → review 파이프라인 강제
 - 도구 화이트리스트 + disallowedTools로 PM의 코드 작성 차단
-- SDK reviewer가 3단계(Haiku→Sonnet→Opus) 리뷰 게이트
+- SDK reviewer가 Opus 단일 리뷰 게이트
 
 **핵심 코드 위치:**
 - `scripts/cli/vela-pipeline.js` — 오케스트레이터

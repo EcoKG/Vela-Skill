@@ -6,14 +6,16 @@ vela-pipeline.js 오케스트레이터가 각 단계의 모델을 자동 선택�
 
 | 역할 | 기본 모델 | 비고 |
 |------|----------|------|
-| Researcher | Sonnet | 프로젝트 분석 |
+| Researcher | Opus | 3관점 병렬 분석 |
 | Planner | Sonnet | 설계 |
 | Executor | Sonnet | 코드 구현 |
-| Reviewer | Haiku→Sonnet→Opus | 3단계 에스컬레이션 |
+| Reviewer | Opus | 단일 리뷰 |
+| Diff Summary | Opus | 전체 diff 통합 검토 (5차원 채점) |
+| Learning | Haiku | 파이프라인 학습 축적 |
 
-## 에스컬레이션 동작 (관찰용 참고)
+## 리뷰 동작 (관찰용 참고)
 
-오케스트레이터가 자동으로 에스컬레이션을 처리한다:
-- Reviewer 점수 미달 시 상위 모델로 자동 재실행
-- reject 연속 시 상위 모델로 자동 재실행
-- PM은 에스컬레이션에 개입하지 않는다
+오케스트레이터가 자동으로 리뷰를 처리한다:
+- Opus 단일 호출로 5차원 채점 (점수 ≥ 20/25 → 승인)
+- reject 시 오케스트레이터가 피드백을 주입하여 자동 재실행
+- PM은 리뷰에 개입하지 않는다

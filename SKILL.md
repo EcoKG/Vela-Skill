@@ -25,7 +25,7 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
   결과를 예쁘게 포맷하여 표시:
   ```
   ⛵ Vela Pipeline Status
-  🧭 standard │ Step: execute (7/10) │ Task: 인증 시스템 추가
+  🧭 standard │ Step: execute (7/12) │ Task: 인증 시스템 추가
   ✦ Branch: vela/auth-system-1358
   🌟 Completed: init → research → plan → plan-check → checkpoint → branch
   ```
@@ -101,7 +101,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - small + code-bug → ralph (자동 반복)
    - small + docs → hotfix (init → execute → commit)
    - medium + code → quick (init → plan → execute → verify → commit → finalize)
-   - large + code → standard (full 10-step)
+   - large + code → standard (full 12-step)
 
 4. **파이프라인 시작**
    ```bash
@@ -170,7 +170,7 @@ node .vela/cli/vela-engine.js auto
    ├── config.json              ← Vela 설정
    ├── shared/                  ← SDK 공유 모듈
    │   ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit, 격리)
-   │   ├── sdk-reviewer.js      ← 3단계 Haiku→Sonnet→Opus 리뷰
+   │   ├── sdk-reviewer.js      ← Opus 단일 리뷰
    │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
    │   ├── sdk-researcher.js    ← 3관점 병렬 분석
    │   ├── sdk-executor.js      ← Sonnet TDD 실행
@@ -325,7 +325,7 @@ node .vela/cli/vela-engine.js auto
 
 | 종류 | 단계 | 조건 |
 |------|------|------|
-| **standard** | init → research → plan → plan-check → checkpoint → **branch** → execute → verify → **commit** → finalize | 6+ 파일, 300+ 라인 |
+| **standard** | init → research → plan → plan-check → checkpoint → **branch** → execute → verify → diff-summary → learning → **commit** → finalize | 6+ 파일, 300+ 라인 |
 | **quick** | init → plan → execute → verify → **commit** → finalize | 3 파일 이하, 100 라인 이하 |
 | **trivial** | init → execute → **commit** → finalize | 1 파일, 10 라인 이하 |
 
@@ -371,7 +371,7 @@ node .vela/cli/vela-engine.js branch                # 브랜치 생성 (branch �
 node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commit 단계)
 node .vela/cli/vela-engine.js sub-transition         # execute sub-phase 전진
 node .vela/cli/vela-engine.js cancel                # 파이프라인 취소 (복구 안내 포함)
-node .vela/cli/vela-engine.js review                # SDK 3단계 코드 리뷰 (Haiku→Sonnet→Opus)
+node .vela/cli/vela-engine.js review                # SDK Opus 단일 리뷰
 node .vela/cli/vela-engine.js plan-check            # SDK plan.md 구조 검증 (Haiku)
 node .vela/cli/vela-engine.js research              # SDK 3-관점 병렬 리서치 (Haiku)
 node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
@@ -459,7 +459,7 @@ Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계�
 
 | 커맨드 | 모델 | 설명 |
 |--------|------|------|
-| `review` | Haiku→Sonnet→Opus (3단계) | 코드/산출물 리뷰, 점수 기반 에스컬레이션 |
+| `review` | Opus (단일) | 코드/산출물 리뷰, 5차원 채점 (≥20/25 승인) |
 | `plan-check` | Haiku | plan.md 구조 검증 (필수 섹션 + 200byte 최소 분량) |
 | `research` | Haiku × 3 (병렬) | 아키텍처/보안/품질 3-관점 병렬 분석 |
 | `execute` | Sonnet | TDD 기반 코드 구현 (readwrite 권한) |
@@ -683,7 +683,7 @@ Vela는 `@anthropic-ai/claude-agent-sdk`의 `query()` API를 사용하여 파이
 vela-pipeline.js (오케스트레이터)
   ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
   ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
-  ├── sdk-reviewer.js (3단계 리뷰)
+  ├── sdk-reviewer.js (Opus 단일 리뷰)
   ├── sdk-plan-checker.js (plan 검증)
   ├── sdk-researcher.js (3관점 분석)
   ├── sdk-executor.js (코드 구현)

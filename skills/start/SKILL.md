@@ -30,7 +30,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
    사용자에게 선택지를 제시한다:
    - ⛵ **small**: trivial (init → execute → commit → finalize) — 단일 파일, 10줄 이하
    - 🧭 **medium**: quick (init → plan → execute → verify → commit → finalize) — 3파일 이하
-   - ✦ **large**: standard (full 10-step with research, plan, team review) — 대규모 작업
+   - ✦ **large**: standard (full 12-step with research, plan, team review) — 대규모 작업
 
 5. **파이프라인 시작**
    ⚠️ Bash timeout을 반드시 600000 (10분)으로 설정한다. SDK 에이전트가 순차 실행되므로 수 분이 걸린다.
