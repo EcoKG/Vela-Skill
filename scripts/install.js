@@ -92,6 +92,7 @@ const FILE_MANIFEST = [
   { src: "scripts/cli/vela-report.js", dst: "cli/vela-report.js" },
   { src: "scripts/cli/vela-pipeline.js", dst: "cli/vela-pipeline.js" },
   { src: "scripts/cli/vela-wave.js", dst: "cli/vela-wave.js" },
+  { src: "scripts/cli/vela-sprint.js", dst: "cli/vela-sprint.js" },
   // Cache
   { src: "scripts/cache/treenode.js", dst: "cache/treenode.js" },
   // Root-level managed files
@@ -110,7 +111,7 @@ const FILE_MANIFEST = [
   { src: "scripts/agents/vela-pm.md", dst: "agents/vela-pm.md" },
   // Templates
   { src: "templates/pipeline.json", dst: "templates/pipeline.json" },
-  { src: "templates/presets.json", dst: "templates/presets.json" },
+
   {
     src: "templates/config.json",
     dst: "templates/config.json",
@@ -236,6 +237,8 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/sdk-validator.js", dst: "shared/sdk-validator.js" },
   { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
   { src: "scripts/shared/sdk-analyzer.js", dst: "shared/sdk-analyzer.js" },
+  { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
+  { src: "scripts/shared/sdk-sprint-planner.js", dst: "shared/sdk-sprint-planner.js" },
   {
     src: "scripts/shared/sdk-custom-tools.js",
     dst: "shared/sdk-custom-tools.js",
@@ -593,7 +596,7 @@ function install() {
 This project uses Vela for development governance.
 
 - To explore/read code: use normal tools freely (Explore mode).
-- To modify code: ALWAYS start with \`node .vela/cli/vela-pipeline.js run "<task>" --scale <small|medium|large>\`
+- To modify code: ALWAYS start with \`node .vela/cli/vela-pipeline.js run "<task>"\`
 - Follow pipeline steps in order. Do NOT use TaskCreate/TaskUpdate during pipeline execution.
 - Do NOT skip pipeline steps or create your own plans outside the pipeline.
 - vela-pipeline.js가 각 단계의 SDK agent를 자동 실행한다.

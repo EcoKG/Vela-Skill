@@ -4,7 +4,7 @@
 
 ## 새 파이프라인 시작
 ```bash
-node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>
+node .vela/cli/vela-pipeline.js run "요청"
 ```
 
 ## 기존 파이프라인 재개
@@ -14,7 +14,7 @@ node .vela/cli/vela-pipeline.js resume
 ```
 `resume`은 현재 단계부터 자동으로 이어서 실행한다. 완료된 단계는 skip된다.
 
-## Standard Pipeline (large)
+## Standard Pipeline
 
 ```
 오케스트레이터가 자동 실행하는 흐름:
@@ -35,16 +35,28 @@ node .vela/cli/vela-pipeline.js resume
 9. approve/reject 자동 판정 (reject 시 리뷰 피드백과 함께 재실행)
 ```
 
-## Quick Pipeline (medium)
+## 스프린트 실행 흐름
 
-Plan → Execute. 오케스트레이터가 각 단계의 SDK agent + 리뷰를 자동 실행.
+여러 슬라이스로 분해가 필요한 대규모 요청은 스프린트로 실행한다.
 
-## Trivial Pipeline (small)
+```
+[Sprint Planning] — SDK Sprint Planner (Sonnet)
+1. PM이 vela-sprint.js run "요청" 실행
+2. Sprint Planner가 슬라이스 분해 + 의존성 그래프 생성
+3. sprint-plan.json 생성 (슬라이스 목록, 의존성, 실행 순서)
 
-PM 직접 수행. 에이전트 소환 없음. 소스 코드 직접 접근 허용.
+[Slice Execution] — 각 슬라이스를 독립 파이프라인으로 실행
+4. getNextSlice()로 다음 실행 가능한 슬라이스 결정
+5. 의존성이 충족된 슬라이스에 대해 vela-pipeline.js run 실행
+6. 완료된 슬라이스의 컨텍스트를 다음 슬라이스에 전달
+7. 모든 슬라이스 완료 시 스프린트 종료
 
-## Ralph Pipeline
-execute → verify 자동 반복 (최대 10회).
+[Resume/Cancel] — 중단 복구
+- resume: 마지막 실행 지점부터 자동 재개
+- cancel: 진행 중인 스프린트 취소
+```
+
+단일 요청으로 처리 가능하면 파이프라인, 다중 슬라이스 분해가 필요하면 스프린트를 사용한다.
 
 ## PM 승인 기준
 - **APPROVE**: Reviewer 점수 20+/25, CRITICAL 0개

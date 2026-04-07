@@ -46,7 +46,7 @@ sync_local_project() {
   # Templates (skip config.json to preserve user settings)
   mkdir -p .vela/templates
   cp "$SRC/templates/pipeline.json" .vela/templates/ 2>/dev/null
-  cp "$SRC/templates/presets.json" .vela/templates/ 2>/dev/null
+
 
   # References
   mkdir -p .vela/references

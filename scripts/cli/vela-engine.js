@@ -6,7 +6,7 @@
  * All state transitions happen through this CLI, never by direct file edits.
  *
  * Commands:
- *   init <request> [--type TYPE] [--scale SIZE]  — Start a new pipeline
+ *   init <request> [--type TYPE]  — Start a new pipeline
  *   state                                          — Show current pipeline state
  *   transition                                     — Advance to the next step
  *   dispatch [--role ROLE]                         — Get agent specification
@@ -108,34 +108,7 @@ function cmdInit() {
   const cleaned = cleanupCancelledArtifacts(24);
 
   const type = getFlag("--type") || "code";
-  const scale = getFlag("--scale");
-
-  // Scale selection is MANDATORY — user must choose
-  if (!scale) {
-    return output({
-      ok: false,
-      error: "Pipeline scale selection required. Ask the user to choose.",
-      options: {
-        small: "간단한 작업 — 단일 파일, 설정 변경, 소소한 수정",
-        medium: "보통 작업 — 여러 파일, 계획 후 구현",
-        large: "대규모 작업 — 리서치, 설계, 팀 리뷰 포함",
-      },
-      types: {
-        code: "기능 추가/구현 (기본값)",
-        "code-bug": "버그 수정 (테스트 통과까지 자동 반복)",
-        "code-refactor": "리팩토링",
-        docs: "문서/설정/비-소스 수정",
-      },
-      usage:
-        'vela-engine init "task" --scale small|medium|large [--type code|code-bug|code-refactor|docs]',
-      message:
-        "User must select scale (size of work). Type is optional — defaults to code.",
-    });
-  }
-
-  // Support legacy scale values (ralph, hotfix, trivial, quick, standard)
-  const normalizedScale = normalizeLegacyScale(scale);
-  const pipelineType = resolvePipeline(normalizedScale, type);
+  const pipelineType = "standard";
 
   // Load pipeline definition (before creating any directories)
   const pipelineDef = loadPipelineDefinition();
@@ -184,7 +157,7 @@ function cmdInit() {
     pipeline_type: pipelineType,
     request: request,
     type: type,
-    scale: normalizedScale,
+    scale: "standard",
     current_step: firstStep.id,
     current_step_index: 0,
     steps: steps.map((s) => s.id),
@@ -212,7 +185,7 @@ function cmdInit() {
   const meta = {
     request,
     type,
-    scale,
+    scale: "standard",
     pipeline_type: pipelineType,
     created_at: now.toISOString(),
   };
@@ -224,7 +197,7 @@ function cmdInit() {
     ok: true,
     command: "init",
     pipeline_type: pipelineType,
-    scale: normalizedScale,
+    scale: "standard",
     current_step: firstStep.id,
     current_mode: firstStep.mode,
     artifact_dir: artifactDir,
@@ -650,12 +623,10 @@ function cmdCommit() {
     infra: "chore",
   };
   const commitType = typeMap[state.type] || "feat";
-  const slug = slugify(state.request);
   const shortDesc = state.request.substring(0, 70);
 
   const messageFlag = getFlag("--message");
-  const commitMessage = messageFlag || `${commitType}(${slug}): ${shortDesc}`;
-  const commitBody = `\nVela-Pipeline: ${path.basename(state._artifactDir)}\nCheckpoint: ${state.git.checkpoint_hash || "unknown"}`;
+  const commitMessage = messageFlag || `${commitType}: ${shortDesc}`;
 
   // Capture diff as artifact
   try {
@@ -686,14 +657,8 @@ function cmdCommit() {
   }
 
   // Commit
-  const fullMessage = commitMessage + "\n" + commitBody;
   try {
-    const tmpMsgFile = path.join(VELA_DIR, "_commit-msg.tmp");
-    fs.writeFileSync(tmpMsgFile, fullMessage);
-    gitExec("commit", "-F", tmpMsgFile);
-    try {
-      fs.unlinkSync(tmpMsgFile);
-    } catch (e) {}
+    gitExec("commit", "-m", commitMessage);
   } catch (e) {
     return output({ ok: false, error: `Commit failed: ${e.message}` });
   }
@@ -722,7 +687,7 @@ function cmdAuto() {
       ok: false,
       command: "auto",
       error: "No active pipeline.",
-      message: 'Start a pipeline first: vela-engine init "task" --scale <size>',
+      message: 'Start a pipeline first: vela-engine init "task"',
     });
   }
 
@@ -1681,65 +1646,6 @@ function autoDetectScale(request) {
   if (words <= 10) return "small";
   if (words <= 30) return "medium";
   return "large";
-}
-
-/**
- * Normalize legacy scale values to small/medium/large.
- * Keeps backward compatibility with ralph, hotfix, trivial, quick, standard.
- */
-function normalizeLegacyScale(scale) {
-  switch (scale) {
-    case "trivial":
-      return "small";
-    case "quick":
-      return "medium";
-    case "standard":
-      return "large";
-    // ralph and hotfix pass through — handled by resolvePipeline
-    case "small":
-    case "medium":
-    case "large":
-    case "ralph":
-    case "hotfix":
-      return scale;
-    default:
-      return "medium";
-  }
-}
-
-/**
- * Resolve pipeline type from scale + type combination.
- *
- * Matrix:
- *   size\type    code/refactor    code-bug     docs
- *   small        trivial          ralph        hotfix
- *   medium       quick            ralph        quick
- *   large        standard         standard     quick
- *   ralph        ralph            ralph        ralph
- *   hotfix       hotfix           hotfix       hotfix
- */
-function resolvePipeline(scale, type) {
-  // Direct pipeline names (legacy/explicit)
-  if (scale === "ralph") return "ralph";
-  if (scale === "hotfix") return "hotfix";
-
-  if (type === "code-bug") {
-    return scale === "large" ? "standard" : "ralph";
-  }
-  if (type === "docs") {
-    return scale === "small" ? "hotfix" : "quick";
-  }
-  // code, code-refactor
-  switch (scale) {
-    case "small":
-      return "trivial";
-    case "medium":
-      return "quick";
-    case "large":
-      return "standard";
-    default:
-      return "standard";
-  }
 }
 
 function slugify(text) {

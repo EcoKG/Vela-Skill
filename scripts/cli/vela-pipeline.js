@@ -8,7 +8,7 @@
  * and permission hooks.
  *
  * Commands:
- *   run <request> --scale <s/m/l> [--type TYPE]  — Run full pipeline
+ *   run <request> [--type TYPE]                   — Run full pipeline
  *   resume                                         — Resume active pipeline from current step
  *   status                                         — Show pipeline status
  *   cancel                                         — Cancel active pipeline
@@ -430,12 +430,11 @@ function loadAgentPrompt(actor) {
 // ═══════════════════════════════════════════════════════════
 
 /**
- * Detect project mode based on codebase state + work scale.
+ * Detect project mode based on codebase state.
  *
  * Modes:
  *   bootstrap   — Empty repo / no code to explore (fileCount === 0)
- *   targeted    — Existing codebase, narrow change scope (scale: small/medium)
- *   exploratory — Existing codebase, wide/ambiguous scope (scale: large)
+ *   exploratory — Existing codebase (fileCount > 0)
  *
  * fileCount is derived from `git ls-files` when cwd is a git repo,
  * otherwise from a 1-level recursive fs.readdirSync() that skips
@@ -443,10 +442,9 @@ function loadAgentPrompt(actor) {
  * (err on the side of more thorough methodology).
  *
  * @param {string} cwd - Working directory to inspect
- * @param {string} scale - Work scale: small/medium/large
- * @returns {'bootstrap'|'targeted'|'exploratory'} project mode
+ * @returns {'bootstrap'|'exploratory'} project mode
  */
-function detectProjectMode(cwd, scale) {
+function detectProjectMode(cwd) {
   let fileCount = 0;
 
   try {
@@ -473,25 +471,15 @@ function detectProjectMode(cwd, scale) {
   } catch (_e) {
     // Unexpected error — fallback to exploratory (conservative)
     console.log(
-      `[project-mode] detection error, fallback=exploratory scale=${scale}`,
+      `[project-mode] detection error, fallback=exploratory`,
     );
     return "exploratory";
   }
 
-  // Decision tree
-  let mode;
-  if (fileCount === 0) {
-    mode = "bootstrap";
-  } else if (scale === "small" || scale === "medium") {
-    mode = "targeted";
-  } else if (scale === "large") {
-    mode = "exploratory";
-  } else {
-    // Unknown scale — conservative fallback
-    mode = "exploratory";
-  }
+  // Decision tree: bootstrap (empty) or exploratory (has code)
+  const mode = fileCount === 0 ? "bootstrap" : "exploratory";
 
-  console.log(`[project-mode] fileCount=${fileCount} scale=${scale} → ${mode}`);
+  console.log(`[project-mode] fileCount=${fileCount} → ${mode}`);
   return mode;
 }
 
@@ -1100,7 +1088,6 @@ async function runReviewLoop(stepDef, state, maxRevisions) {
       step: stepDef.id,
       artifactDir,
       cwd: CWD,
-      scale: state.scale,
     });
 
     if (!reviewResult.ok) {
@@ -1298,23 +1285,20 @@ async function runVerifyRetryLoop(steps, state, maxRevisions) {
  * Run the full pipeline from init to completion.
  *
  * @param {string} request - User's task description
- * @param {string} scale - Pipeline scale (small/medium/large)
  * @param {string} type - Pipeline type (code/code-bug/code-refactor/docs)
  * @returns {Promise<void>}
  */
-async function runPipeline(request, scale, type) {
+async function runPipeline(request, type) {
   console.log("═══════════════════════════════════════════════════");
   console.log("  Vela Pipeline Orchestrator");
   console.log(`  Request: ${request}`);
-  console.log(`  Scale: ${scale} | Type: ${type}`);
+  console.log(`  Type: ${type}`);
   console.log("═══════════════════════════════════════════════════");
 
   // Step 1: Initialize pipeline via engine
   const engineArgs = [
     "init",
     request,
-    "--scale",
-    scale,
     "--type",
     type,
     "--auto",
@@ -1334,7 +1318,7 @@ async function runPipeline(request, scale, type) {
 
   // Inject project_mode into pipeline-state.json for downstream steps (M023/S02)
   try {
-    const projectMode = detectProjectMode(CWD, scale);
+    const projectMode = detectProjectMode(CWD);
     const statePath = path.join(initResult.artifact_dir, "pipeline-state.json");
     if (fs.existsSync(statePath)) {
       const stateData = JSON.parse(fs.readFileSync(statePath, "utf-8"));
@@ -1712,7 +1696,6 @@ function generateReport(state, stepResults) {
   let report = `# Pipeline Report\n\n`;
   report += `**Request:** ${state.request}\n`;
   report += `**Pipeline:** ${state.pipeline_type}\n`;
-  report += `**Scale:** ${state.scale}\n`;
   report += `**Created:** ${state.created_at}\n`;
   report += `**Completed:** ${now}\n`;
   report += `**Total Cost:** $${totalCost.toFixed(4)}\n\n`;
@@ -1818,20 +1801,14 @@ async function cmdRun() {
   const request = args[1];
   if (!request) {
     console.error(
-      "Usage: vela-pipeline run <request> --scale <small|medium|large> [--type <type>]",
+      "Usage: vela-pipeline run <request> [--type <type>]",
     );
-    process.exit(1);
-  }
-
-  const scale = getFlag("--scale");
-  if (!scale) {
-    console.error("Error: --scale required (small, medium, or large)");
     process.exit(1);
   }
 
   const type = getFlag("--type") || "code";
 
-  await runPipeline(request, scale, type);
+  await runPipeline(request, type);
 }
 
 /**
@@ -1849,7 +1826,7 @@ async function cmdResume() {
   console.log("═══════════════════════════════════════════════════");
   console.log("  Vela Pipeline Orchestrator — RESUME");
   console.log(`  Request: ${state.request}`);
-  console.log(`  Scale: ${state.scale} | Type: ${state.pipeline_type}`);
+  console.log(`  Type: ${state.pipeline_type}`);
   console.log(`  Current step: ${state.current_step}`);
   console.log(`  Completed: ${(state.completed_steps || []).join(", ") || "none"}`);
   console.log("═══════════════════════════════════════════════════");
@@ -1883,7 +1860,7 @@ function showHelp() {
 Vela Pipeline Orchestrator — SDK-based Pipeline Execution
 
 Usage:
-  node vela-pipeline.js run <request> --scale <s|m|l> [--type <type>]
+  node vela-pipeline.js run <request> [--type <type>]
   node vela-pipeline.js resume
   node vela-pipeline.js status
   node vela-pipeline.js cancel
@@ -1896,13 +1873,12 @@ Commands:
   cancel    Cancel the active pipeline
 
 Options:
-  --scale   Pipeline scale: small, medium, large (required for run)
   --type    Task type: code, code-bug, code-refactor, docs (default: code)
   --help    Show this help message
 
 Examples:
-  node vela-pipeline.js run "Add user authentication" --scale large
-  node vela-pipeline.js run "Fix typo in README" --scale small --type docs
+  node vela-pipeline.js run "Add user authentication"
+  node vela-pipeline.js run "Fix typo in README" --type docs
   node vela-pipeline.js resume
   node vela-pipeline.js status
   node vela-pipeline.js cancel

@@ -3,7 +3,7 @@
 ## vela-engine (파이프라인 엔진)
 
 ```bash
-node .vela/cli/vela-engine.js init "설명" --scale <small|medium|large>
+node .vela/cli/vela-engine.js init "설명"
 node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js transition
 node .vela/cli/vela-engine.js record pass|fail
@@ -24,14 +24,26 @@ node .vela/cli/vela-engine.js validate                           # SDK 코드 �
 ## vela-pipeline (SDK 오케스트레이터)
 
 ```bash
-node .vela/cli/vela-pipeline.js run "<요청>" --scale <small|medium|large> [--type TYPE]  # SDK 파이프라인 실행
+node .vela/cli/vela-pipeline.js run "<요청>" [--type TYPE]                               # SDK 파이프라인 실행
 node .vela/cli/vela-pipeline.js status                                                    # 파이프라인 상태 조회
 node .vela/cli/vela-pipeline.js cancel                                                    # 활성 파이프라인 취소
 ```
 
-- `--scale`: small(trivial) / medium(quick) / large(standard)
-- `--type`: 파이프라인 타입 (기본: scale에 따라 자동 결정)
+- `--type`: 파이프라인 타입 (code/code-bug/code-refactor/docs)
 - vela-engine.js의 상태 머신을 CLI bridge로 재사용하여 단계 전이를 위임한다.
+
+## vela-sprint (스프린트 오케스트레이터)
+
+```bash
+node .vela/cli/vela-sprint.js run "<요청>"          # 스프린트 계획 + 전체 슬라이스 순차 실행
+node .vela/cli/vela-sprint.js status [sprint-id]     # 스프린트 상태 및 슬라이스별 진행률
+node .vela/cli/vela-sprint.js resume [sprint-id]     # 중단된 스프린트 재개
+node .vela/cli/vela-sprint.js cancel [sprint-id]     # 활성 스프린트 취소
+```
+
+- sdk-sprint-planner.js가 요청을 의존성 그래프 기반 슬라이스로 분해한다.
+- 각 슬라이스를 vela-pipeline.js run으로 독립 파이프라인 실행한다 (CLI bridge, K025).
+- 상태 파일: `.vela/sprints/sprint-*.json`
 
 ## vela-analyze (분석 보고서)
 

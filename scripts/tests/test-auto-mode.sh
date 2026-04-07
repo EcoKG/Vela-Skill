@@ -39,13 +39,6 @@ setup_sandbox() {
         { "id": "execute", "name": "Execute", "mode": "write", "exit_gate": [] },
         { "id": "finalize", "name": "Finalize", "mode": "read", "exit_gate": [] }
       ]
-    },
-    "trivial": {
-      "steps": [
-        { "id": "init", "name": "Init", "mode": "read", "exit_gate": ["artifact_dir_created"] },
-        { "id": "execute", "name": "Execute", "mode": "write", "exit_gate": [] },
-        { "id": "finalize", "name": "Finalize", "mode": "read", "exit_gate": [] }
-      ]
     }
   }
 }
@@ -172,7 +165,7 @@ echo "────────────────────────�
 # ── Test 1: init --auto → auto:true, auto_reject_count:0 ──
 echo ""
 echo "📋 Test 1: init --auto → state에 auto:true 기록"
-run_engine init "test auto mode" --scale large --auto --force > /dev/null
+run_engine init "test auto mode" --auto --force > /dev/null
 auto_val=$(read_state_field "auto")
 reject_count=$(read_state_field "auto_reject_count")
 assert_eq "auto field is true" "true" "$auto_val"
@@ -182,7 +175,7 @@ cancel_active > /dev/null
 # ── Test 2: init without --auto → auto 필드 없음 ──
 echo ""
 echo "📋 Test 2: init without --auto → auto 필드 없음"
-run_engine init "test no auto" --scale large --force > /dev/null
+run_engine init "test no auto" --force > /dev/null
 auto_val=$(read_state_field "auto")
 reject_count=$(read_state_field "auto_reject_count")
 assert_eq "auto field undefined" "__UNDEFINED__" "$auto_val"
@@ -192,7 +185,7 @@ cancel_active > /dev/null
 # ── Test 3: record reject 2회 연속 → auto:false ──
 echo ""
 echo "📋 Test 3: record reject 2회 연속 → auto:false"
-run_engine init "test reject counter" --scale large --auto --force > /dev/null
+run_engine init "test reject counter" --auto --force > /dev/null
 run_engine record reject --summary "first reject" > /dev/null
 auto_after_1=$(read_state_field "auto")
 assert_eq "auto still true after 1 reject" "true" "$auto_after_1"
@@ -207,7 +200,7 @@ cancel_active > /dev/null
 # ── Test 4: record pass → auto_reject_count 리셋 ──
 echo ""
 echo "📋 Test 4: record pass → auto_reject_count 리셋"
-run_engine init "test pass reset" --scale large --auto --force > /dev/null
+run_engine init "test pass reset" --auto --force > /dev/null
 run_engine record reject --summary "one reject" > /dev/null
 reject_count_1=$(read_state_field "auto_reject_count")
 assert_eq "reject count is 1" "1" "$reject_count_1"
@@ -222,7 +215,7 @@ cancel_active > /dev/null
 # ── Test 5: checkpoint gate: auto + plan-check.md → 자동 통과 ──
 echo ""
 echo "📋 Test 5: checkpoint gate: auto + plan-check.md 존재 → 자동 통과"
-run_engine init "test gate auto pass" --scale large --auto --force > /dev/null
+run_engine init "test gate auto pass" --auto --force > /dev/null
 ARTIFACT_DIR=$(get_artifact_dir)
 
 # Create artifacts needed to pass earlier gates and reach checkpoint
@@ -249,7 +242,7 @@ cancel_active > /dev/null
 # ── Test 6: checkpoint gate: auto + plan-check.md 부재 → 차단 ──
 echo ""
 echo "📋 Test 6: checkpoint gate: auto + plan-check.md 부재 → 차단"
-run_engine init "test gate auto block" --scale large --auto --force > /dev/null
+run_engine init "test gate auto block" --auto --force > /dev/null
 ARTIFACT_DIR=$(get_artifact_dir)
 
 # Create plan.md but NOT plan-check.md
@@ -275,7 +268,7 @@ cancel_active > /dev/null
 # ── Test 7: pass → reject 1회 → auto 유지 (연속 2회 아님) ──
 echo ""
 echo "📋 Test 7: pass 후 reject 1회 → auto 유지"
-run_engine init "test non-consecutive" --scale large --auto --force > /dev/null
+run_engine init "test non-consecutive" --auto --force > /dev/null
 run_engine record reject --summary "reject 1" > /dev/null
 run_engine record pass --summary "pass resets" > /dev/null
 run_engine record reject --summary "reject after pass" > /dev/null

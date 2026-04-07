@@ -48,7 +48,7 @@ SDK 오케스트레이터가 단계별 도구 화이트리스트와 `disallowedT
 | GUARD 8 | VG-08 | verify 완료 전 git push 차단 |
 | GUARD 9 | — | 보호 브랜치 직접 커밋 경고 (차단 아님) |
 | GUARD 11 | VG-11 | 비-team 단계에서 approval-*.json / review-*.md 작성 차단 (team 단계에서만 허용) |
-| GUARD 12 | VG-12 | execute 단계에서 PM 직접 소스 수정 차단 — SDK Agent 위임 강제 (delegation.json 검증, trivial 면제) |
+| GUARD 12 | VG-12 | execute 단계에서 PM 직접 소스 수정 차단 — SDK Agent 위임 강제 (delegation.json 검증) |
 
 ### Fail-Closed 모델
 

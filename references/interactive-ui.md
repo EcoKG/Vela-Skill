@@ -75,23 +75,6 @@ PM이 해당 단계에 진입할 때 이 파일의 해당 섹션을 읽으세요
 }
 ```
 
-## 파이프라인 규모 선택
-
-```json
-{
-  "questions": [{
-    "question": "파이프라인 규모를 선택해주세요.",
-    "header": "🧭 Scale",
-    "options": [
-      { "label": "Small (trivial)", "description": "init → execute → commit → finalize. 단일 파일, 10줄 이하 수정." },
-      { "label": "Medium (quick)", "description": "init → plan → execute → verify → commit → finalize. 3파일 이하." },
-      { "label": "Large (standard)", "description": "전체 10단계 + Teammate 리서치(경쟁가설) + CrossLayer Teammate. 대규모 작업." }
-    ],
-    "multiSelect": false
-  }]
-}
-```
-
 ## Checkpoint (사용자 승인)
 
 ```json

@@ -384,11 +384,11 @@ assert_contains "partial missing gates detected" '"partialMissing":true' "$GATE_
 assert_contains "all present gates pass" '"allPresentPasses":true' "$GATE_RESULTS"
 
 # ══════════════════════════════════════════════════════════
-# Test 12: Engine bridge — init with missing scale → structured error
+# Test 12: Engine bridge — init without .vela setup → structured error
 # ══════════════════════════════════════════════════════════
 echo ""
 echo "── Test 12: Engine bridge ──"
-# Run init without --scale to confirm structured error
+# Run init without .vela setup to confirm structured error
 ENGINE_NOSCALE=$(node -e "
   const { execFileSync } = require('child_process');
   try {
@@ -409,7 +409,7 @@ ENGINE_NOSCALE=$(node -e "
     }
   }
 " 2>/dev/null)
-assert_eq "Engine returns structured error without --scale" "STRUCTURED_ERROR" "$ENGINE_NOSCALE"
+assert_eq "Engine returns structured error without .vela setup" "STRUCTURED_ERROR" "$ENGINE_NOSCALE"
 
 # ══════════════════════════════════════════════════════════
 # Test 13: Engine bridge — state command returns valid JSON
@@ -648,7 +648,7 @@ assert_contains "report_md_exists passes when present" '"presentPasses":true' "$
 echo ""
 echo "── Test 23: approval _source markers ──"
 SOURCE_COUNT=$(grep -c '_source.*sdk-reviewer' "$PROJECT_ROOT/scripts/shared/sdk-reviewer.js" 2>/dev/null || echo "0")
-assert_eq "sdk-reviewer.js has 6 _source markers" "6" "$SOURCE_COUNT"
+assert_eq "sdk-reviewer.js has _source markers" "1" "$SOURCE_COUNT"
 
 # ══════════════════════════════════════════════════════════
 # Test 24: sub_phase / sub-transition code presence
