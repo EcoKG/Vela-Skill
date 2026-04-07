@@ -110,7 +110,7 @@ const FILE_MANIFEST = [
   { src: "scripts/agents/vela-pm.md", dst: "agents/vela-pm.md" },
   // Templates
   { src: "templates/pipeline.json", dst: "templates/pipeline.json" },
-  { src: "templates/presets.json", dst: "templates/presets.json" },
+
   {
     src: "templates/config.json",
     dst: "templates/config.json",
@@ -593,7 +593,7 @@ function install() {
 This project uses Vela for development governance.
 
 - To explore/read code: use normal tools freely (Explore mode).
-- To modify code: ALWAYS start with \`node .vela/cli/vela-pipeline.js run "<task>" --scale <small|medium|large>\`
+- To modify code: ALWAYS start with \`node .vela/cli/vela-pipeline.js run "<task>"\`
 - Follow pipeline steps in order. Do NOT use TaskCreate/TaskUpdate during pipeline execution.
 - Do NOT skip pipeline steps or create your own plans outside the pipeline.
 - vela-pipeline.js가 각 단계의 SDK agent를 자동 실행한다.

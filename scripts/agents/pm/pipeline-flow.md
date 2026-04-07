@@ -4,7 +4,7 @@
 
 ## 새 파이프라인 시작
 ```bash
-node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>
+node .vela/cli/vela-pipeline.js run "요청"
 ```
 
 ## 기존 파이프라인 재개

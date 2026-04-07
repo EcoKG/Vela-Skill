@@ -384,11 +384,11 @@ assert_contains "partial missing gates detected" '"partialMissing":true' "$GATE_
 assert_contains "all present gates pass" '"allPresentPasses":true' "$GATE_RESULTS"
 
 # ══════════════════════════════════════════════════════════
-# Test 12: Engine bridge — init with missing scale → structured error
+# Test 12: Engine bridge — init without .vela setup → structured error
 # ══════════════════════════════════════════════════════════
 echo ""
 echo "── Test 12: Engine bridge ──"
-# Run init without --scale to confirm structured error
+# Run init without .vela setup to confirm structured error
 ENGINE_NOSCALE=$(node -e "
   const { execFileSync } = require('child_process');
   try {
@@ -409,7 +409,7 @@ ENGINE_NOSCALE=$(node -e "
     }
   }
 " 2>/dev/null)
-assert_eq "Engine returns structured error without --scale" "STRUCTURED_ERROR" "$ENGINE_NOSCALE"
+assert_eq "Engine returns structured error without .vela setup" "STRUCTURED_ERROR" "$ENGINE_NOSCALE"
 
 # ══════════════════════════════════════════════════════════
 # Test 13: Engine bridge — state command returns valid JSON

@@ -3,8 +3,8 @@
 # test-s03-relaxation.sh — S03 파이프라인 완화 + 게이트 버그 수정 테스트
 #
 # Covers all T01+T02 changes:
-#   1. VG-12 trivial exemption (gate-guard)
-#   2. pipeline.json exit_gate empty arrays
+#   1. VG-12 standard pipeline write blocking (gate-guard)
+#   2. (removed)
 #   3. CODE_EXTENSIONS no longer includes config extensions
 #   4. vela-cost.js flat format artifact search
 #   5. vela-compact.js PreCompact vs PostCompact distinction
@@ -155,32 +155,11 @@ echo "⛵ S03 Pipeline Relaxation & Gate Bug Fix Tests"
 echo "════════════════════════════════════════════════"
 
 # ═══════════════════════════════════════════════════
-# 1. VG-12 trivial exemption
+# 1. VG-12 standard pipeline write blocking
 # ═══════════════════════════════════════════════════
 echo ""
-echo "── 1. VG-12 trivial pipeline exemption ──"
+echo "── 1. VG-12 standard pipeline + no delegation → blocked ──"
 
-setup_sandbox
-create_pipeline "trivial" "execute" "active"
-
-# Trivial pipeline + execute step + write .js → should NOT be blocked by VG-12
-# (It may still be blocked by VG-12's delegation check for non-trivial, but trivial is exempt)
-# Note: With no delegation.json AND trivial pipeline, VG-12 should skip → exit 0
-TRIVIAL_WRITE=$(cat <<EOF
-{
-  "tool_name": "Write",
-  "tool_input": {"file_path": "$PROJECT/src/fix.js", "content": "fixed"},
-  "session_id": "test-session",
-  "cwd": "$PROJECT"
-}
-EOF
-)
-
-assert_exit "VG-12: trivial pipeline + execute + code write → exit 0 (exempt)" 0 \
-  "$GATE_GUARD" "$TRIVIAL_WRITE"
-
-# Non-trivial (standard) pipeline + execute step + no delegation → should block (exit 2)
-teardown_sandbox
 setup_sandbox
 create_pipeline "standard" "execute" "active"
 
@@ -196,36 +175,6 @@ EOF
 
 assert_exit "VG-12: standard pipeline + execute + no delegation → exit 2 (blocked)" 2 \
   "$GATE_GUARD" "$STANDARD_WRITE"
-
-# ═══════════════════════════════════════════════════
-# 2. pipeline.json exit_gate assertions
-# ═══════════════════════════════════════════════════
-echo ""
-echo "── 2. pipeline.json exit_gate empty arrays ──"
-
-assert_node "trivial execute exit_gate is empty array" "
-  const p = require('$PIPELINE_JSON');
-  const eg = p.pipelines.trivial.overrides.execute.exit_gate;
-  if (!Array.isArray(eg) || eg.length !== 0) throw new Error('expected empty array, got: ' + JSON.stringify(eg));
-"
-
-assert_node "trivial commit exit_gate is empty array" "
-  const p = require('$PIPELINE_JSON');
-  const eg = p.pipelines.trivial.overrides.commit.exit_gate;
-  if (!Array.isArray(eg) || eg.length !== 0) throw new Error('expected empty array, got: ' + JSON.stringify(eg));
-"
-
-assert_node "hotfix execute exit_gate is empty array" "
-  const p = require('$PIPELINE_JSON');
-  const eg = p.pipelines.hotfix.overrides.execute.exit_gate;
-  if (!Array.isArray(eg) || eg.length !== 0) throw new Error('expected empty array, got: ' + JSON.stringify(eg));
-"
-
-assert_node "hotfix commit exit_gate is empty array" "
-  const p = require('$PIPELINE_JSON');
-  const eg = p.pipelines.hotfix.overrides.commit.exit_gate;
-  if (!Array.isArray(eg) || eg.length !== 0) throw new Error('expected empty array, got: ' + JSON.stringify(eg));
-"
 
 # ═══════════════════════════════════════════════════
 # 3. CODE_EXTENSIONS config exclusion

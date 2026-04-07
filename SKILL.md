@@ -96,23 +96,16 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - `code-refactor`: 리팩토링
    - `docs`: 문서/설정/비-소스 수정
 
-   scale + type 조합으로 파이프라인이 자동 결정된다:
-   - small + code → trivial (init → execute → commit → finalize)
-   - small + code-bug → ralph (자동 반복)
-   - small + docs → hotfix (init → execute → commit)
-   - medium + code → quick (init → plan → execute → verify → commit → finalize)
-   - large + code → standard (full 12-step)
+   모든 요청은 standard 12-step 파이프라인을 거친다 (규모 무관).
 
 4. **파이프라인 시작**
    ```bash
-   node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-pipeline.js run "작업 설명" --type <code|code-bug|code-refactor|docs>
    ```
 
 5. **파이프라인 진행**
-   SDK 오케스트레이터가 파이프라인 단계를 자동 순차 실행한다.
-   - standard: Research→Plan→Execute→Review (SDK query() 기반)
-   - quick: Plan→Execute→Review (SDK query() 기반)
-   - trivial: Execute only (SDK query() 기반)
+   SDK 오케스트레이터가 standard 12-step 파이프라인을 자동 순차 실행한다.
+   - Research→Plan→Execute→Review (SDK query() 기반)
 
 ---
 
@@ -137,7 +130,7 @@ node .vela/cli/vela-engine.js auto
 
 4. **파이프라인 시작 (auto 플래그 추가)**
    ```bash
-   node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large> --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-pipeline.js run "작업 설명" --type <code|code-bug|code-refactor|docs>
    ```
 
 5. **자동 진행**
@@ -325,11 +318,7 @@ node .vela/cli/vela-engine.js auto
 
 | 종류 | 단계 | 조건 |
 |------|------|------|
-| **standard** | init → research → plan → plan-check → checkpoint → **branch** → execute → verify → diff-summary → learning → **commit** → finalize | 6+ 파일, 300+ 라인 |
-| **quick** | init → plan → execute → verify → **commit** → finalize | 3 파일 이하, 100 라인 이하 |
-| **trivial** | init → execute → **commit** → finalize | 1 파일, 10 라인 이하 |
-
-규모는 요청 내용을 분석하여 자동 감지한다.
+| **standard** | init → research → plan → plan-check → checkpoint → **branch** → execute → verify → diff-summary → learning → **commit** → finalize | 모든 요청 |
 
 ### 각 단계의 모드
 
@@ -353,7 +342,7 @@ node .vela/cli/vela-engine.js auto
 파이프라인 실행은 오케스트레이터를 통해 수행한다:
 
 ```bash
-node .vela/cli/vela-pipeline.js run "작업 설명" --scale <s|m|l> [--type <type>]   # 새 파이프라인 시작
+node .vela/cli/vela-pipeline.js run "작업 설명" [--type <type>]                    # 새 파이프라인 시작
 node .vela/cli/vela-pipeline.js resume                                              # 기존 파이프라인 재개
 node .vela/cli/vela-pipeline.js status                                              # 파이프라인 상태 조회
 node .vela/cli/vela-pipeline.js cancel                                              # 파이프라인 취소
@@ -380,7 +369,6 @@ node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
 **옵션:**
 | 옵션 | 설명 |
 |------|------|
-| `--scale <size>` | 파이프라인 규모 (small/medium/large) |
 | `--type <type>` | 작업 유형 (code/code-bug/code-refactor/docs) |
 | `--auto` | auto 모드 — 각 단계 완료 후 자동 transition. reject 2회 연속 시 중단. |
 | `--force` | dirty tree 체크 스킵 |

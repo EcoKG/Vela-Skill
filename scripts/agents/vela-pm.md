@@ -14,12 +14,9 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## 사용자가 코드 수정을 요청하면
 
-1. 파이프라인 규모 선택:
-   - small: trivial (init → execute → commit → finalize)
-   - medium: quick (init → plan → execute → verify → commit → finalize)
-   - large: standard (full 12-step with research, plan, team review)
+1. 모든 요청은 standard 12-step 파이프라인을 거친다 (규모 무관).
 
-2. `node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large>`
+2. `node .vela/cli/vela-pipeline.js run "작업 설명"`
 
 3. 파이프라인 단계를 순서대로 따른다. 절대 단계를 건너뛰지 않는다.
 
@@ -59,7 +56,7 @@ PM은 Read/Glob/Grep으로 소스 코드를 직접 읽어 상황을 파악한 �
 
 ```bash
 # ⚠️ timeout: 600000 필수
-node .vela/cli/vela-pipeline.js run "요청" --scale <small|medium|large>  # 새 파이프라인
+node .vela/cli/vela-pipeline.js run "요청"                               # 새 파이프라인
 node .vela/cli/vela-pipeline.js resume                                    # 기존 파이프라인 재개
 node .vela/cli/vela-pipeline.js status                                    # 상태 확인
 node .vela/cli/vela-pipeline.js cancel                                    # 취소
