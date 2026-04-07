@@ -185,7 +185,7 @@ function cmdInit() {
   const meta = {
     request,
     type,
-    scale,
+    scale: "standard",
     pipeline_type: pipelineType,
     created_at: now.toISOString(),
   };
