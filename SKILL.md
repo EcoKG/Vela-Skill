@@ -32,6 +32,7 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
   파이프라인이 없으면: `⛵ Vela — Explore 모드. 활성 파이프라인 없음.`
 - `$ARGUMENTS`가 `git-clean` → `/vela:git-clean` 절차 실행. `skills/git-clean/SKILL.md`를 읽고 지시대로 수행한다.
 - `$ARGUMENTS`가 `analyze` → `/vela:analyze` 절차 실행
+- `$ARGUMENTS`가 `sprint` 또는 `sprint <args>` → `/vela:sprint` 절차 실행
 - `$ARGUMENTS`가 비어있음 → AskUserQuestion으로 선택:
 
 ```json
@@ -84,19 +85,14 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - AskUserQuestion으로 "맞다 — 진행" / "수정 필요" 확인
    - 승인된 프롬프트가 `vela-pipeline.js run`의 request가 된다
 
-3. **파이프라인 규모 선택**
-   사용자에게 선택지를 제시한다:
-   - ⛵ **small**: 간단한 작업 — 단일 파일, 설정 변경, 소소한 수정
-   - 🧭 **medium**: 보통 작업 — 여러 파일, 계획 후 구현
-   - ✦ **large**: 대규모 작업 — 리서치, 설계, 팀 리뷰 포함
-
+3. **작업 유형 선택**
    type은 선택 사항 (기본값: code):
    - `code`: 기능 추가/구현
    - `code-bug`: 버그 수정 (테스트 통과까지 자동 반복)
    - `code-refactor`: 리팩토링
    - `docs`: 문서/설정/비-소스 수정
 
-   모든 요청은 standard 12-step 파이프라인을 거친다 (규모 무관).
+   모든 요청은 standard 12-step 파이프라인을 거친다.
 
 4. **파이프라인 시작**
    ```bash
@@ -146,6 +142,37 @@ node .vela/cli/vela-engine.js auto
 
 ---
 
+## /vela:sprint — 멀티 슬라이스 스프린트
+
+`/vela sprint` (또는 `/vela:sprint`)은 대규모 작업을 여러 슬라이스로 분해하여 순차 실행하는 스프린트 오케스트레이션이다.
+
+### 명령어
+
+```bash
+node .vela/cli/vela-sprint.js run "<요청>"          # 스프린트 계획 + 전체 슬라이스 순차 실행
+node .vela/cli/vela-sprint.js status [sprint-id]     # 스프린트 상태 및 슬라이스별 진행률
+node .vela/cli/vela-sprint.js resume [sprint-id]     # 중단된 스프린트 재개
+node .vela/cli/vela-sprint.js cancel [sprint-id]     # 활성 스프린트 취소
+```
+
+### 절차
+
+1. **스프린트 계획**: `sdk-sprint-planner.js`(Sonnet)가 요청을 분석하여 의존성 그래프 기반 슬라이스로 분해한다.
+2. **순차 실행**: 각 슬라이스를 `vela-pipeline.js run`으로 독립 파이프라인 실행한다 (CLI bridge, K025).
+3. **컨텍스트 전달**: 완료된 의존 슬라이스의 결과를 후속 슬라이스에 `buildSliceContext`로 주입한다.
+4. **상태 추적**: `sprint-manager.js`가 스프린트 FSM 상태와 슬라이스별 진행률을 `.vela/sprints/sprint-*.json`에 기록한다.
+
+### 실행 모드 결정 — 파이프라인 vs 스프린트
+
+| 조건 | 실행 방식 |
+|------|----------|
+| 단일 작업, 명확한 범위 | `/vela:start` — 단일 파이프라인 |
+| 여러 독립 기능, 복합 요청 | `/vela:sprint` — 멀티 슬라이스 스프린트 |
+
+PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 제안한다.
+
+---
+
 ## /vela:init — 환경 구축
 
 이 커맨드가 호출되면 현재 프로젝트에 Vela 환경을 구축한다.
@@ -168,6 +195,8 @@ node .vela/cli/vela-engine.js auto
    │   ├── sdk-researcher.js    ← 3관점 병렬 분석
    │   ├── sdk-executor.js      ← Sonnet TDD 실행
    │   ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석
+   │   ├── sdk-sprint-planner.js ← 스프린트 슬라이스 분해 (Sonnet)
+   │   ├── sprint-manager.js    ← 스프린트 상태 관리 (CRUD, FSM, 큐)
    │   ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리
    │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
    │   ├── change-surface.js    ← 참조 무결성 검증 (diff 기반)
@@ -178,11 +207,13 @@ node .vela/cli/vela-engine.js auto
    │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진
    │   ├── vela-pipeline.js     ← SDK 오케스트레이터 (파이프라인 자동 실행)
    │   ├── vela-report.js       ← 파이프라인 리포트/대시보드
+   │   ├── vela-sprint.js       ← 스프린트 CLI (run/status/resume/cancel)
    │   └── vela-wave.js         ← Wave 병렬 그룹화 PoC
    ├── cache/                   ← TreeNode SQLite 캐시
    │   └── treenode.js          ← 캐시 관리자
    ├── templates/
    │   └── pipeline.json        ← 파이프라인 정의
+   ├── sprints/                  ← 스프린트 상태 파일 (sprint-*.json)
    └── artifacts/               ← 파이프라인 실행 산출물
    ```
 
@@ -372,6 +403,17 @@ node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
 | `--type <type>` | 작업 유형 (code/code-bug/code-refactor/docs) |
 | `--auto` | auto 모드 — 각 단계 완료 후 자동 transition. reject 2회 연속 시 중단. |
 | `--force` | dirty tree 체크 스킵 |
+
+### 스프린트 명령어
+
+멀티 슬라이스 스프린트 오케스트레이션:
+
+```bash
+node .vela/cli/vela-sprint.js run "<요청>"          # 스프린트 계획 + 순차 실행
+node .vela/cli/vela-sprint.js status [sprint-id]     # 스프린트 상태 조회
+node .vela/cli/vela-sprint.js resume [sprint-id]     # 중단된 스프린트 재개
+node .vela/cli/vela-sprint.js cancel [sprint-id]     # 활성 스프린트 취소
+```
 
 ---
 
@@ -703,6 +745,4 @@ SDK `query()`의 `hooks` 파라미터로 보안 규칙을 인라인 적용한다
 
 Gate Keeper/Guard 규칙, CLI 명령어, TreeNode 캐시 상세는 `references/` 디렉토리를 참조한다:
 - `references/gates-and-guards.md` — 전체 게이트/가드 규칙 목록
-- `references/cli-reference.md` — CLI 명령어 전체 레퍼런스
-목록
 - `references/cli-reference.md` — CLI 명령어 전체 레퍼런스
