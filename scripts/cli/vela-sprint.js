@@ -44,6 +44,7 @@ const {
   updateSliceStatus,
   updateSprintStatus,
   getNextSlice,
+  SPRINTS_DIR,
 } = require("../shared/sprint-manager");
 
 // ─── Sprint Planner ───
@@ -217,6 +218,16 @@ function executeSprint(sprintId) {
 
       if (next.action === "complete") {
         updateSprintStatus(sprintId, "done");
+
+        // Generate sprint summary artifact (non-fatal — K042 pattern)
+        try {
+          const completedPlan = loadSprint(sprintId);
+          const summaryPath = generateSprintSummary(completedPlan);
+          console.log(`\n📄 스프린트 요약 생성됨: ${summaryPath}`);
+        } catch (err) {
+          console.error(`\n⚠️ 스프린트 요약 생성 실패 (스프린트는 정상 완료): ${err.message}`);
+        }
+
         console.log("\n✅ 스프린트 완료! 모든 슬라이스가 성공적으로 실행되었습니다.");
         break;
       }
@@ -307,6 +318,95 @@ function executeSprint(sprintId) {
   } finally {
     releaseSprintLock();
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Sprint Summary Generation
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Generate a sprint summary markdown file and write it to the sprint dir.
+ *
+ * Follows the generateReport() pattern in vela-pipeline.js (K037-style markdown).
+ * Produces: header (title, request, timing), per-slice table, overall stats.
+ *
+ * @param {object} plan - Completed sprint plan (loaded via loadSprint)
+ * @returns {string} Path to the written sprint-summary.md
+ */
+function generateSprintSummary(plan) {
+  const now = new Date().toISOString();
+
+  // ─── Header ───
+  let md = `# Sprint Summary\n\n`;
+  md += `**Title:** ${plan.title}\n`;
+  md += `**Request:** ${plan.request}\n`;
+  md += `**Created:** ${plan.created_at}\n`;
+  md += `**Completed:** ${now}\n`;
+  md += `**Status:** ${plan.status}\n\n`;
+
+  // ─── Per-slice table ───
+  md += `## Slice Results\n\n`;
+  md += `| ID | Title | Status | Duration | Result |\n`;
+  md += `|----|-------|--------|----------|--------|\n`;
+
+  let doneCount = 0;
+  let failedCount = 0;
+  let skippedCount = 0;
+
+  for (const slice of plan.slices) {
+    const statusIcon =
+      slice.status === "done"
+        ? "✅"
+        : slice.status === "failed"
+          ? "❌"
+          : slice.status === "skipped"
+            ? "⏭️"
+            : "⬜";
+
+    // Duration: calculate from started_at/completed_at if both exist
+    let duration = "-";
+    if (slice.started_at && slice.completed_at) {
+      const ms =
+        new Date(slice.completed_at).getTime() -
+        new Date(slice.started_at).getTime();
+      if (ms >= 0) {
+        duration = `${(ms / 1000).toFixed(1)}s`;
+      }
+    }
+
+    // Result snippet: truncate long results
+    let resultSnippet = slice.result || "-";
+    if (resultSnippet.length > 60) {
+      resultSnippet = resultSnippet.substring(0, 57) + "...";
+    }
+    // Escape pipe characters for table cell
+    resultSnippet = resultSnippet.replace(/\|/g, "\\|");
+
+    md += `| ${slice.id} | ${slice.title} | ${statusIcon} ${slice.status} | ${duration} | ${resultSnippet} |\n`;
+
+    // Count stats
+    if (slice.status === "done") doneCount++;
+    else if (slice.status === "failed") failedCount++;
+    else if (slice.status === "skipped") skippedCount++;
+  }
+
+  // ─── Overall stats ───
+  md += `\n## Stats\n\n`;
+  md += `- **Total slices:** ${plan.total_slices}\n`;
+  md += `- **Completed:** ${doneCount}\n`;
+  md += `- **Failed:** ${failedCount}\n`;
+  md += `- **Skipped:** ${skippedCount}\n`;
+
+  // ─── Write to sprint dir ───
+  const sprintDir = path.join(SPRINTS_DIR, plan.id);
+  const summaryPath = path.join(sprintDir, "sprint-summary.md");
+
+  if (!fs.existsSync(sprintDir)) {
+    fs.mkdirSync(sprintDir, { recursive: true });
+  }
+  fs.writeFileSync(summaryPath, md, "utf8");
+
+  return summaryPath;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -615,6 +715,7 @@ module.exports = {
   buildSliceContext,
   assembleSliceRequest,
   executeSprint,
+  generateSprintSummary,
   displaySprintStatus,
   displaySprintList,
   acquireSprintLock,

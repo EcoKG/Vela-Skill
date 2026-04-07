@@ -316,6 +316,66 @@ assert_eq "lock is not .orchestrator.lock" "0" "$HAS_ORCH"
 LOCK_PATH_CHECK=$(grep -c 'state.*\.sprint\.lock' "$VS")
 assert_eq "lock file in .vela/state/" "true" "$([ "$LOCK_PATH_CHECK" -ge 1 ] && echo true || echo false)"
 
+# ─── Group 8: Sprint Summary Generation ───
+echo "── SUMMARY GENERATION ──"
+
+# Create sprint with 2 slices, mark both done with timing
+SUM_ID=$(node -e "
+  const sm = require('$SM');
+  const plan = sm.createSprint({
+    title: 'Summary Gen Test',
+    request: 'Test summary generation',
+    slices: [
+      { id: 'x1', title: 'First Slice' },
+      { id: 'x2', title: 'Second Slice', depends_on: ['x1'] }
+    ]
+  });
+  sm.updateSprintStatus(plan.id, 'running');
+  // Slice x1: done
+  sm.updateSliceStatus(plan.id, 'x1', { status: 'queued' });
+  sm.updateSliceStatus(plan.id, 'x1', { status: 'running', started_at: '2026-04-07T10:00:00Z' });
+  sm.updateSliceStatus(plan.id, 'x1', { status: 'done', result: 'x1 completed ok', completed_at: '2026-04-07T10:05:00Z' });
+  // Slice x2: done
+  sm.updateSliceStatus(plan.id, 'x2', { status: 'queued' });
+  sm.updateSliceStatus(plan.id, 'x2', { status: 'running', started_at: '2026-04-07T10:05:00Z' });
+  sm.updateSliceStatus(plan.id, 'x2', { status: 'done', result: 'x2 completed ok', completed_at: '2026-04-07T10:12:30Z' });
+  sm.updateSprintStatus(plan.id, 'done');
+  console.log(plan.id);
+")
+
+# 23. generateSprintSummary is exported
+GSS_TYPE=$(node -e "console.log(typeof require('$VS').generateSprintSummary)")
+assert_eq "exports generateSprintSummary as function" "function" "$GSS_TYPE"
+
+# 24. Call generateSprintSummary → file created
+SUM_PATH=$(node -e "
+  const { generateSprintSummary } = require('$VS');
+  const sm = require('$SM');
+  const plan = sm.loadSprint('$SUM_ID');
+  const p = generateSprintSummary(plan);
+  console.log(p);
+")
+assert_eq "sprint-summary.md was created" "true" "$([ -f "$SUM_PATH" ] && echo true || echo false)"
+
+# 25. Summary contains sprint title
+SUM_CONTENT=$(cat "$SUM_PATH")
+assert_contains "summary contains sprint title" "Summary Gen Test" "$SUM_CONTENT"
+
+# 26. Summary contains table header
+assert_contains "summary contains table header" "| ID | Title | Status | Duration | Result |" "$SUM_CONTENT"
+
+# 27. Summary contains stats section
+assert_contains "summary contains Stats heading" "## Stats" "$SUM_CONTENT"
+
+# 28. Summary contains completed count 2
+assert_contains "summary shows 2 completed" "**Completed:** 2" "$SUM_CONTENT"
+
+# 29. Summary contains slice x1 duration (300s = 300.0s)
+assert_contains "summary contains x1 duration" "300.0s" "$SUM_CONTENT"
+
+# 30. Summary contains request
+assert_contains "summary contains request" "Test summary generation" "$SUM_CONTENT"
+
 echo ""
 
 # ─── Summary ───
