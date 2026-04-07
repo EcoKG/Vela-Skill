@@ -109,31 +109,15 @@ try {
 }
 
 // ─── GSD_BUNDLED_EXTENSION_PATHS ─────────────────────────────────────────────
-// gsd-pi/dist/cli.js reads this env var to decide which extensions to load.
-// We include:
-//   1. GSD's bundled extensions (gsd-pi/dist/resources/extensions/) — needed
-//      because cli.js imports ./resources/extensions/gsd/preferences.js at
-//      startup and several GSD extensions provide platform-level features.
-//   2. Our Vela extension (dist/resources/extensions/vela/index.js).
+// Phase 7: Only load the Vela extension — no GSD extensions.
+// DefaultResourceLoader in @gsd/pi-coding-agent reads this env var.
 const { serializeBundledExtensionPaths } = (await import(
   `${gsdPiRoot}/dist/bundled-extension-paths.js`
 )) as {
   serializeBundledExtensionPaths: (paths: string[]) => string;
 };
 
-const { discoverExtensionEntryPaths } = (await import(
-  `${gsdPiRoot}/dist/extension-discovery.js`
-)) as {
-  discoverExtensionEntryPaths: (dir: string) => string[];
-};
-
-// GSD bundled extensions (from gsd-pi's dist/)
-const gsdDistExtDir = join(gsdPiRoot, "dist", "resources", "extensions");
-const gsdExtPaths = existsSync(gsdDistExtDir)
-  ? discoverExtensionEntryPaths(gsdDistExtDir)
-  : [];
-
-// Vela extension (from our dist/ after build)
+// Vela extension only (no GSD extensions)
 const velaExtPath = join(
   velaRoot,
   "dist",
@@ -143,20 +127,15 @@ const velaExtPath = join(
   "index.js"
 );
 
-const allExtPaths = [...gsdExtPaths, velaExtPath].filter((p) => existsSync(p));
+const velaExtPaths = [velaExtPath].filter((p) => existsSync(p));
 process.env.GSD_BUNDLED_EXTENSION_PATHS =
-  serializeBundledExtensionPaths(allExtPaths);
+  serializeBundledExtensionPaths(velaExtPaths);
 
-// ─── GSD_CODING_AGENT_DIR — point to ~/.vela/agent/ instead of ~/.gsd/agent/ ─
-// gsd-pi/dist/cli.js uses agentDir from app-paths.js which honours this var.
+// ─── GSD_CODING_AGENT_DIR — point to ~/.vela/agent/ ─────────────────────────
 const homeDir = process.env.HOME || process.env.USERPROFILE || "";
 process.env.GSD_CODING_AGENT_DIR = join(homeDir, ".vela", "agent");
+process.env.PI_APP_NAME = "vela";
 
-// ─── Suppress GSD's own update check ─────────────────────────────────────────
-process.env.PI_SKIP_VERSION_CHECK = "1";
-
-// ─── Import gsd-pi/dist/cli.js (the Pi platform) ─────────────────────────────
-// We import cli.js directly — NOT gsd-pi/dist/loader.js — because loader.js
-// would overwrite PI_PACKAGE_DIR with GSD's own pkg/ directory, breaking
-// our .vela config dir and "vela" branding.
-await import(`${gsdPiRoot}/dist/cli.js`);
+// ─── Import our standalone cli — Phase 7 ─────────────────────────────────────
+// cli.js uses @gsd/pi-coding-agent APIs directly — no GSD-specific deps.
+await import("./cli.js");

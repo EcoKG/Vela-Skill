@@ -17,7 +17,7 @@
  *       → return { ok, text, artifact }
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import {
   createAgentSession,
@@ -277,6 +277,52 @@ Start with: # Learnings: {REQUEST}
 `,
   },
 
+  "sprint-planner": {
+    outputFile: "sprint-plan.json",
+    toolSet: "readOnly",
+    description: "Sprint Decomposition Planning",
+    systemPrompt: `# Vela Sprint Planner
+
+You are a sprint architect. Decompose a high-level request into focused, parallelisable work slices.
+
+## Your mission
+Analyse the request and produce a structured JSON sprint plan.
+
+## Output format
+Respond with a JSON code block containing:
+
+\`\`\`json
+{
+  "title": "<short sprint title>",
+  "description": "<2-3 sentence description>",
+  "slices": [
+    {
+      "id": "slice-1",
+      "title": "<short slice title>",
+      "description": "<what this slice implements, 1-2 sentences>",
+      "depends_on": []
+    },
+    {
+      "id": "slice-2",
+      "title": "<short slice title>",
+      "description": "<what this slice implements>",
+      "depends_on": ["slice-1"]
+    }
+  ]
+}
+\`\`\`
+
+## Constraints
+- 3-8 slices for most requests; never more than 12
+- Each slice should be independently testable
+- Use depends_on to express ordering dependencies (DAG, no cycles)
+- Be specific about what each slice implements
+- Slice IDs must be unique strings (e.g. "slice-1", "slice-2")
+
+Request: {REQUEST}
+`,
+  },
+
   finalizer: {
     outputFile: "report.md",
     toolSet: "coding",
@@ -469,7 +515,6 @@ function writeArtifact(filePath: string, content: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const tmp = filePath + ".tmp";
   writeFileSync(tmp, content, "utf8");
-  const { renameSync } = require("node:fs") as typeof import("node:fs");
   renameSync(tmp, filePath);
 }
 

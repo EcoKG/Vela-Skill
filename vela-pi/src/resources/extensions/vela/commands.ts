@@ -39,6 +39,19 @@ import {
   type PipelineState,
 } from "./pipeline.js";
 import { runVelaAgent, getAvailableRoles } from "./dispatch.js";
+import {
+  createSprint,
+  findActiveSprint,
+  listSprints,
+  loadSprint,
+  updateSliceStatus,
+  updateSprintStatus,
+  getNextSlice,
+  generateSprintSummary,
+  buildSliceContext,
+  type SprintPlan,
+  type SprintSlice,
+} from "./sprint.js";
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 
@@ -76,6 +89,9 @@ export function registerVelaCommands(pi: ExtensionAPI): void {
           break;
         case "dispatch":
           await cmdDispatch(parts.slice(1), ctx);
+          break;
+        case "sprint":
+          await cmdSprint(parts.slice(1), ctx);
           break;
         case "auto":
           await cmdAuto(ctx);
@@ -475,6 +491,315 @@ async function cmdHistory(ctx: ExtensionCommandContext): Promise<void> {
   }
 
   ctx.ui.notify(lines.join("\n"), "info");
+}
+
+// ─── Sprint Command ───────────────────────────────────────────────────────────
+
+async function cmdSprint(
+  parts: string[],
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  const cwd = ctx.cwd;
+  const sub = parts[0]?.toLowerCase();
+
+  switch (sub) {
+    case "run": {
+      const request = parts.slice(1).join(" ").replace(/^["']|["']$/g, "").trim();
+      if (!request) {
+        ctx.ui.notify('Usage: /vela sprint run "<request>"', "warning");
+        return;
+      }
+      await cmdSprintRun(request, cwd, ctx);
+      break;
+    }
+    case "status": {
+      const sprintId = parts[1];
+      cmdSprintStatus(sprintId, cwd, ctx);
+      break;
+    }
+    case "resume": {
+      const sprintId = parts[1];
+      await cmdSprintResume(sprintId, cwd, ctx);
+      break;
+    }
+    case "cancel": {
+      const sprintId = parts[1];
+      cmdSprintCancel(sprintId, cwd, ctx);
+      break;
+    }
+    default:
+      ctx.ui.notify(
+        [
+          "[Vela] Sprint commands:",
+          '  /vela sprint run "<request>"   — plan and execute a sprint',
+          "  /vela sprint status [id]       — show sprint state",
+          "  /vela sprint resume [id]       — resume an interrupted sprint",
+          "  /vela sprint cancel [id]       — cancel an active sprint",
+        ].join("\n"),
+        "info"
+      );
+  }
+}
+
+async function cmdSprintRun(
+  request: string,
+  cwd: string,
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  ctx.ui.notify(
+    `[Vela] Planning sprint: "${request}"\n  Dispatching sprint planner...`,
+    "info"
+  );
+
+  // Use sprint planner agent to decompose the request
+  const planResult = await runVelaAgent({
+    role: "sprint-planner",
+    cwd,
+    artifactDir: join(cwd, ".vela", "state"),
+    request,
+    taskType: "code",
+  });
+
+  // Parse slices from planner output
+  let slices: Array<{ id: string; title: string; description: string; depends_on: string[] }> = [];
+  let title = request.substring(0, 50);
+
+  if (planResult.ok && planResult.text) {
+    try {
+      // Try to extract JSON from the planner response
+      const jsonMatch = planResult.text.match(/```json\n([\s\S]*?)\n```/) ||
+                        planResult.text.match(/\{[\s\S]*"slices"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1] ?? jsonMatch[0]) as {
+          title?: string;
+          slices?: typeof slices;
+        };
+        if (parsed.title) title = parsed.title;
+        if (Array.isArray(parsed.slices)) slices = parsed.slices;
+      }
+    } catch {
+      // Fallback: create a single-slice sprint
+    }
+  }
+
+  // Fallback: single slice
+  if (slices.length === 0) {
+    slices = [{ id: "slice-01", title: request.substring(0, 60), description: request, depends_on: [] }];
+  }
+
+  // Create the sprint
+  const plan = createSprint({ title, request, slices }, cwd);
+  updateSprintStatus(plan.id, "running", cwd);
+
+  ctx.ui.notify(
+    `[Vela] Sprint created: "${plan.title}"\n` +
+      `  ID: ${plan.id}\n` +
+      `  Slices: ${slices.length}\n` +
+      slices.map((s) => `    • ${s.id}: ${s.title}`).join("\n") +
+      "\n\nStarting execution...",
+    "success"
+  );
+
+  // Execute slices sequentially
+  await executeSprintSlices(plan.id, cwd, ctx);
+}
+
+async function executeSprintSlices(
+  sprintId: string,
+  cwd: string,
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  let iteration = 0;
+
+  while (true) {
+    iteration++;
+    const plan = loadSprint(sprintId, cwd);
+    const next = getNextSlice(plan);
+
+    if (next.action === "complete") {
+      updateSprintStatus(sprintId, "done", cwd);
+      try {
+        const completedPlan = loadSprint(sprintId, cwd);
+        const summaryPath = generateSprintSummary(completedPlan, cwd);
+        ctx.ui.notify(
+          `[Vela] Sprint completed!\n  Summary: ${summaryPath}`,
+          "success"
+        );
+      } catch {
+        ctx.ui.notify("[Vela] Sprint completed!", "success");
+      }
+      return;
+    }
+
+    if (next.action === "halt" || next.action === "blocked") {
+      updateSprintStatus(sprintId, "failed", cwd);
+      ctx.ui.notify(`[Vela] Sprint stopped: ${next.reason}`, "warning");
+      return;
+    }
+
+    if (next.action === "run" && next.slice) {
+      const slice = next.slice;
+      ctx.ui.notify(
+        `[Vela] Executing slice ${iteration}/${plan.total_slices}: ${slice.title}`,
+        "info"
+      );
+
+      updateSliceStatus(sprintId, slice.id, { status: "queued" }, cwd);
+      updateSliceStatus(sprintId, slice.id, { status: "running", started_at: new Date().toISOString() }, cwd);
+
+      const context = buildSliceContext(plan, slice);
+      const sliceRequest = context
+        ? `## Previous slice context\n${context}\n\n## Current task\n${slice.request || slice.title}`
+        : (slice.request || slice.title);
+
+      // Run the full pipeline for this slice via dispatch
+      const result = await runVelaAgent({
+        role: "executor",
+        cwd,
+        artifactDir: join(cwd, ".vela", "artifacts", `sprint-${sprintId}-${slice.id}`),
+        request: sliceRequest,
+        taskType: "code",
+      });
+
+      if (result.ok) {
+        updateSliceStatus(sprintId, slice.id, {
+          status: "done",
+          result: result.text?.substring(0, 200),
+          completed_at: new Date().toISOString(),
+        }, cwd);
+        ctx.ui.notify(`[Vela] Slice done: ${slice.title}`, "success");
+      } else {
+        updateSliceStatus(sprintId, slice.id, {
+          status: "failed",
+          result: result.error ?? "unknown error",
+          completed_at: new Date().toISOString(),
+        }, cwd);
+        ctx.ui.notify(`[Vela] Slice failed: ${slice.title} — ${result.error}`, "warning");
+        // Halt on slice failure
+        updateSprintStatus(sprintId, "failed", cwd);
+        return;
+      }
+    }
+  }
+}
+
+function cmdSprintStatus(
+  sprintId: string | undefined,
+  cwd: string,
+  ctx: ExtensionCommandContext
+): void {
+  const STATUS_ICON: Record<string, string> = {
+    planned: "⬜", running: "🔵", done: "✅", failed: "❌", cancelled: "🚫",
+    queued: "🔲", skipped: "⏭",
+  };
+
+  if (sprintId) {
+    try {
+      const plan = loadSprint(sprintId, cwd);
+      formatSprintStatus(plan, STATUS_ICON, ctx);
+    } catch (e) {
+      ctx.ui.notify(`[Vela] Sprint not found: ${sprintId}`, "warning");
+    }
+    return;
+  }
+
+  const active = findActiveSprint(cwd);
+  if (active) {
+    formatSprintStatus(active, STATUS_ICON, ctx);
+    return;
+  }
+
+  const sprints = listSprints(cwd);
+  if (sprints.length === 0) {
+    ctx.ui.notify("[Vela] No sprint history.", "info");
+    return;
+  }
+
+  const lines = ["[Vela] Recent sprints:"];
+  for (const s of sprints.slice(0, 10)) {
+    const icon = STATUS_ICON[s.status] ?? "❓";
+    lines.push(`  ${icon} ${s.id.split("-").slice(2).join("-").substring(0, 20).padEnd(20)} ${s.status.padEnd(10)} ${s.completed_slices}/${s.total_slices} slices`);
+  }
+  ctx.ui.notify(lines.join("\n"), "info");
+}
+
+function formatSprintStatus(
+  plan: SprintPlan,
+  icons: Record<string, string>,
+  ctx: ExtensionCommandContext
+): void {
+  const lines = [
+    `[Vela] Sprint: ${plan.title}`,
+    `  ID:       ${plan.id}`,
+    `  Status:   ${icons[plan.status] ?? ""} ${plan.status}`,
+    `  Progress: ${plan.completed_slices}/${plan.total_slices} slices`,
+    "",
+    "  Slices:",
+  ];
+  for (const s of plan.slices) {
+    const icon = icons[s.status] ?? "❓";
+    const deps = s.depends_on.length > 0 ? ` (deps: ${s.depends_on.join(", ")})` : "";
+    lines.push(`    ${icon} ${s.id}: ${s.title}${deps}`);
+  }
+  ctx.ui.notify(lines.join("\n"), "info");
+}
+
+async function cmdSprintResume(
+  sprintId: string | undefined,
+  cwd: string,
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  let plan: SprintPlan;
+  if (sprintId) {
+    try {
+      plan = loadSprint(sprintId, cwd);
+    } catch {
+      ctx.ui.notify(`[Vela] Sprint not found: ${sprintId}`, "warning");
+      return;
+    }
+  } else {
+    const active = findActiveSprint(cwd);
+    if (!active) {
+      ctx.ui.notify("[Vela] No active sprint to resume.", "info");
+      return;
+    }
+    plan = active;
+  }
+
+  ctx.ui.notify(`[Vela] Resuming sprint: ${plan.title} (${plan.completed_slices}/${plan.total_slices} done)`, "info");
+  await executeSprintSlices(plan.id, cwd, ctx);
+}
+
+function cmdSprintCancel(
+  sprintId: string | undefined,
+  cwd: string,
+  ctx: ExtensionCommandContext
+): void {
+  let plan: SprintPlan;
+  if (sprintId) {
+    try {
+      plan = loadSprint(sprintId, cwd);
+    } catch {
+      ctx.ui.notify(`[Vela] Sprint not found: ${sprintId}`, "warning");
+      return;
+    }
+  } else {
+    const active = findActiveSprint(cwd);
+    if (!active) {
+      ctx.ui.notify("[Vela] No active sprint to cancel.", "info");
+      return;
+    }
+    plan = active;
+  }
+
+  // Cancel running slices
+  for (const s of plan.slices) {
+    if (s.status === "running") {
+      updateSliceStatus(plan.id, s.id, { status: "failed", result: "Cancelled", completed_at: new Date().toISOString() }, cwd);
+    }
+  }
+  updateSprintStatus(plan.id, "cancelled", cwd);
+  ctx.ui.notify(`[Vela] Sprint cancelled: ${plan.title}`, "info");
 }
 
 async function cmdDispatch(
