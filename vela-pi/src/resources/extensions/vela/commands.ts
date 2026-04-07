@@ -26,6 +26,7 @@ import {
   createPipelineBranch,
   findActivePipelineState,
   formatTimestamp,
+  getCurrentMode,
   listPipelineHistory,
   loadPipelineDefinition,
   recordStep,
@@ -37,12 +38,13 @@ import {
   writeJSON,
   type PipelineState,
 } from "./pipeline.js";
+import { runVelaAgent, getAvailableRoles } from "./dispatch.js";
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 
 export function registerVelaCommands(pi: ExtensionAPI): void {
   pi.registerCommand("vela", {
-    description: "Vela pipeline engine — /vela start|status|transition|record|branch|commit|history|auto|cancel|help",
+    description: "Vela pipeline engine — /vela start|status|transition|record|dispatch|branch|commit|history|auto|cancel|help",
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const parts = args.trim().split(/\s+/);
       const sub = parts[0]?.toLowerCase();
@@ -71,6 +73,9 @@ export function registerVelaCommands(pi: ExtensionAPI): void {
           break;
         case "history":
           await cmdHistory(ctx);
+          break;
+        case "dispatch":
+          await cmdDispatch(parts.slice(1), ctx);
           break;
         case "auto":
           await cmdAuto(ctx);
@@ -472,6 +477,71 @@ async function cmdHistory(ctx: ExtensionCommandContext): Promise<void> {
   ctx.ui.notify(lines.join("\n"), "info");
 }
 
+async function cmdDispatch(
+  parts: string[],
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  const cwd = ctx.cwd;
+  const state = findActivePipelineState(cwd);
+
+  if (!state) {
+    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+    return;
+  }
+
+  // Determine role: --role flag, or derive from current step
+  const roleIdx = parts.indexOf("--role");
+  const role = roleIdx >= 0 ? parts[roleIdx + 1] : state.current_step;
+
+  if (!role) {
+    ctx.ui.notify(
+      `[Vela] No role specified. Available: ${getAvailableRoles().join(", ")}`,
+      "warning"
+    );
+    return;
+  }
+
+  const artifactDir = state._artifactDir ?? state.artifact_dir;
+  if (!artifactDir) {
+    ctx.ui.notify("[Vela] No artifact directory found.", "warning");
+    return;
+  }
+
+  const def = loadPipelineDefinition(cwd);
+  const mode = getCurrentMode(state, def);
+
+  ctx.ui.notify(
+    `[Vela] Dispatching agent: role=${role}, mode=${mode}\n  This may take a few minutes...`,
+    "info"
+  );
+
+  const result = await runVelaAgent({
+    role,
+    cwd,
+    artifactDir,
+    request: state.request,
+    taskType: state.task_type ?? state.type ?? "code",
+    pipelineMode: mode,
+  });
+
+  if (!result.ok) {
+    ctx.ui.notify(
+      `[Vela] Agent dispatch failed (${role}): ${result.error}`,
+      "warning"
+    );
+    return;
+  }
+
+  const duration = result.durationMs ? `${Math.round(result.durationMs / 1000)}s` : "";
+  ctx.ui.notify(
+    `[Vela] Agent completed: ${role}\n` +
+      `  Artifact: ${result.artifact ?? "—"}\n` +
+      (duration ? `  Duration: ${duration}\n` : "") +
+      "\nRun /vela transition when ready to advance.",
+    "success"
+  );
+}
+
 async function cmdAuto(ctx: ExtensionCommandContext): Promise<void> {
   const state = findActivePipelineState(ctx.cwd);
   if (!state) {
@@ -554,6 +624,7 @@ function cmdHelp(ctx: ExtensionCommandContext): void {
       "                                 — create feature branch",
       "  /vela commit [--message TEXT]  — commit pipeline changes",
       "  /vela history                  — show pipeline history",
+      "  /vela dispatch [--role ROLE]   — run an agent for the current (or specified) step",
       "  /vela auto                     — toggle auto-advance mode",
       "  /vela cancel                   — cancel the active pipeline",
       "  /vela help                     — show this help",
