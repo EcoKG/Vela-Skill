@@ -623,12 +623,10 @@ function cmdCommit() {
     infra: "chore",
   };
   const commitType = typeMap[state.type] || "feat";
-  const slug = slugify(state.request);
   const shortDesc = state.request.substring(0, 70);
 
   const messageFlag = getFlag("--message");
-  const commitMessage = messageFlag || `${commitType}(${slug}): ${shortDesc}`;
-  const commitBody = `\nVela-Pipeline: ${path.basename(state._artifactDir)}\nCheckpoint: ${state.git.checkpoint_hash || "unknown"}`;
+  const commitMessage = messageFlag || `${commitType}: ${shortDesc}`;
 
   // Capture diff as artifact
   try {
@@ -659,14 +657,8 @@ function cmdCommit() {
   }
 
   // Commit
-  const fullMessage = commitMessage + "\n" + commitBody;
   try {
-    const tmpMsgFile = path.join(VELA_DIR, "_commit-msg.tmp");
-    fs.writeFileSync(tmpMsgFile, fullMessage);
-    gitExec("commit", "-F", tmpMsgFile);
-    try {
-      fs.unlinkSync(tmpMsgFile);
-    } catch (e) {}
+    gitExec("commit", "-m", commitMessage);
   } catch (e) {
     return output({ ok: false, error: `Commit failed: ${e.message}` });
   }
