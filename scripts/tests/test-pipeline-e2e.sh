@@ -719,6 +719,213 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════
+# Test 27: pipeline.json — diff-summary step exists in standard
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 27: diff-summary step in standard pipeline ──"
+DIFF_SUMMARY_EXISTS=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const ids = j.pipelines.standard.steps.map(s => s.id);
+  console.log(ids.includes('diff-summary') ? 'EXISTS' : 'MISSING');
+" 2>/dev/null)
+assert_eq "diff-summary step exists in standard pipeline" "EXISTS" "$DIFF_SUMMARY_EXISTS"
+
+# ══════════════════════════════════════════════════════════
+# Test 28: pipeline.json — learning step exists in standard
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 28: learning step in standard pipeline ──"
+LEARNING_EXISTS=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const ids = j.pipelines.standard.steps.map(s => s.id);
+  console.log(ids.includes('learning') ? 'EXISTS' : 'MISSING');
+" 2>/dev/null)
+assert_eq "learning step exists in standard pipeline" "EXISTS" "$LEARNING_EXISTS"
+
+# ══════════════════════════════════════════════════════════
+# Test 29: pipeline.json — step ordering: diff-summary after verify, before commit
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 29: diff-summary ordering ──"
+DS_ORDER=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const ids = j.pipelines.standard.steps.map(s => s.id);
+  const dsIdx = ids.indexOf('diff-summary');
+  const verifyIdx = ids.indexOf('verify');
+  const commitIdx = ids.indexOf('commit');
+  console.log(dsIdx > verifyIdx && dsIdx < commitIdx ? 'ORDER_OK' : 'ORDER_FAIL');
+" 2>/dev/null)
+assert_eq "diff-summary after verify and before commit" "ORDER_OK" "$DS_ORDER"
+
+# ══════════════════════════════════════════════════════════
+# Test 30: pipeline.json — step ordering: learning after diff-summary, before commit
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 30: learning ordering ──"
+LRN_ORDER=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const ids = j.pipelines.standard.steps.map(s => s.id);
+  const lrnIdx = ids.indexOf('learning');
+  const dsIdx = ids.indexOf('diff-summary');
+  const commitIdx = ids.indexOf('commit');
+  console.log(lrnIdx > dsIdx && lrnIdx < commitIdx ? 'ORDER_OK' : 'ORDER_FAIL');
+" 2>/dev/null)
+assert_eq "learning after diff-summary and before commit" "ORDER_OK" "$LRN_ORDER"
+
+# ══════════════════════════════════════════════════════════
+# Test 31: vela-pipeline.js — sdkDiffSummary require exists
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 31: sdkDiffSummary import ──"
+SDK_DS_IMPORT=$(grep -c 'sdkDiffSummary' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+TOTAL=$((TOTAL + 1))
+if [ "$SDK_DS_IMPORT" -ge 2 ]; then
+  echo "  ✅ PASS: sdkDiffSummary referenced ($SDK_DS_IMPORT times, >=2 = import+use)"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: sdkDiffSummary count ($SDK_DS_IMPORT) < 2"
+  FAIL=$((FAIL + 1))
+fi
+
+# ══════════════════════════════════════════════════════════
+# Test 32: vela-pipeline.js — sdkLearning require exists
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 32: sdkLearning import ──"
+SDK_LRN_IMPORT=$(grep -c 'sdkLearning' "$PIPELINE_MODULE" 2>/dev/null || echo "0")
+TOTAL=$((TOTAL + 1))
+if [ "$SDK_LRN_IMPORT" -ge 2 ]; then
+  echo "  ✅ PASS: sdkLearning referenced ($SDK_LRN_IMPORT times, >=2 = import+use)"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: sdkLearning count ($SDK_LRN_IMPORT) < 2"
+  FAIL=$((FAIL + 1))
+fi
+
+# ══════════════════════════════════════════════════════════
+# Test 33: vela-pipeline.js — runVerifyRetryLoop export
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 33: runVerifyRetryLoop export ──"
+RETRY_EXPORT=$(node -e "
+  const m = require('$PIPELINE_MODULE');
+  console.log(typeof m.runVerifyRetryLoop === 'function' ? 'EXPORTED' : 'MISSING');
+" 2>/dev/null)
+assert_eq "runVerifyRetryLoop is exported function" "EXPORTED" "$RETRY_EXPORT"
+
+# ══════════════════════════════════════════════════════════
+# Test 34: pipeline.json — diff-summary entry_gate includes verification_md_exists
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 34: diff-summary entry_gate ──"
+DS_GATE=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const ds = j.pipelines.standard.steps.find(s => s.id === 'diff-summary');
+  console.log(ds && ds.entry_gate && ds.entry_gate.includes('verification_md_exists') ? 'GATE_OK' : 'GATE_FAIL');
+" 2>/dev/null)
+assert_eq "diff-summary entry_gate has verification_md_exists" "GATE_OK" "$DS_GATE"
+
+# ══════════════════════════════════════════════════════════
+# Test 35: pipeline.json — learning entry_gate includes diff_summary_exists
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 35: learning entry_gate ──"
+LRN_GATE=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const lrn = j.pipelines.standard.steps.find(s => s.id === 'learning');
+  console.log(lrn && lrn.entry_gate && lrn.entry_gate.includes('diff_summary_exists') ? 'GATE_OK' : 'GATE_FAIL');
+" 2>/dev/null)
+assert_eq "learning entry_gate has diff_summary_exists" "GATE_OK" "$LRN_GATE"
+
+# ══════════════════════════════════════════════════════════
+# Test 36: pipeline.json — commit entry_gate includes learning_md_exists
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 36: commit entry_gate ──"
+COMMIT_GATE=$(node -e "
+  const j = JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/templates/pipeline.json','utf8'));
+  const commit = j.pipelines.standard.steps.find(s => s.id === 'commit');
+  console.log(commit && commit.entry_gate && commit.entry_gate.includes('learning_md_exists') ? 'GATE_OK' : 'GATE_FAIL');
+" 2>/dev/null)
+assert_eq "commit entry_gate has learning_md_exists" "GATE_OK" "$COMMIT_GATE"
+
+# ══════════════════════════════════════════════════════════
+# Test 37: checkLocalGate — diff_summary_exists gate
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 37: checkLocalGate diff_summary_exists ──"
+TEMP_DS_DIR="$TEMP_GATE_DIR/ds-test"
+mkdir -p "$TEMP_DS_DIR"
+
+GATE_DS=$(node -e "
+  const { checkLocalGate } = require('$PIPELINE_MODULE');
+  const fs = require('fs');
+  const dir = '$TEMP_DS_DIR';
+
+  // Case 1: diff-summary.md missing → gate fails
+  const r1 = checkLocalGate({ exit_gate: ['diff_summary_exists'] }, dir);
+
+  // Case 2: diff-summary.md present → gate passes
+  fs.writeFileSync(dir + '/diff-summary.md', '# Diff Summary');
+  const r2 = checkLocalGate({ exit_gate: ['diff_summary_exists'] }, dir);
+
+  console.log(JSON.stringify({
+    missingFails: !r1.passed && r1.missing.includes('diff_summary_exists'),
+    presentPasses: r2.passed,
+  }));
+" 2>/dev/null)
+assert_contains "diff_summary_exists fails when missing" '"missingFails":true' "$GATE_DS"
+assert_contains "diff_summary_exists passes when present" '"presentPasses":true' "$GATE_DS"
+
+# ══════════════════════════════════════════════════════════
+# Test 38: checkLocalGate — learning_md_exists gate
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 38: checkLocalGate learning_md_exists ──"
+TEMP_LRN_DIR="$TEMP_GATE_DIR/lrn-test"
+mkdir -p "$TEMP_LRN_DIR"
+
+GATE_LRN=$(node -e "
+  const { checkLocalGate } = require('$PIPELINE_MODULE');
+  const fs = require('fs');
+  const dir = '$TEMP_LRN_DIR';
+
+  // Case 1: learning.md missing → gate fails
+  const r1 = checkLocalGate({ exit_gate: ['learning_md_exists'] }, dir);
+
+  // Case 2: learning.md present → gate passes
+  fs.writeFileSync(dir + '/learning.md', '# Learning');
+  const r2 = checkLocalGate({ exit_gate: ['learning_md_exists'] }, dir);
+
+  console.log(JSON.stringify({
+    missingFails: !r1.passed && r1.missing.includes('learning_md_exists'),
+    presentPasses: r2.passed,
+  }));
+" 2>/dev/null)
+assert_contains "learning_md_exists fails when missing" '"missingFails":true' "$GATE_LRN"
+assert_contains "learning_md_exists passes when present" '"presentPasses":true' "$GATE_LRN"
+
+# ══════════════════════════════════════════════════════════
+# Test 39: vela-pipeline.js — verify retry loop references in executeStepLoop
+# ══════════════════════════════════════════════════════════
+echo ""
+echo "── Test 39: verify retry loop integration ──"
+RETRY_REFS=$(node -e "
+  const src = require('fs').readFileSync('$PIPELINE_MODULE', 'utf8');
+  const results = {
+    hasRunVerifyRetryLoop: src.includes('runVerifyRetryLoop'),
+    hasMaxRevisions: src.includes('max_revisions'),
+    hasEscalateOnExhaustion: src.includes('escalate_to_pm'),
+    hasVerificationFeedback: src.includes('verification.md'),
+  };
+  console.log(JSON.stringify(results));
+" 2>/dev/null)
+assert_contains "runVerifyRetryLoop referenced in source" '"hasRunVerifyRetryLoop":true' "$RETRY_REFS"
+assert_contains "max_revisions config referenced" '"hasMaxRevisions":true' "$RETRY_REFS"
+assert_contains "escalate_to_pm on exhaustion" '"hasEscalateOnExhaustion":true' "$RETRY_REFS"
+assert_contains "verification.md feedback injection" '"hasVerificationFeedback":true' "$RETRY_REFS"
+
+# ══════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════
 echo ""

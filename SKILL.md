@@ -25,7 +25,7 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
   결과를 예쁘게 포맷하여 표시:
   ```
   ⛵ Vela Pipeline Status
-  🧭 standard │ Step: execute (7/10) │ Task: 인증 시스템 추가
+  🧭 standard │ Step: execute (7/12) │ Task: 인증 시스템 추가
   ✦ Branch: vela/auth-system-1358
   🌟 Completed: init → research → plan → plan-check → checkpoint → branch
   ```
@@ -101,7 +101,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - small + code-bug → ralph (자동 반복)
    - small + docs → hotfix (init → execute → commit)
    - medium + code → quick (init → plan → execute → verify → commit → finalize)
-   - large + code → standard (full 10-step)
+   - large + code → standard (full 12-step)
 
 4. **파이프라인 시작**
    ```bash
@@ -325,7 +325,7 @@ node .vela/cli/vela-engine.js auto
 
 | 종류 | 단계 | 조건 |
 |------|------|------|
-| **standard** | init → research → plan → plan-check → checkpoint → **branch** → execute → verify → **commit** → finalize | 6+ 파일, 300+ 라인 |
+| **standard** | init → research → plan → plan-check → checkpoint → **branch** → execute → verify → diff-summary → learning → **commit** → finalize | 6+ 파일, 300+ 라인 |
 | **quick** | init → plan → execute → verify → **commit** → finalize | 3 파일 이하, 100 라인 이하 |
 | **trivial** | init → execute → **commit** → finalize | 1 파일, 10 라인 이하 |
 

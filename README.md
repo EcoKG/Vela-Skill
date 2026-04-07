@@ -93,7 +93,8 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │                                                           │
 │  🧭 PIPELINE ────────────────────────────────────        │
 │  init → research → plan → plan-check → checkpoint        │
-│       → branch → execute → verify → commit → finalize    │
+│       → branch → execute → verify → diff-summary         │
+│       → learning → commit → finalize                     │
 │                                                           │
 │  🔌 SDK ORCHESTRATOR (vela-pipeline.js) ─────────        │
 │  review:     Opus 단일 리뷰                               │
@@ -156,7 +157,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 | 종류 | 단계 | 선택 |
 |------|------|------|
-| **standard** | init → research → plan → plan-check → checkpoint → branch → execute → verify → commit → finalize | `--scale large` |
+| **standard** | init → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize | `--scale large` |
 | **quick** | init → plan → execute → verify → commit → finalize | `--scale medium` |
 | **trivial** | init → execute → commit → finalize | `--scale small` |
 | **ralph** | init → execute ↔ verify (반복) → commit → finalize | `--scale ralph` |
@@ -169,6 +170,16 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 ### Hotfix 모드
 비-소스 변경(문서, 설정, README)용 최소 파이프라인. 리뷰 스킵.
+
+### Diff-Summary / Learning 단계
+standard 파이프라인에서 verify 성공 후 commit 전에 실행되는 후처리 단계:
+- **diff-summary**: Opus가 전체 diff를 5차원(consistency/completeness/doc-sync/regression/coherence)으로 통합 검토하여 `diff-summary.md` 생성
+- **learning**: Haiku가 파이프라인 실행에서 패턴을 추출하여 `learning.md` 생성 및 `learnings.json` 누적
+
+두 단계 모두 non-fatal — SDK 실패 시 경고만 남기고 파이프라인은 계속 진행.
+
+### Verify 재시도 루프
+standard 파이프라인에서 verify 실패 시 execute → code-review → verify 사이클을 `max_revisions`(기본 3)까지 자동 반복. 재시도마다 verification.md의 실패 내용을 execute에 주입. 반복 소진 시 `escalate_to_pm`으로 파이프라인 중단.
 
 ### Pipeline 템플릿
 `templates/presets.json`에 사전 정의된 패턴: auth, api-crud, bugfix, refactor, migration, docs

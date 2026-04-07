@@ -17,7 +17,7 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 1. 파이프라인 규모 선택:
    - small: trivial (init → execute → commit → finalize)
    - medium: quick (init → plan → execute → verify → commit → finalize)
-   - large: standard (full 10-step with research, plan, team review)
+   - large: standard (full 12-step with research, plan, team review)
 
 2. `node .vela/cli/vela-pipeline.js run "작업 설명" --scale <small|medium|large>`
 
