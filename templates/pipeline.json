@@ -204,6 +204,7 @@
       ".vela/cache/",
       ".vela/state/",
       ".vela/artifacts/",
+      ".vela/sprints/",
       ".vela/tracker-signals.json",
       ".vela/write-log.jsonl",
       "*.vela-tmp"

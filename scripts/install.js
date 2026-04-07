@@ -236,6 +236,7 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/sdk-validator.js", dst: "shared/sdk-validator.js" },
   { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
   { src: "scripts/shared/sdk-analyzer.js", dst: "shared/sdk-analyzer.js" },
+  { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
   {
     src: "scripts/shared/sdk-custom-tools.js",
     dst: "shared/sdk-custom-tools.js",
