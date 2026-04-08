@@ -1,10 +1,10 @@
 # ⛵ Vela Engine — Pi SDK Edition
 
-**Vela**는 Pi SDK(`@gsd/pi-coding-agent`) 위에서 동작하는 결정론적 샌드박스 개발 엔진이다.
+**Vela**는 `@mariozechner/pi-coding-agent`(오픈소스 Pi SDK) 위에서 동작하는 결정론적 샌드박스 개발 엔진이다.
 모든 AI 코딩 행위는 Vela의 파이프라인을 통해서만 진행된다.
 
-> **v5.0**: Claude Code SKILL.md + Hook 기반 시스템에서 Pi SDK 기반 독립형 npm CLI 패키지(`vela-pi`)로 전면 이전.
-GSD 의존성 없음 — `@mariozechner/pi-coding-agent` (오픈소스) 직접 사용.
+> **v5.1**: GSD 의존성 완전 제거 — `@mariozechner/pi-coding-agent` 직접 사용.
+> 울트라플랜 M1~M5 완료 — 파이프라인 타입 확장, Auto Loop, 병렬 Research, 고도화된 Gate Guard, 프롬프트 옵티마이저.
 
 ---
 
@@ -21,6 +21,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 
 ### 3. 🔭 추적 가능한 개발 (Traceable Development)
 산출물(research.md, plan.md, review-execute.md, approval-execute.json), artifact 디렉토리, git 커밋에 파이프라인 참조.
+모든 상태 전이와 단계 기록은 `trace.jsonl`에 JSONL 형식으로 append-only 기록.
 
 ### 4. ✦ 구조로 강제 (Enforce by Structure)
 지시는 무시된다. 산출물이 없으면 전이 차단. approval 없으면 다음 단계 불가. `--scale` 미지정 시 init 거부.
@@ -62,9 +63,15 @@ vela
 │  checkToolCall()          checkGateGuard()                │
 │                                                           │
 │  🧭 PIPELINE ────────────────────────────────────        │
-│  init → research → plan → plan-check → checkpoint        │
-│       → branch → execute → verify → diff-summary         │
-│       → learning → commit → finalize                     │
+│  standard: init → research → plan → plan-check →         │
+│    checkpoint → branch → execute → verify →              │
+│    diff-summary → learning → commit → finalize           │
+│  quick:    init → plan → execute → verify →              │
+│            commit → finalize                             │
+│  trivial:  init → execute → commit → finalize            │
+│  ralph:    init → execute ↔ verify (×10) →               │
+│            commit → finalize                             │
+│  hotfix:   init → execute → commit                       │
 │                                                           │
 │  🔌 DISPATCH (dispatch.ts) ───────────────────────        │
 │  researcher:    read-only 분석 → research.md              │
@@ -76,12 +83,21 @@ vela
 │  learning:      패턴 추출 → learning.md                   │
 │  finalizer:     최종 보고서 → report.md                   │
 │  sprint-planner: 스프린트 분해 → sprint-plan.json         │
+│  pm:            위임 관리 → delegation.json               │
 │  ↳ 각 역할은 SessionManager.inMemory() 격리 세션          │
 │                                                           │
 │  🗂 SPRINT (sprint.ts) ────────────────────────────       │
 │  /vela sprint run <request> → 슬라이스 분해 → 자동 실행   │
 │  슬라이스 FSM: planned → queued → running → done/failed  │
 │  의존성 DAG + Kahn's 알고리즘 사이클 감지                  │
+│                                                           │
+│  ⚡ AUTO LOOP (runAutoLoop) ──────────────────────        │
+│  /vela auto → dispatch → record → transition → repeat    │
+│  최대 30 이터레이션. user/pm 단계에서 일시 정지.           │
+│                                                           │
+│  🔬 PARALLEL RESEARCH ────────────────────────────        │
+│  researcher 역할 → 3개 inMemory 세션 동시 실행            │
+│  architecture / security / quality 관점 병렬 분석         │
 ✦──────────────────────────────────────────────────────────✦
 ```
 
@@ -104,7 +120,22 @@ vela
 | **ralph** | init → execute ↔ verify (반복, 최대 10회) → commit → finalize | `--scale ralph` |
 | **hotfix** | init → execute → commit | `--scale hotfix` |
 
-`--scale` 필수. 미지정 시 AskUserQuestion으로 사용자에게 선택 요구.
+`--scale` 필수. 미지정 시 선택 메뉴 출력 후 재입력 요구.
+
+### 프리셋 (--preset)
+
+| 프리셋 | scale 기본값 | 설명 |
+|--------|-------------|------|
+| `auth` | large | 인증/OAuth 관련 작업 |
+| `api-crud` | medium | REST API CRUD 엔드포인트 |
+| `bugfix` | medium | 버그 수정 |
+| `refactor` | large | 코드 리팩토링 |
+| `migration` | large | DB/코드 마이그레이션 |
+| `docs` | small | 문서 작업 |
+
+```
+/vela start "JWT 리프레시 토큰 추가" --preset auth
+```
 
 ### Ralph 모드
 테스트 통과까지 execute → verify를 최대 10회 자동 반복. 버그 수정/TDD에 적합.
@@ -125,15 +156,16 @@ standard 파이프라인에서 verify 실패 시 execute → verify 사이클을
 
 | 역할 | 출력 파일 | 도구셋 | 설명 |
 |------|-----------|--------|------|
-| `researcher` | research.md | read-only | 코드베이스 분석 |
+| `researcher` | research.md | read-only | 코드베이스 분석 (병렬 3세션: architecture/security/quality) |
 | `planner` | plan.md | coding | 구현 계획 수립 |
 | `plan-checker` | plan-check.md | read-only | plan.md 구조 검증 |
 | `executor` | task-summary.md | coding | TDD 코드 구현 |
 | `reviewer` | review-execute.md | read-only | 코드 리뷰 (APPROVE/REJECT + 점수) |
 | `diff-summary` | diff-summary.md | read-only | diff 통합 요약 |
-| `learning` | learning.md | read-only | 파이프라인 패턴 추출 |
+| `learning` | learning.md | read-only | 파이프라인 패턴 추출 → `.vela/learnings.json` 누적 |
 | `finalizer` | report.md | coding | 최종 파이프라인 보고서 |
 | `sprint-planner` | sprint-plan.json | read-only | 요청을 슬라이스 DAG로 분해 |
+| `pm` | delegation.json | coding | 위임 관리, executor 지정 |
 
 ### 수동 디스패치
 
@@ -141,6 +173,22 @@ standard 파이프라인에서 verify 실패 시 execute → verify 사이클을
 /vela dispatch researcher "OAuth 인증 분석"
 /vela dispatch planner "OAuth 인증 추가"
 ```
+
+---
+
+## 프롬프트 옵티마이저 (M5-1)
+
+`/vela start` 실행 시 요청 품질을 자동 검사한다. 문제가 발견되면 경고 + 개선 예시를 출력하고 중단.
+
+| 검사 | 조건 | 안내 |
+|------|------|------|
+| 너무 짧음 | 4단어 미만 | WHAT/WHERE/WHY 포함 요구 |
+| 단일 동사 | `fix`, `add` 등 단독 입력 | 주어 + 맥락 추가 요구 |
+| 위치 없음 | 파일/모듈 경로 미포함 (코드 태스크) | `src/api/users.ts` 등 명시 요구 |
+| 대명사 모호 | 짧은 요청에 it/this/that | 구체적 대상으로 교체 요구 |
+| 수락 기준 없음 | 8단어 이상, should/must 없음 | 검증 기준 추가 권장 |
+
+`--force` 플래그로 우회 가능.
 
 ---
 
@@ -152,8 +200,9 @@ standard 파이프라인에서 verify 실패 시 execute → verify 사이클을
 
 ```
 planned → queued → running → done
-                          ↘ failed
-         ↘ skipped
+                          ↘ failed → queued  (재시도)
+          running → queued           (일시 정지)
+          queued  → planned          (역전이)
 ```
 
 ### 커맨드
@@ -189,7 +238,7 @@ Pi SDK `checkToolCall()` 내에서 동기적으로 실행. 모드에 따라 도�
 | 민감파일 보호 | VK-05 | `.env`, `credentials.json`, 개인키 등 쓰기 차단 |
 | 시크릿 감지 | VK-06 | AWS 키, GitHub PAT, Anthropic 키 등 15개 패턴 차단 |
 | PM 속독 | VK-07 | delegation.json 없이 PM 직접 소스 수정 차단 |
-| 체인 연산자 차단 | VK-08 | `&&`, `\|\|`, `;`, `\|` — `ls && rm -rf /` 방지 |
+| 체인 연산자 차단 | VK-08 | `&&`/`\|\|`/`;`/`\|` 체인 각 세그먼트 개별 검사, 안전 명령만 허용 |
 
 ### 🌟 Gate Guard (VG — 파이프라인 상태 기반)
 
@@ -203,8 +252,11 @@ Pi SDK `checkGateGuard()` 내에서 `pipeline-state.json`을 읽어 파이프라
 | 상태 파일 보호 | VG-05 | pipeline-state.json 직접 수정 차단 |
 | git commit 제한 | VG-07 | execute/commit/finalize 단계에서만 git commit 허용 |
 | git push 제한 | VG-08 | verify 완료 전 push 차단, --force 항상 차단 |
-| 비-팀 단계 승인 차단 | VG-11 | team 단계 외 approval/review 작성 차단 |
-| executor 위임 | VG-12 | execute 단계에 delegation.json 필요 |
+| 팀 단계 검증 | VG-11 | research/plan/execute/diff-summary/verify 외 단계에서 approval-*/review-* 작성 차단 |
+| executor 위임 | VG-12 | execute 단계 소스 수정 시 delegation.json 존재 + 스키마(executor, task 필드) 검증 |
+| 경로 순회 차단 | VG-13 | `/../` 포함 파일 경로 차단 |
+| 동시 파이프라인 차단 | VG-14 | 활성 파이프라인 중 `/vela start` Bash 명령 차단 |
+| vela-tmp 보호 | VG-15 | `*.vela-tmp` 파일 직접 쓰기 차단 |
 | 파괴적 명령 차단 | VG-DESTROY | `rm -rf`, `git reset --hard` 차단 |
 
 ### Fail-Closed 보안 모델
@@ -218,8 +270,8 @@ Pi SDK `checkGateGuard()` 내에서 `pipeline-state.json`을 읽어 파이프라
 ## 슬래시 커맨드 레퍼런스
 
 ```
-/vela start "<request>" [--scale small|medium|large|ralph|hotfix]
-/vela status                                    # 현재 파이프라인 상태
+/vela start "<request>" [--scale small|medium|large|ralph|hotfix] [--preset <name>] [--force]
+/vela status                                    # 현재 파이프라인 상태 (진행 바 + 단계 목록)
 /vela transition                                # 다음 단계로 전이
 /vela record pass|fail|reject [--summary TEXT]  # 단계 결과 기록
 /vela sub-transition                            # TDD 서브페이즈 전진
@@ -228,7 +280,8 @@ Pi SDK `checkGateGuard()` 내에서 `pipeline-state.json`을 읽어 파이프라
 /vela history                                   # 파이프라인 이력
 /vela dispatch <role> <request>                 # 서브에이전트 수동 디스패치
 /vela sprint run|status|resume|cancel [args]    # 스프린트 오케스트레이션
-/vela auto                                      # Auto 모드 토글
+/vela auto                                      # Auto 모드 토글 (최대 30 이터레이션)
+/vela analyze [--deps] [--security] [--quality] # 의존성/보안/품질 분석
 /vela cancel                                    # 파이프라인 취소
 /vela help                                      # 도움말
 ```
@@ -237,7 +290,7 @@ Pi SDK `checkGateGuard()` 내에서 `pipeline-state.json`을 읽어 파이프라
 
 ## CLI 플래그
 
-`vela` 바이너리는 `dist/loader.ts` → `dist/cli.ts`를 통해 Pi SDK를 직접 초기화한다.
+`vela` 바이너리는 `dist/loader.js` → `dist/cli.js`를 통해 Pi SDK를 직접 초기화한다.
 
 ```
 vela [options]
@@ -260,17 +313,20 @@ Options:
 
 ```
 .vela/
-├── pipeline-state.json              # 현재 파이프라인 상태 (엔진 관리)
-├── config.json                      # 프로젝트별 설정
+├── config.json                              # 프로젝트별 설정
+├── persona.md                               # (선택) 세션 시작 시 주입되는 페르소나
+├── learnings.json                           # 파이프라인 누적 학습 (최대 100개)
 ├── artifacts/{YYYYMMDD}T{HHmmss}-{slug}/
 │   ├── meta.json
 │   ├── pipeline-state.json
+│   ├── trace.jsonl                          # 상태 전이 + 단계 기록 (JSONL, append-only)
 │   ├── research.md
 │   ├── plan.md, plan-check.md
 │   ├── task-summary.md
 │   ├── review-execute.md, approval-execute.json
 │   ├── verification.md
 │   ├── diff.patch, diff-summary.md, approval-diff-summary.json
+│   ├── delegation.json                      # executor 위임 (VG-12 필수)
 │   ├── learning.md
 │   └── report.md
 └── sprints/{sprint-id}/
@@ -286,18 +342,18 @@ Options:
 vela-pi/
 ├── package.json                     # name: vela-pi, bin: vela → dist/loader.js
 ├── src/
-│   ├── loader.ts                    # 진입점 — Pi SDK 환경 변수 설정, GSD_BUNDLED_EXTENSION_PATHS
-│   ├── cli.ts                       # Standalone Pi SDK CLI (gsd-pi 의존성 없음)
+│   ├── loader.ts                    # 진입점 — PI_PACKAGE_DIR, PI_APP_NAME, PI_CODING_AGENT_DIR 설정 후 cli.ts 로드
+│   ├── cli.ts                       # Standalone Pi SDK CLI (additionalExtensionPaths로 익스텐션 등록)
 │   └── resources/extensions/vela/
-│       ├── index.ts                 # 익스텐션 등록 (registerVelaCommands, checkToolCall)
-│       ├── pipeline.ts              # 파이프라인 상태 머신 (vela-engine.js 포트)
-│       ├── commands.ts              # /vela 슬래시 커맨드 핸들러
-│       ├── dispatch.ts              # Sub-agent 디스패처 (sdk-runner.js 포트)
-│       ├── guards.ts                # VK/VG 게이트 강제
+│       ├── index.ts                 # 익스텐션 등록 (registerVelaCommands, checkToolCall, session_start 훅)
+│       ├── pipeline.ts              # 파이프라인 상태 머신 + appendTrace()
+│       ├── commands.ts              # /vela 슬래시 커맨드 핸들러 + analyzeRequestQuality()
+│       ├── dispatch.ts              # Sub-agent 디스패처 + runParallelResearch() + accumulateLearning()
+│       ├── guards.ts                # VK-01~08 + VG-00~15 + VG-DESTROY 게이트
 │       ├── git.ts                   # Git 헬퍼 (push, stash, branch 감지 등)
-│       ├── sprint.ts                # 스프린트 오케스트레이션 (sprint-manager.js 포트)
+│       ├── sprint.ts                # 스프린트 오케스트레이션 + SLICE_TRANSITIONS FSM
 │       └── templates/
-│           └── pipeline.json        # 파이프라인 타입 정의 (standard/quick/trivial/ralph/hotfix)
+│           └── pipeline.json        # 파이프라인 타입 정의 (standard/quick/trivial/ralph/hotfix + scales + presets)
 └── dist/                            # tsc 빌드 출력
 ```
 
@@ -347,7 +403,13 @@ Node.js ≥ 22.0.0 필요.
 | v5.0 | Phase 5 | git.ts — 타입 안전 Git 헬퍼 모듈 |
 | v5.0 | Phase 6 | sprint.ts — 스프린트 오케스트레이션 + /vela sprint 커맨드 |
 | v5.0 | Phase 7 | cli.ts — gsd-pi 의존성 없는 독립형 Pi SDK CLI 진입점 |
-| v5.0 | Phase 8 | **GSD 완전 제거** — `gsd-pi` → `@mariozechner/pi-coding-agent` (오픈소스 원본) 직접 의존. `loader.ts` GSD 코드 전면 제거, `additionalExtensionPaths` 방식으로 익스텐션 로딩 |
+| v5.0 | Phase 8 | **GSD 완전 제거** — `@mariozechner/pi-coding-agent` 직접 의존. `additionalExtensionPaths` 방식 익스텐션 로딩 |
+| **v5.1** | **Ultra Plan** | **울트라플랜 M1~M5 — 파이프라인/가드/디스패치 전면 고도화** |
+| v5.1 | M1 | quick/trivial/ralph/hotfix 파이프라인 타입 추가 (inheritance 패턴). `scales` 맵 + `presets` 섹션 |
+| v5.1 | M2 | `runAutoLoop` (30 iter), `runParallelResearch` (3세션 병렬), `pm` 역할, `accumulateLearning` |
+| v5.1 | M3 | VG-11 TEAM_STEPS 확장(diff-summary/verify), VG-12 스키마 검증, VG-13 경로순회, VG-14 동시파이프라인, VG-15 .vela-tmp |
+| v5.1 | M4 | `appendTrace()` → trace.jsonl, `cleanupStalePipelines()`, sprint FSM (failed→queued, running→queued, queued→planned) |
+| v5.1 | M5 | `analyzeRequestQuality()` 프롬프트 옵티마이저, persona.md session_start 주입, `/vela analyze` 커맨드 |
 
 ---
 
