@@ -19,7 +19,7 @@ import { join } from "node:path";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
-} from "@gsd/pi-coding-agent";
+} from "@mariozechner/pi-coding-agent";
 import {
   cleanupCancelledArtifacts,
   commitPipeline,
@@ -226,7 +226,7 @@ async function cmdStart(
       `  Artifact dir: .vela/artifacts/${artifactDirName}\n` +
       (cleaned > 0 ? `  Cleaned ${cleaned} old cancelled artifact(s).\n` : "") +
       "\nRun /vela status to check state.",
-    "success"
+    "info"
   );
 }
 
@@ -307,7 +307,7 @@ async function cmdTransition(ctx: ExtensionCommandContext): Promise<void> {
   }
 
   if (result.completed) {
-    ctx.ui.notify("[Vela] Pipeline completed successfully! 🎉", "success");
+    ctx.ui.notify("[Vela] Pipeline completed successfully! 🎉", "info");
     return;
   }
 
@@ -315,7 +315,7 @@ async function cmdTransition(ctx: ExtensionCommandContext): Promise<void> {
     `[Vela] Advanced: ${result.previous_step} → ${result.current_step}\n` +
       `  Step: ${result.current_step_name}\n` +
       `  Mode: ${result.current_mode}`,
-    "success"
+    "info"
   );
 }
 
@@ -351,7 +351,7 @@ async function cmdRecord(
 
   ctx.ui.notify(
     `[Vela] Recorded ${result.verdict} for step "${result.step}" (revision ${result.revision}).${autoNote}`,
-    "success"
+    "info"
   );
 }
 
@@ -371,7 +371,7 @@ async function cmdSubTransition(ctx: ExtensionCommandContext): Promise<void> {
   if (result.completed) {
     ctx.ui.notify(
       `[Vela] All sub-phases completed for "${state.current_step}".`,
-      "success"
+      "info"
     );
     return;
   }
@@ -381,7 +381,7 @@ async function cmdSubTransition(ctx: ExtensionCommandContext): Promise<void> {
       (result.remaining?.length
         ? `  Remaining: ${result.remaining.join(", ")}`
         : "  (last sub-phase)"),
-    "success"
+    "info"
   );
 }
 
@@ -429,7 +429,7 @@ async function cmdBranch(
       );
       break;
     case "created":
-      ctx.ui.notify(`[Vela] Branch "${result.branch}" created.`, "success");
+      ctx.ui.notify(`[Vela] Branch "${result.branch}" created.`, "info");
       break;
   }
 }
@@ -466,7 +466,7 @@ async function cmdCommit(
     case "committed":
       ctx.ui.notify(
         `[Vela] Committed: ${result.commit_message}\n  Hash: ${result.hash?.substring(0, 7)}`,
-        "success"
+        "info"
       );
       break;
   }
@@ -597,7 +597,7 @@ async function cmdSprintRun(
       `  Slices: ${slices.length}\n` +
       slices.map((s) => `    • ${s.id}: ${s.title}`).join("\n") +
       "\n\nStarting execution...",
-    "success"
+    "info"
   );
 
   // Execute slices sequentially
@@ -623,10 +623,10 @@ async function executeSprintSlices(
         const summaryPath = generateSprintSummary(completedPlan, cwd);
         ctx.ui.notify(
           `[Vela] Sprint completed!\n  Summary: ${summaryPath}`,
-          "success"
+          "info"
         );
       } catch {
-        ctx.ui.notify("[Vela] Sprint completed!", "success");
+        ctx.ui.notify("[Vela] Sprint completed!", "info");
       }
       return;
     }
@@ -667,7 +667,7 @@ async function executeSprintSlices(
           result: result.text?.substring(0, 200),
           completed_at: new Date().toISOString(),
         }, cwd);
-        ctx.ui.notify(`[Vela] Slice done: ${slice.title}`, "success");
+        ctx.ui.notify(`[Vela] Slice done: ${slice.title}`, "info");
       } else {
         updateSliceStatus(sprintId, slice.id, {
           status: "failed",
@@ -863,7 +863,7 @@ async function cmdDispatch(
       `  Artifact: ${result.artifact ?? "—"}\n` +
       (duration ? `  Duration: ${duration}\n` : "") +
       "\nRun /vela transition when ready to advance.",
-    "success"
+    "info"
   );
 }
 

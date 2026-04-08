@@ -4,6 +4,7 @@
 모든 AI 코딩 행위는 Vela의 파이프라인을 통해서만 진행된다.
 
 > **v5.0**: Claude Code SKILL.md + Hook 기반 시스템에서 Pi SDK 기반 독립형 npm CLI 패키지(`vela-pi`)로 전면 이전.
+GSD 의존성 없음 — `@mariozechner/pi-coding-agent` (오픈소스) 직접 사용.
 
 ---
 
@@ -33,6 +34,8 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 ```bash
 npm install -g vela-pi
 ```
+
+의존성: `@mariozechner/pi-coding-agent` (자동 설치). GSD/gsd-pi 불필요.
 
 ### 실행
 
@@ -302,9 +305,12 @@ vela-pi/
 
 | 변수 | 값 | 설명 |
 |------|----|------|
-| `GSD_BUNDLED_EXTENSION_PATHS` | `dist/resources/extensions/vela/index.js` | Vela 익스텐션만 로드 (GSD 익스텐션 제외) |
-| `PI_PACKAGE_DIR` | `vela-pi/pkg/` | Pi 설정 디렉토리 |
+| `PI_PACKAGE_DIR` | `vela-pi/pkg/` | Pi 설정 디렉토리 (piConfig 읽기) |
 | `PI_APP_NAME` | `vela` | Pi 앱 식별자 |
+| `PI_CODING_AGENT_DIR` | `~/.vela/agent` | auth.json, models.json 위치 |
+| `VELA_EXT_PATH` | `dist/resources/extensions/vela/index.js` | Vela 익스텐션 경로 (loader → cli 전달) |
+
+> `GSD_BUNDLED_EXTENSION_PATHS`는 사용하지 않습니다. 익스텐션은 `DefaultResourceLoader`의 `additionalExtensionPaths` 배열로 등록합니다.
 
 ---
 
@@ -341,6 +347,7 @@ Node.js ≥ 22.0.0 필요.
 | v5.0 | Phase 5 | git.ts — 타입 안전 Git 헬퍼 모듈 |
 | v5.0 | Phase 6 | sprint.ts — 스프린트 오케스트레이션 + /vela sprint 커맨드 |
 | v5.0 | Phase 7 | cli.ts — gsd-pi 의존성 없는 독립형 Pi SDK CLI 진입점 |
+| v5.0 | Phase 8 | **GSD 완전 제거** — `gsd-pi` → `@mariozechner/pi-coding-agent` (오픈소스 원본) 직접 의존. `loader.ts` GSD 코드 전면 제거, `additionalExtensionPaths` 방식으로 익스텐션 로딩 |
 
 ---
 
