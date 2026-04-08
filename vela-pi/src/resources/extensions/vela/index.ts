@@ -12,7 +12,7 @@ import type {
   ExtensionContext,
   SessionStartEvent,
   ToolCallEvent,
-} from "@gsd/pi-coding-agent";
+} from "@mariozechner/pi-coding-agent";
 
 interface ToolCallEventResult {
   block?: boolean;

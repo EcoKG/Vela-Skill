@@ -1,24 +1,25 @@
 /**
- * Vela Standalone CLI — Phase 7
+ * Vela Standalone CLI
  *
- * Direct Pi SDK entry point — replaces the gsd-pi/dist/cli.js dependency.
- * Eliminates GSD-specific startup (preferences, RTK, managed tools, web mode, etc.)
- * and loads ONLY the Vela extension.
+ * Direct @mariozechner/pi-coding-agent entry point — no GSD dependencies.
  *
  * Flow:
- *   loader.ts sets PI_PACKAGE_DIR, NODE_PATH, GSD_BUNDLED_EXTENSION_PATHS (vela only)
- *     → imports this file directly instead of gsd-pi/dist/cli.js
+ *   loader.ts sets PI_PACKAGE_DIR, PI_APP_NAME, PI_CODING_AGENT_DIR, VELA_EXT_PATH
+ *     → imports this file
+ *     → wires Vela extension via DefaultResourceLoader.additionalExtensionPaths
+ *     → runs InteractiveMode (TUI) or runPrintMode / runRpcMode
  *
- * Supported flags (matching gsd-pi's interface for drop-in compatibility):
+ * Supported flags:
  *   --version / -v           print version
  *   --help / -h              print help
- *   --print / -p <msg>       single-shot print mode
+ *   --print / -p             single-shot print mode
  *   --mode text|json|rpc     output mode (print mode variant)
  *   --model <id>             override model
  *   --continue / -c          continue most recent session
  *   --no-session             ephemeral session (no disk persistence)
- *   --append-system-prompt <text|file>  append to system prompt
- *   --list-models            list available models and exit
+ *   --append-system-prompt <text|file>
+ *   --list-models [filter]   list available models and exit
+ *   --verbose                verbose startup output
  *   <message>                initial message (interactive mode)
  */
 
@@ -36,7 +37,7 @@ import {
   InteractiveMode,
   runPrintMode,
   runRpcMode,
-} from "@gsd/pi-coding-agent";
+} from "@mariozechner/pi-coding-agent";
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 
@@ -52,9 +53,13 @@ const pkg = req(join(__dirname, "..", "package.json")) as {
 const APP_NAME = process.env.PI_APP_NAME ?? pkg.piConfig?.name ?? "vela";
 const APP_VERSION = pkg.version;
 
+// PI_CODING_AGENT_DIR set by loader.ts; fallback to ~/.vela/agent
 const agentDir =
-  process.env.GSD_CODING_AGENT_DIR ??
+  process.env.PI_CODING_AGENT_DIR ??
   join(process.env.HOME ?? process.env.USERPROFILE ?? "", `.${APP_NAME}`, "agent");
+
+// Vela extension path injected by loader.ts
+const velaExtPath = process.env.VELA_EXT_PATH ?? "";
 
 // ─── Arg Parsing ─────────────────────────────────────────────────────────────
 
@@ -119,7 +124,7 @@ function printHelp(): void {
     `${APP_NAME} v${APP_VERSION} — Vela deterministic pipeline engine\n\n` +
       `Usage: ${APP_NAME} [options] [message]\n\n` +
       `Options:\n` +
-      `  --print, -p <msg>    Single-shot: send message, print response, exit\n` +
+      `  --print, -p          Single-shot: send message, print response, exit\n` +
       `  --mode text|json|rpc Output mode (use with --print)\n` +
       `  --model <id>         Override model (e.g. anthropic/claude-opus-4-5)\n` +
       `  --continue, -c       Continue most recent session\n` +
@@ -132,7 +137,8 @@ function printHelp(): void {
       `  /vela start "<request>"   Start a new pipeline\n` +
       `  /vela status              Show pipeline state\n` +
       `  /vela transition          Advance to next step\n` +
-      `  /vela dispatch            Run agent for current step\n` +
+      `  /vela dispatch <role>     Run agent for current step\n` +
+      `  /vela sprint run|status   Sprint orchestration\n` +
       `  /vela help                Show all Vela commands\n`
   );
 }
@@ -142,13 +148,13 @@ function printHelp(): void {
 const cliFlags = parseCliArgs(process.argv);
 const isPrintMode = cliFlags.print === true || cliFlags.mode !== undefined;
 
-// TTY check (interactive mode requires a terminal)
+// TTY check
 if (!process.stdin.isTTY && !isPrintMode && cliFlags.listModels === undefined) {
   process.stderr.write(
     `[${APP_NAME}] Error: Interactive mode requires a terminal (TTY).\n` +
       `[${APP_NAME}] Non-interactive alternatives:\n` +
-      `[${APP_NAME}]   ${APP_NAME} --print "your message"     Single-shot prompt\n` +
-      `[${APP_NAME}]   ${APP_NAME} --mode rpc                 JSON-RPC over stdin/stdout\n`
+      `[${APP_NAME}]   ${APP_NAME} --print "your message"\n` +
+      `[${APP_NAME}]   ${APP_NAME} --mode rpc\n`
   );
   process.exit(1);
 }
@@ -158,55 +164,47 @@ if (parseInt(process.versions.node) >= 22) {
   process.env.NODE_COMPILE_CACHE ??= join(agentDir, ".compile-cache");
 }
 
-// ─── Shared Setup ─────────────────────────────────────────────────────────────
+// ─── Core Setup ──────────────────────────────────────────────────────────────
 
 const authFilePath = join(agentDir, "auth.json");
 const authStorage = AuthStorage.create(authFilePath);
-
-// Load stored API keys from auth.json into process.env
-try {
-  const { loadStoredEnvKeys } = (await import(
-    `${dirname(req.resolve("gsd-pi/package.json"))}/dist/wizard.js`
-  )) as { loadStoredEnvKeys: (auth: typeof authStorage) => void };
-  loadStoredEnvKeys(authStorage);
-} catch {
-  // Non-fatal: auth may come from env vars directly (ANTHROPIC_API_KEY, etc.)
-}
-
 const modelsJsonPath = join(agentDir, "models.json");
-const modelRegistry = new ModelRegistry(authStorage, modelsJsonPath);
+const modelRegistry = ModelRegistry.create(authStorage, modelsJsonPath);
 const settingsManager = SettingsManager.create(agentDir);
 
-// Quiet startup — Vela uses its own branding
-if (!settingsManager.getQuietStartup()) {
-  settingsManager.setQuietStartup(true);
-}
-if (!settingsManager.getCollapseChangelog()) {
-  settingsManager.setCollapseChangelog(true);
-}
+// Quiet Vela-branded startup
+if (!settingsManager.getQuietStartup()) settingsManager.setQuietStartup(true);
+if (!settingsManager.getCollapseChangelog()) settingsManager.setCollapseChangelog(true);
 
 // ─── --list-models ────────────────────────────────────────────────────────────
 
 if (cliFlags.listModels !== undefined) {
   const models = modelRegistry.getAvailable();
   if (models.length === 0) {
-    console.log("No models available. Set API keys in environment variables.");
+    console.log("No models available. Set ANTHROPIC_API_KEY or configure auth.json.");
     process.exit(0);
   }
 
   const searchPattern =
     typeof cliFlags.listModels === "string" ? cliFlags.listModels : undefined;
-  let filtered = models;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let filtered: any[] = models;
   if (searchPattern) {
     const q = searchPattern.toLowerCase();
-    filtered = models.filter((m) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    filtered = (models as any[]).filter((m: any) =>
       `${m.provider} ${m.id} ${m.name}`.toLowerCase().includes(q)
     );
   }
-  filtered.sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (filtered as any[]).sort((a: any, b: any) =>
+    (a.provider as string).localeCompare(b.provider) ||
+    (a.id as string).localeCompare(b.id)
+  );
 
   const hdrs = ["provider", "model", "name"];
-  const rows = filtered.map((m) => [m.provider, m.id, m.name]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (filtered as any[]).map((m: any) => [m.provider, m.id, m.name] as string[]);
   const widths = hdrs.map((h, i) =>
     Math.max(h.length, ...rows.map((r) => (r[i] ?? "").length))
   );
@@ -214,31 +212,39 @@ if (cliFlags.listModels !== undefined) {
   console.log(hdrs.map((h, i) => pad(h, widths[i])).join("  "));
   console.log(widths.map((w) => "-".repeat(w)).join("  "));
   for (const row of rows) {
-    console.log(row.map((c, i) => pad(c, widths[i])).join("  "));
+    console.log(row.map((c: string, i: number) => pad(c, widths[i])).join("  "));
   }
   process.exit(0);
 }
 
-// ─── Resource Loader ─────────────────────────────────────────────────────────
+// ─── Resource Loader — wires Vela extension ───────────────────────────────────
 
-// Read --append-system-prompt (may be a file path or literal text)
+// Resolve --append-system-prompt (file path or literal text)
 let appendSystemPrompt: string | undefined;
 if (cliFlags.appendSystemPrompt) {
   try {
-    if (existsSync(cliFlags.appendSystemPrompt)) {
-      appendSystemPrompt = readFileSync(cliFlags.appendSystemPrompt, "utf-8");
-    } else {
-      appendSystemPrompt = cliFlags.appendSystemPrompt;
-    }
+    appendSystemPrompt = existsSync(cliFlags.appendSystemPrompt)
+      ? readFileSync(cliFlags.appendSystemPrompt, "utf-8")
+      : cliFlags.appendSystemPrompt;
   } catch {
     appendSystemPrompt = cliFlags.appendSystemPrompt;
   }
 }
 
+// Collect extension paths: Vela extension + any --extension flags
+const additionalExtensionPaths: string[] = [];
+if (velaExtPath && existsSync(velaExtPath)) {
+  additionalExtensionPaths.push(velaExtPath);
+}
+for (const extPath of cliFlags.extensions) {
+  if (existsSync(extPath)) additionalExtensionPaths.push(extPath);
+}
+
 const resourceLoader = new DefaultResourceLoader({
   agentDir,
-  additionalExtensionPaths:
-    cliFlags.extensions.length > 0 ? cliFlags.extensions : undefined,
+  additionalExtensionPaths: additionalExtensionPaths.length > 0
+    ? additionalExtensionPaths
+    : undefined,
   appendSystemPrompt,
 });
 await resourceLoader.reload();
@@ -266,17 +272,18 @@ const { session, extensionsResult, modelFallbackMessage } = await createAgentSes
   resourceLoader,
 });
 
-// Log extension errors (non-fatal)
+// Log non-fatal extension errors
 for (const err of extensionsResult.errors) {
   process.stderr.write(`[${APP_NAME}] Extension error: ${err.error}\n`);
 }
 
 // Apply --model override
 if (cliFlags.model) {
-  const available = modelRegistry.getAvailable();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const available: any[] = modelRegistry.getAvailable() as any[];
   const match =
-    available.find((m) => m.id === cliFlags.model) ||
-    available.find((m) => `${m.provider}/${m.id}` === cliFlags.model);
+    available.find((m: any) => m.id === cliFlags.model) ??
+    available.find((m: any) => `${m.provider}/${m.id}` === cliFlags.model);
   if (match) {
     try {
       await session.setModel(match);
@@ -286,19 +293,25 @@ if (cliFlags.model) {
   }
 }
 
-// ─── Print Mode ───────────────────────────────────────────────────────────────
+// ─── Print / RPC Mode ─────────────────────────────────────────────────────────
+
+// @mariozechner/pi-coding-agent: InteractiveMode/runPrintMode/runRpcMode accept
+// AgentSessionRuntime (internal type). Cast via unknown since AgentSession is
+// the public interface but shares the same runtime shape at runtime.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sessionRuntime = session as any;
 
 if (isPrintMode) {
   const mode = cliFlags.mode ?? "text";
 
   if (mode === "rpc") {
-    await runRpcMode(session);
+    await runRpcMode(sessionRuntime);
     session.dispose();
     process.exit(0);
   }
 
   const initialMessage = cliFlags.messages[0];
-  await runPrintMode(session, {
+  await runPrintMode(sessionRuntime, {
     mode: mode === "json" ? "json" : "text",
     initialMessage,
     messages: cliFlags.messages.slice(1),
@@ -309,9 +322,10 @@ if (isPrintMode) {
 
 // ─── Interactive TUI Mode ─────────────────────────────────────────────────────
 
-const initialMessage = cliFlags.messages.length > 0 ? cliFlags.messages.join(" ") : undefined;
+const initialMessage =
+  cliFlags.messages.length > 0 ? cliFlags.messages.join(" ") : undefined;
 
-const interactiveMode = new InteractiveMode(session, {
+const interactiveMode = new InteractiveMode(sessionRuntime, {
   modelFallbackMessage,
   initialMessage,
   verbose: cliFlags.verbose === true,

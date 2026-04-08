@@ -25,7 +25,7 @@ import {
   codingTools,
   SessionManager,
   type CreateAgentSessionOptions,
-} from "@gsd/pi-coding-agent";
+} from "@mariozechner/pi-coding-agent";
 import type { PipelineMode } from "./pipeline.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

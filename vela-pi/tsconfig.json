@@ -10,11 +10,6 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "paths": {
-      "@gsd/pi-coding-agent": [
-        "./node_modules/gsd-pi/packages/pi-coding-agent/dist/index.d.ts"
-      ]
-    }
   },
   "include": ["src/**/*"]
 }

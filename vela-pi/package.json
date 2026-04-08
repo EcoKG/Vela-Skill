@@ -19,7 +19,7 @@
     "dev": "node --experimental-strip-types src/loader.ts"
   },
   "dependencies": {
-    "gsd-pi": "^2.65.0"
+    "@mariozechner/pi-coding-agent": "latest"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
