@@ -109,13 +109,22 @@ export function checkToolCall(
     const cmd =
       typeof toolInput.command === "string" ? toolInput.command : "";
 
-    // VK-08: Chain operators block safe-read commands from becoming write commands
+    // VK-08: Chain operators — block unless ALL segments are safe-read
     if (CHAIN_OPERATOR_RE.test(cmd)) {
-      return {
-        blocked: true,
-        reason: `[Vela VK-08] Bash chain operator (&&, ||, ;, |) blocked. Run commands separately.`,
-        code: "VK-08",
-      };
+      // Split on chain operators and check each segment
+      const segments = cmd.split(/&&|\|\||;|\|/).map(s => s.trim()).filter(Boolean);
+      const allSegmentsSafe = segments.every(seg => SAFE_BASH_READ.test(seg));
+
+      if (!allSegmentsSafe) {
+        return {
+          blocked: true,
+          reason: `[Vela VK-08] Bash chain operator blocked: not all segments are safe-read commands.\n` +
+            `  Unsafe segments: ${segments.filter(s => !SAFE_BASH_READ.test(s)).map(s => s.substring(0, 50)).join(", ")}\n` +
+            `  Tip: Run each command separately, or ensure all parts are read-only.`,
+          code: "VK-08",
+        };
+      }
+      // All segments are safe — allow the chain
     }
 
     if (mode === "read" || mode === "rw-artifact") {
@@ -222,9 +231,33 @@ export function checkToolCall(
     }
   }
 
-  // ── VK-07: PM mode — Read/Glob/Grep only ──────────────────────────────────
-  // Note: PM mode is enforced separately by the pipeline dispatcher (Phase 3).
-  // Included here as a no-op placeholder for future integration.
+  // ── VK-07: PM actor — write tools require delegation.json ────────────────
+  if (WRITE_TOOLS.has(toolName) && state) {
+    // PM actor check: if current step actor is "pm", writes need delegation
+    // (PM should orchestrate via dispatch, not write code directly)
+    // This is only enforced when we have pipeline state context
+    const artifactDir = state._artifactDir ?? state.artifact_dir;
+    if (artifactDir) {
+      const delegationPath = join(artifactDir, "delegation.json");
+      if (!existsSync(delegationPath)) {
+        // Check if it's a source file (not artifact dir)
+        const filePath =
+          typeof toolInput.file_path === "string" ? toolInput.file_path :
+          typeof toolInput.path === "string" ? toolInput.path : "";
+        const isArtifactWrite = filePath.startsWith(artifactDir) ||
+                                 filePath.includes("/.vela/");
+        if (!isArtifactWrite && filePath) {
+          return {
+            blocked: true,
+            reason: `[Vela VK-07] PM cannot write source files directly without delegation.json.\n` +
+              `  File: ${filePath}\n` +
+              `  Use /vela dispatch to delegate to an executor agent.`,
+            code: "VK-07",
+          };
+        }
+      }
+    }
+  }
 
   // ══ VG-SERIES: Pipeline-state-based guards (require state context) ══════════
   if (state) {
