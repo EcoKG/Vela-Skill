@@ -10,6 +10,7 @@
  */
 
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -528,6 +529,16 @@ export function transitionPipeline(
 
   persistState(state);
 
+  // Trace the transition
+  const traceArtifactDir = state._artifactDir ?? state.artifact_dir;
+  if (traceArtifactDir) {
+    appendTrace(traceArtifactDir, {
+      event: "transition",
+      from: currentStepDef.id,
+      to: nextStep.id,
+    });
+  }
+
   // Clean up stale delegation.json on transition
   const cwd = deriveCwd(state);
   if (cwd) {
@@ -576,6 +587,17 @@ export function recordStep(
 
   state.updated_at = new Date().toISOString();
   persistState(state);
+
+  // Trace the recorded verdict
+  const recordArtifactDir = state._artifactDir ?? state.artifact_dir;
+  if (recordArtifactDir) {
+    appendTrace(recordArtifactDir, {
+      event: "record",
+      step: state.current_step,
+      verdict: v,
+      revision: revisions[state.current_step],
+    });
+  }
 
   const autoDisabled =
     state.auto === false && (state.auto_reject_count ?? 0) >= 2 && (v === "reject" || v === "fail");
@@ -923,6 +945,17 @@ export function cleanupStalePipelines(cwd: string, hoursOld = 48): number {
     // skip
   }
   return count;
+}
+
+// ─── Trace Logging ────────────────────────────────────────────────────────────
+
+/** Append a JSON line to trace.jsonl in the artifact directory. Non-fatal. */
+function appendTrace(artifactDir: string, entry: Record<string, unknown>): void {
+  try {
+    const tracePath = join(artifactDir, "trace.jsonl");
+    const line = JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n";
+    appendFileSync(tracePath, line, "utf8");
+  } catch { /* non-fatal */ }
 }
 
 // ─── State Writing ────────────────────────────────────────────────────────────
