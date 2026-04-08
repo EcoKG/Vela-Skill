@@ -146,7 +146,7 @@ async function cmdStart(
   // Remove flags from request text
   const cleanRequest = argTokens
     .filter((t, i) =>
-      t !== "--scale" && t !== "--preset" &&
+      t !== "--scale" && t !== "--preset" && t !== "--force" &&
       i !== scaleIdx + 1 && i !== presetIdx + 1
     )
     .join(" ")
@@ -160,6 +160,19 @@ async function cmdStart(
       "warning"
     );
     return;
+  }
+
+  // ── M5-1: Prompt optimizer — warn on vague/insufficient requests ─────────
+  const promptIssues = analyzeRequestQuality(cleanRequest);
+  if (promptIssues.length > 0) {
+    const tips = promptIssues.map((t) => `  • ${t}`).join("\n");
+    ctx.ui.notify(
+      `[Vela] Request quality check:\n${tips}\n\n` +
+      `  Current: "${cleanRequest}"\n\n` +
+      `  Tip: Add --force to skip this check, or refine your request for better results.`,
+      "warning"
+    );
+    if (!argTokens.includes("--force")) return;
   }
 
   // Apply preset if specified
@@ -1217,6 +1230,62 @@ function cmdHelp(ctx: ExtensionCommandContext): void {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * M5-1: Prompt optimizer
+ *
+ * Analyzes the task request for common quality issues that reduce pipeline
+ * effectiveness. Returns a list of human-readable suggestions. Empty list
+ * means the request is acceptable.
+ */
+function analyzeRequestQuality(request: string): string[] {
+  const issues: string[] = [];
+  const words = request.trim().split(/\s+/);
+  const lower = request.toLowerCase();
+
+  // Too short — less than 4 words is almost always vague
+  if (words.length < 4) {
+    issues.push(
+      "Request is too short. Describe WHAT, WHERE, and WHY.\n" +
+      '    Better: "Add user email validation to the registration form in src/auth/register.ts"'
+    );
+  }
+
+  // Pure single-word actions with no target ("fix", "add", "update", "change", "refactor")
+  const vagueVerbs = /^(fix|add|update|change|refactor|improve|modify|edit|delete|remove)$/i;
+  if (words.length === 1 && vagueVerbs.test(words[0])) {
+    issues.push(`Single verb "${words[0]}" tells Vela nothing — add a subject and context.`);
+  }
+
+  // Missing file/module/path hint for code tasks (check only when not docs/analysis)
+  const isDocOrAnalysis = /\b(doc|docs|readme|comment|analyze|analyse|analysis|report)\b/.test(lower);
+  const hasLocation = /\b(in|at|on|for|from|inside|within)\b/.test(lower) ||
+    /[./]/.test(request) ||        // path-like token
+    /src|lib|test|spec|api|ui|db|schema|model|controller|service|component/i.test(request);
+  if (!isDocOrAnalysis && words.length < 10 && !hasLocation) {
+    issues.push(
+      "No file/module location found. Mention where the change goes.\n" +
+      '    Example: "…in src/api/users.ts" or "…in the UserService class"'
+    );
+  }
+
+  // Potentially ambiguous pronouns without antecedent (it, this, that)
+  if (/\b(it|this|that)\b/.test(lower) && words.length < 8) {
+    issues.push(
+      '"it/this/that" is ambiguous in a short request. Replace with the concrete subject.'
+    );
+  }
+
+  // No acceptance criterion for large tasks (>= 8 words but no "should", "must", "so that", "when", "expect")
+  const hasAcceptance = /\b(should|must|so that|when|expect|ensure|verify|assert)\b/.test(lower);
+  if (words.length >= 8 && !hasAcceptance) {
+    issues.push(
+      "Consider adding acceptance criteria (\"…so that …\", \"…should …\") to guide the verify step."
+    );
+  }
+
+  return issues;
+}
 
 function detectTaskType(request: string): string {
   const lower = request.toLowerCase();
