@@ -587,6 +587,35 @@ export function buildSliceContext(plan: SprintPlan, slice: SprintSlice): string 
  *
  * Returns the absolute path to the written file.
  */
+/**
+ * Remove sprint directories older than keepDays, keeping the N most recent.
+ */
+export function cleanupOldSprints(cwd: string, keepCount = 20): number {
+  const sprintsDir = join(cwd, SPRINTS_DIR);
+  if (!existsSync(sprintsDir)) return 0;
+
+  let removed = 0;
+  try {
+    const entries = readdirSync(sprintsDir)
+      .map(name => ({
+        name,
+        path: join(sprintsDir, name),
+        mtime: (() => { try { return statSync(join(sprintsDir, name)).mtimeMs; } catch { return 0; } })(),
+      }))
+      .filter(e => { try { return statSync(e.path).isDirectory(); } catch { return false; } })
+      .sort((a, b) => b.mtime - a.mtime);
+
+    const toRemove = entries.slice(keepCount);
+    for (const entry of toRemove) {
+      try {
+        rmSync(entry.path, { recursive: true, force: true });
+        removed++;
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+  return removed;
+}
+
 export function generateSprintSummary(plan: SprintPlan, cwd: string): string {
   const now = new Date().toISOString();
 
