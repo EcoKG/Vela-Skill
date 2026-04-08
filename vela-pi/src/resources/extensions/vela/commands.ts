@@ -22,6 +22,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import {
   cleanupCancelledArtifacts,
+  cleanupStalePipelines,
   commitPipeline,
   createPipelineBranch,
   findActivePipelineState,
@@ -108,17 +109,85 @@ export function registerVelaCommands(pi: ExtensionAPI): void {
 
 // ─── Sub-commands ─────────────────────────────────────────────────────────────
 
+// Scale → pipeline type mapping (mirrors pipeline.json "scales" section)
+const SCALE_TO_PIPELINE: Record<string, string> = {
+  small:  "trivial",
+  medium: "quick",
+  large:  "standard",
+  ralph:  "ralph",
+  hotfix: "hotfix",
+};
+
+const SCALE_DESCRIPTIONS: Record<string, string> = {
+  small:  "trivial  — init → execute → commit → finalize (4 steps)",
+  medium: "quick    — init → plan → execute → verify → commit → finalize (6 steps)",
+  large:  "standard — full 12-step pipeline with research, review, diff-summary, learning",
+  ralph:  "ralph    — TDD loop: execute ↔ verify up to 10× until tests pass",
+  hotfix: "hotfix   — init → execute → commit (docs/config only, no review)",
+};
+
 async function cmdStart(
   request: string,
   ctx: ExtensionCommandContext
 ): Promise<void> {
   const cwd = ctx.cwd;
 
-  const cleanRequest = request.replace(/^["']|["']$/g, "").trim();
+  // Parse --scale and --preset flags from args
+  const argTokens = request.split(/\s+/);
+  const scaleIdx = argTokens.indexOf("--scale");
+  const presetIdx = argTokens.indexOf("--preset");
+
+  let rawScale = scaleIdx >= 0 ? argTokens[scaleIdx + 1] : undefined;
+  const presetName = presetIdx >= 0 ? argTokens[presetIdx + 1] : undefined;
+
+  // Remove flags from request text
+  const cleanRequest = argTokens
+    .filter((t, i) =>
+      t !== "--scale" && t !== "--preset" &&
+      i !== scaleIdx + 1 && i !== presetIdx + 1
+    )
+    .join(" ")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+
   if (!cleanRequest) {
-    ctx.ui.notify('Usage: /vela start "<task description>"', "warning");
+    ctx.ui.notify(
+      'Usage: /vela start "<task description>" --scale <small|medium|large|ralph|hotfix>\n' +
+      '       /vela start "<task>" --preset <auth|api-crud|bugfix|refactor|docs>',
+      "warning"
+    );
     return;
   }
+
+  // Apply preset if specified
+  if (presetName && !rawScale) {
+    const def = loadPipelineDefinition(cwd);
+    const preset = (def as any)?.presets?.[presetName];
+    if (preset?.scale) rawScale = preset.scale;
+    else {
+      ctx.ui.notify(
+        `[Vela] Unknown preset: "${presetName}". Available: auth, api-crud, bugfix, refactor, migration, docs`,
+        "warning"
+      );
+      return;
+    }
+  }
+
+  // If --scale not given, show selection menu
+  if (!rawScale || !SCALE_TO_PIPELINE[rawScale]) {
+    const scaleList = Object.entries(SCALE_DESCRIPTIONS)
+      .map(([k, v]) => `  --scale ${k.padEnd(7)} → ${v}`)
+      .join("\n");
+    ctx.ui.notify(
+      `[Vela] --scale is required. Options:\n${scaleList}\n\n` +
+      `Example: /vela start "${cleanRequest}" --scale large`,
+      "warning"
+    );
+    return;
+  }
+
+  const scale = rawScale;
+  const pipelineType = SCALE_TO_PIPELINE[scale]!;
 
   // Block if there is already an active pipeline
   const existing = findActivePipelineState(cwd);
@@ -131,8 +200,9 @@ async function cmdStart(
     return;
   }
 
-  // Clean up old cancelled artifacts
+  // Clean up old cancelled artifacts and stale pipelines
   const cleaned = cleanupCancelledArtifacts(cwd, 24);
+  cleanupStalePipelines(cwd);
 
   // Load pipeline definition
   const def = loadPipelineDefinition(cwd);
@@ -141,7 +211,6 @@ async function cmdStart(
   }
 
   const taskType = detectTaskType(cleanRequest);
-  const pipelineType = "standard";
 
   // Git state snapshot
   const gitState = snapshotGitState(cwd);
@@ -185,7 +254,7 @@ async function cmdStart(
     request: cleanRequest,
     task_type: taskType,
     type: taskType,
-    scale: "standard",
+    scale,
     steps: steps.map((s) => s.id),
     completed_steps: [],
     revisions: {},
@@ -221,9 +290,11 @@ async function cmdStart(
   const stepList = steps.map((s) => s.id).join(" → ");
 
   ctx.ui.notify(
-    `[Vela] Pipeline initialised (${taskType}).\n` +
-      `  Step: ${stepList}\n` +
-      `  Artifact dir: .vela/artifacts/${artifactDirName}\n` +
+    `[Vela] Pipeline initialised.\n` +
+      `  Scale:    ${scale} → ${pipelineType}\n` +
+      `  Type:     ${taskType}\n` +
+      `  Steps:    ${stepList}\n` +
+      `  Artifact: .vela/artifacts/${artifactDirName}\n` +
       (cleaned > 0 ? `  Cleaned ${cleaned} old cancelled artifact(s).\n` : "") +
       "\nRun /vela status to check state.",
     "info"
@@ -869,31 +940,113 @@ async function cmdDispatch(
 
 async function cmdAuto(ctx: ExtensionCommandContext): Promise<void> {
   const state = findActivePipelineState(ctx.cwd);
-  if (!state) {
-    ctx.ui.notify("[Vela] No active pipeline.", "warning");
+  if (!state) { ctx.ui.notify("[Vela] No active pipeline.", "warning"); return; }
+
+  const wasAuto = state.auto === true;
+
+  if (wasAuto) {
+    // Turn OFF
+    state.auto = false;
+    state.updated_at = new Date().toISOString();
+    persistStateFromCmd(state);
+    ctx.ui.notify("[Vela] ⏸ Auto mode OFF.", "info");
     return;
   }
 
-  const wasAuto = state.auto === true;
-  state.auto = !wasAuto;
-  if (state.auto) state.auto_reject_count = 0;
+  // Turn ON and start loop
+  state.auto = true;
+  state.auto_reject_count = 0;
   state.updated_at = new Date().toISOString();
+  persistStateFromCmd(state);
+  ctx.ui.notify("[Vela] ⚡ Auto mode ON — starting auto-dispatch loop...", "info");
 
-  if (state._path) {
-    const clean = { ...state };
-    delete clean._path;
-    delete clean._artifactDir;
-    delete clean._stale;
-    const { writeJSON: wj } = await import("./pipeline.js");
-    wj(state._path, clean);
+  await runAutoLoop(ctx);
+}
+
+// verify 재시도 루프 포함
+async function runAutoLoop(ctx: ExtensionCommandContext): Promise<void> {
+  const cwd = ctx.cwd;
+  let maxIterations = 30;
+
+  while (maxIterations-- > 0) {
+    const state = findActivePipelineState(cwd);
+    if (!state || !state.auto || state.status !== "active") break;
+
+    const def = loadPipelineDefinition(cwd);
+    if (!def) break;
+
+    const steps = resolveSteps(def, state.pipeline_type);
+    const currentStep = steps.find(s => s.id === state.current_step);
+    if (!currentStep) break;
+
+    // user/pm steps: pause and wait for manual action
+    if (currentStep.actor === "user" || currentStep.actor === "pm") {
+      ctx.ui.notify(
+        `[Vela] Auto paused at "${state.current_step}" (${currentStep.actor} step).\n` +
+        `  Complete manually then run /vela transition`,
+        "info"
+      );
+      break;
+    }
+
+    // Dispatch agent for current step
+    ctx.ui.notify(`[Vela] Auto: dispatching ${state.current_step}...`, "info");
+    const artifactDir = state._artifactDir ?? state.artifact_dir;
+    const mode = getCurrentMode(state, def);
+    const dispatchResult = await runVelaAgent({
+      role: state.current_step,
+      cwd,
+      artifactDir,
+      request: state.request,
+      taskType: state.task_type ?? "code",
+      pipelineMode: mode,
+    });
+
+    if (!dispatchResult.ok) {
+      ctx.ui.notify(`[Vela] Auto: agent failed (${state.current_step}): ${dispatchResult.error}`, "warning");
+      // Disable auto on failure
+      const s2 = findActivePipelineState(cwd);
+      if (s2) { s2.auto = false; persistStateFromCmd(s2); }
+      break;
+    }
+
+    // Record pass
+    const freshState = findActivePipelineState(cwd);
+    if (!freshState) break;
+    recordStep(freshState, "pass");
+
+    // Try to transition
+    const freshState2 = findActivePipelineState(cwd);
+    if (!freshState2) break;
+    const freshDef = loadPipelineDefinition(cwd);
+    if (!freshDef) break;
+    const result = transitionPipeline(freshState2, freshDef);
+
+    if (result.completed) {
+      ctx.ui.notify("[Vela] ✅ Auto: Pipeline completed!", "info");
+      break;
+    }
+
+    if (!result.ok) {
+      ctx.ui.notify(
+        `[Vela] Auto: transition blocked at "${freshState2.current_step}"\n  ${result.error}\n  Missing: ${result.missing?.join(", ")}`,
+        "warning"
+      );
+      break;
+    }
+
+    ctx.ui.notify(`[Vela] Auto: ${result.previous_step} → ${result.current_step}`, "info");
   }
+}
 
-  ctx.ui.notify(
-    state.auto
-      ? "[Vela] ⚡ Auto mode ON — pipeline will advance automatically."
-      : "[Vela] ⏸ Auto mode OFF — manual mode.",
-    "info"
-  );
+// Helper to persist state without runtime fields
+function persistStateFromCmd(state: PipelineState): void {
+  if (!state._path) return;
+  const clean = { ...state };
+  delete (clean as any)._path;
+  delete (clean as any)._artifactDir;
+  delete (clean as any)._stale;
+  writeJSON(state._path, clean);
 }
 
 async function cmdCancel(ctx: ExtensionCommandContext): Promise<void> {

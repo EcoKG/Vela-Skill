@@ -437,9 +437,30 @@ export function checkExitGate(
         // Finalize gate — report is the output of this step; always passes
         break;
 
-      case "ref_integrity":
-        // Change Surface Analysis — skip gracefully if not configured
+      case "ref_integrity": {
+        // Simple reference integrity: check if diff.patch exists and parse it
+        // If no git repo, skip gracefully
+        const diffPath = join(state._artifactDir ?? state.artifact_dir, "diff.patch");
+        if (!existsSync(diffPath)) break; // non-fatal if no diff yet
+
+        try {
+          const patch = readFileSync(diffPath, "utf8");
+          // Check for obvious broken references: renamed exports without import updates
+          const removedExports = [...patch.matchAll(/^-export\s+(?:const|function|class|type|interface)\s+(\w+)/gm)]
+            .map(m => m[1]);
+          const addedExports = [...patch.matchAll(/^\+export\s+(?:const|function|class|type|interface)\s+(\w+)/gm)]
+            .map(m => m[1]);
+
+          // Exports that were removed but not re-added = potential broken refs
+          const brokenRefs = removedExports.filter(name => !addedExports.includes(name));
+          if (brokenRefs.length > 0) {
+            missing.push(...brokenRefs.map(n => `removed export: ${n}`));
+          }
+        } catch {
+          // non-fatal on parse error
+        }
         break;
+      }
 
       default:
         // Unknown gate — skip
@@ -864,6 +885,44 @@ export function cleanupCancelledArtifacts(cwd: string, hoursOld = 24): number {
   } catch { /* non-fatal */ }
 
   return cleaned;
+}
+
+/**
+ * Mark pipelines that have been active for more than 48h as cancelled.
+ * Returns the number of pipelines marked as stale.
+ */
+export function cleanupStalePipelines(cwd: string, hoursOld = 48): number {
+  const artifactsDir = join(cwd, ".vela", "artifacts");
+  if (!existsSync(artifactsDir)) return 0;
+
+  let count = 0;
+  try {
+    const entries = readdirSync(artifactsDir);
+    const cutoff = Date.now() - hoursOld * 60 * 60 * 1000;
+
+    for (const entry of entries) {
+      const statePath = join(artifactsDir, entry, "pipeline-state.json");
+      if (!existsSync(statePath)) continue;
+      try {
+        const raw = JSON.parse(readFileSync(statePath, "utf8")) as PipelineState;
+        if (raw.status !== "active") continue;
+
+        const updatedAt = new Date(raw.updated_at).getTime();
+        if (isNaN(updatedAt) || updatedAt > cutoff) continue;
+
+        // Mark as cancelled
+        raw.status = "cancelled";
+        raw.updated_at = new Date().toISOString();
+        writeFileSync(statePath, JSON.stringify(raw, null, 2), "utf8");
+        count++;
+      } catch {
+        // skip
+      }
+    }
+  } catch {
+    // skip
+  }
+  return count;
 }
 
 // ─── State Writing ────────────────────────────────────────────────────────────

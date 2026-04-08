@@ -176,6 +176,31 @@ const settingsManager = SettingsManager.create(agentDir);
 if (!settingsManager.getQuietStartup()) settingsManager.setQuietStartup(true);
 if (!settingsManager.getCollapseChangelog()) settingsManager.setCollapseChangelog(true);
 
+// ─── API key validation ───────────────────────────────────────────────────────
+// Run after settingsManager so quiet mode is set, but always show auth errors.
+if (cliFlags.listModels === undefined && !isPrintMode) {
+  // Check for any API key in env or auth.json
+  const hasEnvKey =
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_API_KEY;
+
+  if (!hasEnvKey) {
+    // Try to detect if auth.json has stored keys
+    const authExists = existsSync(authFilePath);
+    if (!authExists) {
+      process.stderr.write(
+        `\n[vela] No API key found.\n` +
+          `  Set an environment variable, e.g.:\n` +
+          `    export ANTHROPIC_API_KEY=sk-ant-...\n` +
+          `  Or run: vela --setup-auth (coming soon)\n\n`
+      );
+      // Non-fatal: continue and let pi-coding-agent handle the error
+    }
+  }
+}
+
 // ─── --list-models ────────────────────────────────────────────────────────────
 
 if (cliFlags.listModels !== undefined) {

@@ -19,6 +19,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
+
 import {
   createAgentSession,
   readOnlyTools,
@@ -67,6 +68,8 @@ interface RoleConfig {
   toolSet: "readOnly" | "coding" | "write";
   /** Human-readable description */
   description: string;
+  /** Per-role timeout override in ms */
+  timeoutMs?: number;
 }
 
 const ROLE_CONFIGS: Record<string, RoleConfig> = {
@@ -74,6 +77,7 @@ const ROLE_CONFIGS: Record<string, RoleConfig> = {
     outputFile: "research.md",
     toolSet: "readOnly",
     description: "Research & Architecture Analysis",
+    timeoutMs: 180_000,
     systemPrompt: `# Vela Researcher
 
 You are a focused code researcher. Analyse the codebase for the given task request.
@@ -137,6 +141,7 @@ Start with: # Implementation Plan: {REQUEST}
     outputFile: "plan-check.md",
     toolSet: "readOnly",
     description: "Plan Verification",
+    timeoutMs: 60_000,
     systemPrompt: `# Vela Plan Checker
 
 You are a critical code reviewer. Verify the implementation plan.
@@ -163,6 +168,7 @@ Be concise. This is a verification step, not a redesign step.
     outputFile: "task-summary.md",
     toolSet: "coding",
     description: "Implementation",
+    timeoutMs: 600_000,
     systemPrompt: `# Vela Executor
 
 You are a precise software engineer. Implement the plan exactly as specified.
@@ -192,6 +198,7 @@ Start with: # Task Summary: {REQUEST}
     outputFile: "review-execute.md",
     toolSet: "readOnly",
     description: "Code Review",
+    timeoutMs: 180_000,
     systemPrompt: `# Vela Reviewer
 
 You are a rigorous code reviewer. Review the implementation.
@@ -281,6 +288,7 @@ Start with: # Learnings: {REQUEST}
     outputFile: "sprint-plan.json",
     toolSet: "readOnly",
     description: "Sprint Decomposition Planning",
+    timeoutMs: 90_000,
     systemPrompt: `# Vela Sprint Planner
 
 You are a sprint architect. Decompose a high-level request into focused, parallelisable work slices.
@@ -327,6 +335,7 @@ Request: {REQUEST}
     outputFile: "report.md",
     toolSet: "coding",
     description: "Pipeline Finalisation",
+    timeoutMs: 120_000,
     systemPrompt: `# Vela Finaliser
 
 Wrap up the pipeline and produce the final report.
@@ -346,6 +355,40 @@ Include:
 Start with: # Pipeline Report: {REQUEST}
 `,
   },
+
+  "pm": {
+    outputFile: "pm-decision.md",
+    toolSet: "readOnly",
+    description: "PM Orchestration Decision",
+    systemPrompt: `# Vela PM
+
+You are a pipeline orchestrator. Read all available artifacts and decide next action.
+
+## Your mission
+1. Read all artifacts in {ARTIFACT_DIR}/
+2. Assess the current pipeline state
+3. Decide the next action
+
+## Decision matrix
+- All artifacts present and approved → ACTION: proceed
+- Review rejected (review-*.md contains REJECT) → ACTION: retry
+- Plan incomplete (plan.md < 500 bytes or missing sections) → ACTION: replanning
+- Critical blocker found → ACTION: escalate
+- Missing artifacts → ACTION: dispatch <role>
+
+## Output
+Write pm-decision.md to: {ARTIFACT_DIR}/pm-decision.md
+
+Format:
+\`\`\`
+ACTION: proceed|retry|replanning|escalate|dispatch <role>
+REASON: <1-2 sentences>
+DETAILS: <optional specifics>
+\`\`\`
+
+Start with: # PM Decision: {REQUEST}
+`,
+  },
 };
 
 // ─── Main Dispatcher ──────────────────────────────────────────────────────────
@@ -360,6 +403,11 @@ export async function runVelaAgent(opts: DispatchOptions): Promise<DispatchResul
   const start = Date.now();
   const { role, cwd, artifactDir, request, taskType = "code", timeoutMs = 300_000 } = opts;
 
+  // researcher role: run parallel 3-perspective analysis
+  if (role === "researcher") {
+    return runParallelResearch(opts);
+  }
+
   const roleConfig = ROLE_CONFIGS[role];
   if (!roleConfig) {
     return {
@@ -368,6 +416,8 @@ export async function runVelaAgent(opts: DispatchOptions): Promise<DispatchResul
       error: `Unknown role: ${role}. Available: ${Object.keys(ROLE_CONFIGS).join(", ")}`,
     };
   }
+
+  const effectiveTimeout = roleConfig.timeoutMs ?? timeoutMs;
 
   // Build system prompt with template substitution
   const systemPrompt = roleConfig.systemPrompt
@@ -407,7 +457,7 @@ export async function runVelaAgent(opts: DispatchOptions): Promise<DispatchResul
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
       session?.abort().catch(() => {});
-    }, timeoutMs);
+    }, effectiveTimeout);
 
     try {
       await session.prompt(fullPrompt);
@@ -419,7 +469,7 @@ export async function runVelaAgent(opts: DispatchOptions): Promise<DispatchResul
       return {
         ok: false,
         role,
-        error: `Agent timed out after ${timeoutMs / 1000}s`,
+        error: `Agent timed out after ${effectiveTimeout / 1000}s`,
         durationMs: Date.now() - start,
       };
     }
@@ -431,6 +481,11 @@ export async function runVelaAgent(opts: DispatchOptions): Promise<DispatchResul
     const artifactPath = join(artifactDir, roleConfig.outputFile);
     if (!existsSync(artifactPath) && text.trim()) {
       writeArtifact(artifactPath, text);
+    }
+
+    // Accumulate learnings if this is the learning role
+    if (role === "learning" && text.trim()) {
+      accumulateLearning(cwd, request, artifactDir, text);
     }
 
     return {
@@ -449,6 +504,92 @@ export async function runVelaAgent(opts: DispatchOptions): Promise<DispatchResul
     };
   } finally {
     session?.dispose();
+  }
+}
+
+// ─── Parallel Research ────────────────────────────────────────────────────────
+
+async function runParallelResearch(opts: DispatchOptions): Promise<DispatchResult> {
+  const start = Date.now();
+  const { cwd, artifactDir, request, taskType = "code", timeoutMs = 300_000 } = opts;
+
+  const perspectives = [
+    { key: "architecture", focus: "Architecture & Design patterns, module dependencies, component interactions" },
+    { key: "security",     focus: "Security vulnerabilities, injection risks, auth issues, sensitive data exposure" },
+    { key: "quality",      focus: "Code quality, test coverage gaps, performance issues, maintainability" },
+  ];
+
+  const perspectiveResults = await Promise.allSettled(
+    perspectives.map(async ({ key, focus }) => {
+      const sessionOpts = {
+        cwd,
+        tools: readOnlyTools,
+        sessionManager: SessionManager.inMemory(cwd),
+      };
+      const { session: s } = await createAgentSession(sessionOpts);
+      try {
+        const prompt = `You are a ${key} analyst. Focus on: ${focus}\n\nRequest: ${request}\nTask type: ${taskType}\n\nAnalyse the codebase and write your findings as markdown. Be concise (200-400 tokens).`;
+        let timedOut = false;
+        const th = setTimeout(() => { timedOut = true; s.abort().catch(() => {}); }, timeoutMs / 3);
+        try { await s.prompt(prompt); } finally { clearTimeout(th); }
+        if (timedOut) return { key, text: `(timed out)` };
+        return { key, text: s.getLastAssistantText() ?? "" };
+      } finally {
+        s.dispose();
+      }
+    })
+  );
+
+  // Merge results into research.md
+  const sections: string[] = [`# Research: ${request}\n`];
+  for (const result of perspectiveResults) {
+    if (result.status === "fulfilled") {
+      const { key, text } = result.value;
+      sections.push(`## ${key.charAt(0).toUpperCase() + key.slice(1)} Analysis\n\n${text}`);
+    } else {
+      sections.push(`## (Analysis failed: ${result.reason})`);
+    }
+  }
+
+  const merged = sections.join("\n\n---\n\n");
+  const artifactPath = join(artifactDir, "research.md");
+  if (!existsSync(artifactPath)) {
+    writeArtifact(artifactPath, merged);
+  }
+
+  return {
+    ok: true,
+    role: "researcher",
+    text: merged,
+    artifact: "research.md",
+    durationMs: Date.now() - start,
+  };
+}
+
+// ─── Learning Accumulation ────────────────────────────────────────────────────
+
+function accumulateLearning(
+  cwd: string,
+  request: string,
+  _artifactDir: string,
+  learningText: string
+): void {
+  try {
+    const accPath = join(cwd, ".vela", "learnings.json");
+    let existing: Array<{ date: string; request: string; summary: string }> = [];
+    if (existsSync(accPath)) {
+      existing = JSON.parse(readFileSync(accPath, "utf8"));
+    }
+    existing.push({
+      date: new Date().toISOString().substring(0, 10),
+      request: request.substring(0, 100),
+      summary: learningText.substring(0, 500),
+    });
+    // Keep last 100 entries
+    if (existing.length > 100) existing = existing.slice(-100);
+    writeArtifact(accPath, JSON.stringify(existing, null, 2));
+  } catch {
+    // non-fatal
   }
 }
 

@@ -16,6 +16,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -28,6 +29,7 @@ export const SPRINT_VERSION = "1.0";
 
 /** Relative (to cwd) sprint storage directory. */
 const SPRINTS_DIR_REL = ".vela/sprints";
+const SPRINTS_DIR = SPRINTS_DIR_REL;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,8 +76,9 @@ export interface SliceNextAction {
 
 const SLICE_TRANSITIONS: Partial<Record<SliceStatus, Set<SliceStatus>>> = {
   planned: new Set<SliceStatus>(["queued", "skipped"]),
-  queued: new Set<SliceStatus>(["running", "skipped"]),
-  running: new Set<SliceStatus>(["done", "failed"]),
+  queued:  new Set<SliceStatus>(["planned", "running", "skipped"]),
+  running: new Set<SliceStatus>(["queued", "done", "failed"]),
+  failed:  new Set<SliceStatus>(["queued"]),
 };
 
 const SPRINT_TRANSITIONS: Partial<Record<SprintStatus, Set<SprintStatus>>> = {
