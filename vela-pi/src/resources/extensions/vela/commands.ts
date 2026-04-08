@@ -97,6 +97,9 @@ export function registerVelaCommands(pi: ExtensionAPI): void {
         case "auto":
           await cmdAuto(ctx);
           break;
+        case "analyze":
+          await cmdAnalyze(parts.slice(1), ctx);
+          break;
         case "cancel":
           await cmdCancel(ctx);
           break;
@@ -314,38 +317,55 @@ async function cmdStatus(ctx: ExtensionCommandContext): Promise<void> {
   const steps = def ? resolveSteps(def, state.pipeline_type) : [];
   const stepIdx = steps.findIndex((s) => s.id === state.current_step);
   const currentStep = steps[stepIdx];
+  const completedCount = state.completed_steps?.length ?? stepIdx;
+  const totalCount = steps.length;
+
+  // Progress bar (12 chars wide)
+  const barWidth = 12;
+  const filled = Math.round((completedCount / Math.max(totalCount, 1)) * barWidth);
+  const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
+
+  // Step list
+  const stepLines = steps.map((s, i) => {
+    const isDone = state.completed_steps?.includes(s.id) ?? i < stepIdx;
+    const isCurrent = s.id === state.current_step;
+    const icon = isDone ? "✅" : isCurrent ? "⏳" : "○ ";
+    return `  ${icon} ${s.id}`;
+  });
+
+  const elapsed = state.created_at
+    ? Math.round((Date.now() - new Date(state.created_at).getTime()) / 60_000)
+    : 0;
 
   const lines = [
-    `[Vela] Pipeline status`,
-    `  ID:       ${state.pipeline_id ?? "—"}`,
-    `  Request:  ${state.request}`,
-    `  Type:     ${state.task_type ?? state.type ?? "—"}`,
-    `  Status:   ${state.status}`,
-    `  Step:     ${state.current_step} (${stepIdx + 1}/${steps.length})`,
-    `  Mode:     ${currentStep?.mode ?? "unknown"}`,
-    `  Actor:    ${currentStep?.actor ?? "unknown"}`,
+    `⛵ VELA PIPELINE STATUS`,
+    `${"─".repeat(40)}`,
+    `  Request: ${state.request.substring(0, 50)}`,
+    `  Scale:   ${state.scale ?? state.pipeline_type}`,
+    `  Step:    ${state.current_step} (${stepIdx + 1}/${totalCount})`,
+    `  Mode:    ${currentStep?.mode ?? "unknown"}`,
+    `  Actor:   ${currentStep?.actor ?? "unknown"}`,
+    ``,
+    `  Progress: [${bar}] ${completedCount}/${totalCount}`,
+    `  Elapsed:  ${elapsed}m`,
     `  Artifact: .vela/artifacts/${state._artifactDir?.split("/").pop() ?? state.artifact_dir.split("/").pop()}`,
+    ``,
+    `  Steps:`,
+    ...stepLines,
   ];
 
-  if (state.auto) lines.push(`  Auto:     ON`);
-
+  if (state.auto) lines.push(``, `  ⚡ Auto mode ON`);
   const revisions = state.revisions ?? {};
   if (revisions[state.current_step]) {
-    lines.push(`  Revisions: ${revisions[state.current_step]}`);
+    lines.push(`  Revisions: ${revisions[state.current_step]}/${currentStep?.max_revisions ?? "?"}`);
   }
-
-  const sp = state.sub_phases?.[state.current_step];
-  if (sp) {
-    lines.push(`  Sub-phase: ${sp.current_phase} (${sp.current_index + 1}/${sp.phases.length})`);
-  }
-
   if (state.git?.pipeline_branch) {
-    lines.push(`  Branch:   ${state.git.pipeline_branch}`);
+    lines.push(`  Branch:    ${state.git.pipeline_branch}`);
   }
-
   if (state._stale) {
-    lines.push(`  ⚠ Pipeline is stale (no activity for >24h)`);
+    lines.push(``, `  ⚠ Pipeline stale (>24h inactive)`);
   }
+  lines.push(`${"─".repeat(40)}`);
 
   ctx.ui.notify(lines.join("\n"), "info");
 }
@@ -1047,6 +1067,87 @@ function persistStateFromCmd(state: PipelineState): void {
   delete (clean as any)._artifactDir;
   delete (clean as any)._stale;
   writeJSON(state._path, clean);
+}
+
+async function cmdAnalyze(
+  parts: string[],
+  ctx: ExtensionCommandContext
+): Promise<void> {
+  const cwd = ctx.cwd;
+  const sub = parts[0]?.toLowerCase();
+
+  if (!sub || sub === "help") {
+    ctx.ui.notify(
+      [
+        "[Vela] Analyze commands:",
+        "  /vela analyze deps              — npm audit + outdated (free)",
+        "  /vela analyze security          — security scan via AI agent",
+        "  /vela analyze quality           — code quality analysis",
+        "  /vela analyze all               — all analyses",
+      ].join("\n"),
+      "info"
+    );
+    return;
+  }
+
+  const perspectivesMap: Record<string, string[]> = {
+    deps:     [],
+    security: ["security"],
+    quality:  ["quality"],
+    all:      ["security", "quality"],
+  };
+
+  const perspectives = perspectivesMap[sub];
+  if (!perspectives) {
+    ctx.ui.notify(`[Vela] Unknown analyze target: ${sub}. Use: deps, security, quality, all`, "warning");
+    return;
+  }
+
+  // deps: shell-based npm audit
+  if (sub === "deps" || sub === "all") {
+    ctx.ui.notify("[Vela] Running npm audit...", "info");
+    try {
+      const { execFileSync } = await import("node:child_process");
+      const audit = execFileSync("npm", ["audit", "--json"], {
+        cwd, timeout: 30_000, stdio: "pipe",
+      }).toString();
+      const auditData = JSON.parse(audit) as { metadata?: { vulnerabilities?: Record<string, number> } };
+      const vulns = auditData.metadata?.vulnerabilities ?? {};
+      const total = Object.values(vulns).reduce((a, b) => a + b, 0);
+      ctx.ui.notify(
+        `[Vela] npm audit: ${total} vulnerabilities\n` +
+        Object.entries(vulns).map(([k, v]) => `  ${k}: ${v}`).join("\n"),
+        total > 0 ? "warning" : "info"
+      );
+    } catch (e) {
+      ctx.ui.notify(`[Vela] npm audit failed: ${(e as Error).message}`, "warning");
+    }
+  }
+
+  // AI analyses
+  const stateForAnalyze = findActivePipelineState(cwd);
+  const artifactDir = stateForAnalyze?._artifactDir
+    ?? stateForAnalyze?.artifact_dir
+    ?? join(cwd, ".vela", "analyze");
+  mkdirSync(artifactDir, { recursive: true });
+
+  for (const perspective of perspectives) {
+    ctx.ui.notify(`[Vela] Analyzing ${perspective}...`, "info");
+    const result = await runVelaAgent({
+      role: "researcher",
+      cwd,
+      artifactDir,
+      request: `Analyze the codebase for ${perspective} issues. Focus: ${perspective === "security" ? "vulnerabilities, injection, auth, sensitive data" : "code quality, maintainability, test coverage, performance"}`,
+      taskType: "analysis",
+      extraContext: `Perspective: ${perspective}`,
+    });
+
+    if (result.ok) {
+      ctx.ui.notify(`[Vela] ${perspective} analysis complete: ${result.artifact}`, "info");
+    } else {
+      ctx.ui.notify(`[Vela] ${perspective} analysis failed: ${result.error}`, "warning");
+    }
+  }
 }
 
 async function cmdCancel(ctx: ExtensionCommandContext): Promise<void> {
