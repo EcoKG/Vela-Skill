@@ -1,10 +1,24 @@
 {
-  "name": "vela-pi",
+  "name": "@ecokg/vela-pi",
   "version": "1.0.0",
   "type": "module",
   "description": "Vela — deterministic sandbox engine built on Pi SDK",
   "bin": {
     "vela": "./dist/loader.js"
+  },
+  "files": [
+    "dist/",
+    "pkg/",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EcoKG/Vela-Skill.git",
+    "directory": "vela-pi"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "piConfig": {
     "name": "vela",
@@ -16,7 +30,8 @@
   "scripts": {
     "build": "tsc && npm run copy-assets",
     "copy-assets": "node -e \"const {cpSync,mkdirSync}=require('fs'); mkdirSync('dist/resources/extensions/vela/templates',{recursive:true}); cpSync('src/resources/extensions/vela/templates','dist/resources/extensions/vela/templates',{recursive:true});\"",
-    "dev": "node --experimental-strip-types src/loader.ts"
+    "dev": "node --experimental-strip-types src/loader.ts",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "latest"
