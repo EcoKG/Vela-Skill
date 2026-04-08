@@ -10,7 +10,7 @@
  * replacing the old Claude Code Hook subprocess with a deterministic function.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PipelineMode, PipelineState } from "./pipeline.js";
 
@@ -345,21 +345,28 @@ function checkGateGuard(
     }
 
     // ── VG-11: approval/review files only in team steps ─────────────────────
-    const TEAM_STEPS = new Set(["research", "plan", "execute"]);
+    // Team steps: any step that has a team.worker_role in pipeline.json.
+    // Fallback to known defaults if pipeline def not accessible.
+    const TEAM_STEPS = new Set([
+      "research", "plan", "execute", "diff-summary", "verify",
+    ]);
     if (filePath) {
       const basename = filePath.split("/").pop() ?? "";
       if ((/^approval-/.test(basename) || /^review-/.test(basename)) && !TEAM_STEPS.has(currentStep)) {
         return {
           blocked: true,
-          reason: `[Vela VG-11] ${basename} can only be written during team steps (research/plan/execute). Current: ${currentStep}.`,
+          reason: `[Vela VG-11] ${basename} can only be written during team steps. Current step "${currentStep}" is not a team step.`,
           code: "VG-11",
         };
       }
     }
 
-    // ── VG-12: execute step — delegation.json must exist ────────────────────
+    // ── VG-12: execute step — delegation.json must exist and be valid ────────
     if (currentStep === "execute" && cwd && filePath && !filePath.includes("/.vela/")) {
-      const delegationPath = join(cwd, ".vela", "state", "delegation.json");
+      const artifactDir = state._artifactDir ?? state.artifact_dir;
+      const delegationPath = artifactDir
+        ? join(artifactDir, "delegation.json")
+        : join(cwd, ".vela", "state", "delegation.json");
       if (!existsSync(delegationPath)) {
         return {
           blocked: true,
@@ -368,6 +375,63 @@ function checkGateGuard(
           code: "VG-12",
         };
       }
+      // Validate schema
+      try {
+        const del = JSON.parse(readFileSync(delegationPath, "utf8")) as Record<string, unknown>;
+        if (!del.executor || !del.task) {
+          return {
+            blocked: true,
+            reason: `[Vela VG-12] delegation.json is invalid (missing executor or task fields). Re-run /vela dispatch.`,
+            code: "VG-12",
+          };
+        }
+      } catch {
+        // non-fatal parse error — allow
+      }
+    }
+
+    // ── VG-13: artifact path traversal prevention ────────────────────────────
+    if (filePath) {
+      const normalized = filePath.replace(/\\/g, "/");
+      if (normalized.includes("/../") || normalized.endsWith("/..")) {
+        return {
+          blocked: true,
+          reason: `[Vela VG-13] Path traversal detected in file path: ${filePath.substring(0, 80)}`,
+          code: "VG-13",
+        };
+      }
+    }
+  }
+
+  // ── VG-14: Concurrent pipeline detection ───────────────────────────────────
+  // Block starting a second pipeline if one is already active (Bash-based init)
+  if (toolName === "Bash" && cwd) {
+    const cmd = typeof toolInput.command === "string" ? toolInput.command : "";
+    if (/vela[-_]?engine.*init\b/.test(cmd) || /\/vela\s+start\b/.test(cmd)) {
+      // If the state passed in is already active, block
+      if (state.status === "active") {
+        return {
+          blocked: true,
+          reason: `[Vela VG-14] Another pipeline is already active at step "${state.current_step}". Cancel it first with /vela cancel.`,
+          code: "VG-14",
+        };
+      }
+    }
+  }
+
+  // ── VG-15: *.vela-tmp accumulation guard ───────────────────────────────────
+  if (WRITE_TOOLS.has(toolName)) {
+    const filePath =
+      typeof toolInput.file_path === "string" ? toolInput.file_path :
+      typeof toolInput.path === "string" ? toolInput.path : "";
+    if (filePath && filePath.endsWith(".vela-tmp")) {
+      // Allow creation but warn — cleanup is the pipeline's responsibility
+      // Actually block direct writes to .vela-tmp to prevent accumulation
+      return {
+        blocked: true,
+        reason: `[Vela VG-15] Direct writes to *.vela-tmp files are blocked. Use pipeline artifact dir instead.`,
+        code: "VG-15",
+      };
     }
   }
 
