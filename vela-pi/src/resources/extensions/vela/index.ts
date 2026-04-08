@@ -53,8 +53,10 @@ export default async function registerExtension(
       if (existsSync(personaPath)) {
         try {
           const persona = readFileSync(personaPath, "utf8").trim();
-          if (persona) {
+          if (persona && persona.length > 0) {
             ctx.ui.setStatus("vela-persona", "⛵ persona");
+            // append to system prompt if api available
+            await (ctx as unknown as { appendSystemPrompt?: (p: string) => Promise<void> }).appendSystemPrompt?.(persona);
           }
         } catch {
           // non-fatal
