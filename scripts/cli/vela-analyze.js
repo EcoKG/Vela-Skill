@@ -719,8 +719,10 @@ async function main() {
 module.exports = { main, generatePdf };
 
 if (require.main === module) {
-  main().catch((err) => {
-    console.error(`Fatal error: ${err.message}`);
-    process.exit(1);
-  });
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(`Fatal error: ${err.message}`);
+      process.exit(1);
+    });
 }
