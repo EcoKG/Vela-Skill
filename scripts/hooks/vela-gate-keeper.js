@@ -128,7 +128,20 @@ function getCurrentMode(pipelineState, pipelineDef) {
   const pipeline = pipelineDef.pipelines && pipelineDef.pipelines[pipeline_type];
   if (!pipeline) return "readwrite";
 
-  const steps = Array.isArray(pipeline.steps) ? pipeline.steps : [];
+  // Resolve steps with inheritance (mirrors resolveSteps in vela-engine.js)
+  let steps = Array.isArray(pipeline.steps) ? pipeline.steps : [];
+  if (pipeline.inherits && pipeline.steps_only) {
+    const parent = pipelineDef.pipelines[pipeline.inherits];
+    if (parent && Array.isArray(parent.steps)) {
+      steps = parent.steps.filter((s) => pipeline.steps_only.includes(s.id));
+      if (pipeline.overrides) {
+        steps = steps.map((s) =>
+          pipeline.overrides[s.id] ? { ...s, ...pipeline.overrides[s.id] } : s,
+        );
+      }
+    }
+  }
+
   const step = steps.find((s) => s.id === current_step);
   return (step && step.mode) || "readwrite";
 }
