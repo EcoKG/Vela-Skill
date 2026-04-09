@@ -1129,19 +1129,14 @@ async function cmdReview() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { sdkReview } = require("../shared/sdk-reviewer.js");
-  const result = await sdkReview({
-    step: state.current_step,
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: Review is performed by PM via Agent(subagent_type="vela-reviewer").
+  // This command is kept as a no-op stub for backwards compatibility.
   output({
-    ok: result.ok,
+    ok: true,
     command: "review",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-reviewer') directly. This stub is a no-op.",
+    artifactDir,
+    current_step: state.current_step,
   });
 }
 
@@ -1169,13 +1164,13 @@ async function cmdPlanCheck() {
     });
   }
 
-  const { sdkPlanCheck } = require("../shared/sdk-plan-checker.js");
-  const result = await sdkPlanCheck({ artifactDir, cwd: CWD });
-
+  // V6: Plan-check is performed by PM via Agent(subagent_type="vela-plan-checker").
   output({
-    ok: result.ok,
+    ok: true,
     command: "plan-check",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-plan-checker') directly. This stub is a no-op.",
+    artifactDir,
+    planPath,
   });
 }
 
@@ -1210,19 +1205,13 @@ async function cmdExecute() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { sdkExecute } = require("../shared/sdk-executor.js");
-  const result = await sdkExecute({
-    step: state.current_step,
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: Execute is performed by PM via Agent(subagent_type="vela-executor").
   output({
-    ok: result.ok,
+    ok: true,
     command: "execute",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-executor') directly. This stub is a no-op.",
+    artifactDir,
+    current_step: state.current_step,
   });
 }
 
@@ -1267,18 +1256,12 @@ async function cmdWaveExecute() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { executeWaves } = require("../shared/wave-executor.js");
-  const result = await executeWaves({
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: wave-execute removed (wave-executor.js deleted). Stub for compatibility.
   output({
-    ok: result.ok,
+    ok: true,
     command: "wave-execute",
-    ...result,
+    v6_note: "Wave execution removed in V6. Use Agent(subagent_type='vela-executor') instead.",
+    artifactDir,
   });
 }
 
@@ -1298,13 +1281,13 @@ async function cmdResearch() {
 
   const step = state.current_step || "unknown";
 
-  const { sdkResearch } = require("../shared/sdk-researcher.js");
-  const result = await sdkResearch({ step, artifactDir, cwd: CWD });
-
+  // V6: Research is performed by vela-researcher agent via Agent tool.
   output({
-    ok: result.ok,
+    ok: true,
     command: "research",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-researcher') directly. This CLI stub is a no-op.",
+    artifactDir,
+    current_step: step,
   });
 }
 
@@ -1328,19 +1311,13 @@ async function cmdValidate() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { sdkValidate } = require("../shared/sdk-validator.js");
-  const result = await sdkValidate({
-    step,
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: Validation is performed by vela-verifier agent via Agent tool.
   output({
-    ok: result.ok,
+    ok: true,
     command: "validate",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-verifier') directly. This CLI stub is a no-op.",
+    artifactDir,
+    current_step: step,
   });
 }
 

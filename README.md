@@ -1,4 +1,4 @@
-# ⛵ Vela Engine v4.1 — Sandbox Development System
+# ⛵ Vela Engine v6.0 — Sandbox Development System
 
 **Vela**(돛자리)는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의 파이프라인을 통해서만 진행된다.
@@ -11,8 +11,8 @@ Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의
 AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela는 **"언제, 어떤 순서로, 누구의 검증을 거쳐 할 수 있는가"**를 강제한다.
 
 ### 2. 🌟 이중 방어 (Defense in Depth)
-- **Gate Keeper** + **Gate Guard** — SDK 콜백 레벨 이중 차단 (Fail-closed: 예외 발생 시 도구 차단)
-- **Reviewer** (SDK Opus 단일) — 고품질 독립 평가
+- **Gate Keeper** + **Gate Guard** — PreToolUse 훅 이중 차단 (Fail-closed: 예외 발생 시 도구 차단)
+- **Reviewer Agent** (vela-reviewer) — 고품질 독립 평가 (5차원 20+/25)
 - **Permission deny/allow** — settings.local.json deny 패턴으로 절대 차단, allow 패턴으로 읽기 도구 자동 허용
 - **GUARD 0**: 파이프라인 중 TaskCreate 차단
 - **pipeline-state.json + config.json 보호**: 직접 수정 불가
@@ -21,7 +21,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 산출물(research.md, plan.md, review-*.md, approval-*.json), git 커밋에 파이프라인 참조, TreeNode 캐시.
 
 ### 4. ✦ 구조로 강제 (Enforce by Structure)
-지시는 무시된다. 산출물이 없으면 전이 차단. approval 없으면 다음 단계 불가. `--scale` 미지정 시 init 거부. PM은 코드를 직접 작성할 수 없다 — 모든 코드 실행은 SDK Executor를 통해서만 가능하다.
+지시는 무시된다. 산출물이 없으면 전이 차단. approval 없으면 다음 단계 불가. PM은 코드를 직접 작성할 수 없다 — 모든 코드 실행은 Executor 에이전트를 통해서만 가능하다.
 
 ---
 
@@ -33,7 +33,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
 ```
 
-설치 시 Claude Agent SDK도 선택적으로 설치된다 (실패해도 기존 방식으로 정상 동작).
+설치 후 `/vela:init`으로 프로젝트 환경을 구축한다.
 
 ### 2. 프로젝트에서 사용
 
@@ -55,8 +55,8 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | 
 
 Auto 모드에서는:
 - 파이프라인 전 단계 자동 진행 (checkpoint 포함)
-- SDK 오케스트레이터가 단계별 Agent를 spawn하여 완전 무인 실행
-- 도구 실패 시 자동 기록, API 에러 시 상태 자동 보존
+- PM이 Agent 도구로 역할별 에이전트를 순서대로 소환하여 완전 무인 실행
+- 스텝 실패 시 자동 기록, 상태 자동 보존
 
 ### 4. 업데이트
 
@@ -82,10 +82,10 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 ```
 ✦──────────────────────────────────────────────────────────✦
-│                    ⛵ VELA SANDBOX                        │
+│                  ⛵ VELA SANDBOX  V6                      │
 │                                                           │
-│  ⛵ Gate Keeper   🌟 Gate Guard   🧭 Orchestrator        │
-│  R/W 모드 강제    파이프라인 순서   SDK 단계별 Agent spawn  │
+│  ⛵ Gate Keeper   🌟 Gate Guard   🧭 PM Agent            │
+│  R/W 모드 강제    파이프라인 순서   Agent 도구로 직접 소환   │
 │                                                           │
 │  ⛵ PROMPT OPTIMIZER ────────────────────────────        │
 │  모든 모드에서 최우선 실행. 불충분한 프롬프트 자동 감지     │
@@ -96,22 +96,20 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │       → branch → execute → verify → diff-summary         │
 │       → learning → commit → finalize                     │
 │                                                           │
-│  🔌 SDK ORCHESTRATOR (vela-pipeline.js) ─────────        │
-│  review:     Opus 단일 리뷰                               │
-│  plan-check: Haiku 구조 검증                               │
-│  research:   Haiku × 3 병렬 분석 (아키텍처/보안/품질)      │
-│  execute:    Sonnet 코드 구현 (TDD)                        │
-│  ↳ SDK 미설치 → 기존 Subagent/Teammate 방식 자동 폴백     │
-│                                                           │
-│  🌟 TEAM ────────────────────────────────────────        │
-│  Subagent: 독립 작업 (Haiku/Sonnet/Opus)                   │
-│  Teammate: 소통 필요 (Research 경쟁가설/CrossLayer)           │
-│  TeamCreate/Delete는 Teammate 사용 시에만                   │
+│  🤖 ROLE AGENTS (Native Claude Code) ────────────        │
+│  vela-researcher:   3관점 분석 (아키텍처/보안/품질)         │
+│  vela-planner:      plan.md 작성 (Architecture/Spec/Test) │
+│  vela-executor:     TDD 구현 (test→implement→refactor)   │
+│  vela-reviewer:     5차원 독립 평가 (20+/25 approve)      │
+│  vela-plan-checker: plan 구조 검증 (PASS/FAIL)            │
+│  vela-verifier:     테스트/린트 실행 + verification.md    │
+│  vela-diff-summary: diff 5차원 통합 검토                   │
+│  vela-learning:     파이프라인 패턴 학습 추출               │
 │                                                           │
 │  ✦ ARCHITECTURE ─────────────────────────────────        │
 │  Plan Gate: Architecture/ClassSpec/TestStrategy 필수      │
 │  Execute: TDD (test → implement → refactor)              │
-│  approval-{step}.json 없으면 전이 차단                    │
+│  산출물 없으면 전이 차단 (vela-engine.js)                  │
 ✦──────────────────────────────────────────────────────────✦
 ```
 

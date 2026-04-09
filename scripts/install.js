@@ -85,19 +85,21 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/constants.js", dst: "shared/constants.js" },
   { src: "scripts/shared/dep-analyzer.js", dst: "shared/dep-analyzer.js" },
   { src: "scripts/shared/global-require.js", dst: "shared/global-require.js" },
-  // CLI tools
+  { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
+  { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
+  { src: "scripts/shared/change-surface.js", dst: "shared/change-surface.js" },
+  // Environment detection (used by session-start hook)
+  { src: "scripts/shared/project-env.js", dst: "shared/project-env.js" },
+  // CLI tools (V6 — no SDK orchestrators)
   { src: "scripts/cli/vela-engine.js", dst: "cli/vela-engine.js" },
   { src: "scripts/cli/vela-analyze.js", dst: "cli/vela-analyze.js" },
   { src: "scripts/cli/vela-cost.js", dst: "cli/vela-cost.js" },
   { src: "scripts/cli/vela-report.js", dst: "cli/vela-report.js" },
-  { src: "scripts/cli/vela-pipeline.js", dst: "cli/vela-pipeline.js" },
-  { src: "scripts/cli/vela-wave.js", dst: "cli/vela-wave.js" },
-  { src: "scripts/cli/vela-sprint.js", dst: "cli/vela-sprint.js" },
   // Cache
   { src: "scripts/cache/treenode.js", dst: "cache/treenode.js" },
   // Root-level managed files
   { src: "scripts/statusline.sh", dst: "statusline.sh" },
-  // Top-level agent files
+  // Top-level agent files — PM + role agents
   { src: "scripts/agents/vela.md", dst: "agents/vela.md" },
   { src: "scripts/agents/researcher.md", dst: "agents/researcher.md" },
   { src: "scripts/agents/planner.md", dst: "agents/planner.md" },
@@ -109,9 +111,19 @@ const FILE_MANIFEST = [
     dst: "agents/conflict-manager.md",
   },
   { src: "scripts/agents/vela-pm.md", dst: "agents/vela-pm.md" },
+  // V6 role agents (deployed to .vela/agents/ AND .claude/agents/)
+  { src: "scripts/agents/vela-researcher.md", dst: "agents/vela-researcher.md" },
+  { src: "scripts/agents/vela-planner.md", dst: "agents/vela-planner.md" },
+  { src: "scripts/agents/vela-executor.md", dst: "agents/vela-executor.md" },
+  { src: "scripts/agents/vela-reviewer.md", dst: "agents/vela-reviewer.md" },
+  { src: "scripts/agents/vela-plan-checker.md", dst: "agents/vela-plan-checker.md" },
+  { src: "scripts/agents/vela-verifier.md", dst: "agents/vela-verifier.md" },
+  { src: "scripts/agents/vela-diff-summary.md", dst: "agents/vela-diff-summary.md" },
+  { src: "scripts/agents/vela-learning.md", dst: "agents/vela-learning.md" },
+  { src: "scripts/agents/vela-sprint-planner.md", dst: "agents/vela-sprint-planner.md" },
+  { src: "scripts/agents/vela-analyzer.md", dst: "agents/vela-analyzer.md" },
   // Templates
   { src: "templates/pipeline.json", dst: "templates/pipeline.json" },
-
   {
     src: "templates/config.json",
     dst: "templates/config.json",
@@ -145,8 +157,8 @@ const FILE_MANIFEST = [
     dst: "agents/pm/block-recovery.md",
   },
   {
-    src: "scripts/agents/pm/sdk-failure-recovery.md",
-    dst: "agents/pm/sdk-failure-recovery.md",
+    src: "scripts/agents/pm/failure-recovery.md",
+    dst: "agents/pm/failure-recovery.md",
   },
   // Agent tree — Researcher
   {
@@ -223,33 +235,6 @@ const FILE_MANIFEST = [
     src: "scripts/guidelines/testing-strategy.md",
     dst: "guidelines/testing-strategy.md",
   },
-  // SDK modules (optional — require @anthropic-ai/claude-agent-sdk)
-  { src: "scripts/shared/sdk-runner.js", dst: "shared/sdk-runner.js" },
-  { src: "scripts/shared/sdk-reviewer.js", dst: "shared/sdk-reviewer.js" },
-  { src: "scripts/shared/sdk-diff-summary.js", dst: "shared/sdk-diff-summary.js" },
-  { src: "scripts/shared/sdk-learning.js", dst: "shared/sdk-learning.js" },
-  {
-    src: "scripts/shared/sdk-plan-checker.js",
-    dst: "shared/sdk-plan-checker.js",
-  },
-  { src: "scripts/shared/sdk-researcher.js", dst: "shared/sdk-researcher.js" },
-  { src: "scripts/shared/sdk-executor.js", dst: "shared/sdk-executor.js" },
-  { src: "scripts/shared/wave-executor.js", dst: "shared/wave-executor.js" },
-  { src: "scripts/shared/sdk-validator.js", dst: "shared/sdk-validator.js" },
-  { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
-  { src: "scripts/shared/sdk-analyzer.js", dst: "shared/sdk-analyzer.js" },
-  { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
-  { src: "scripts/shared/sdk-sprint-planner.js", dst: "shared/sdk-sprint-planner.js" },
-  {
-    src: "scripts/shared/sdk-custom-tools.js",
-    dst: "shared/sdk-custom-tools.js",
-  },
-  {
-    src: "scripts/shared/change-surface.js",
-    dst: "shared/change-surface.js",
-  },
-  // Environment detection (used by pipeline + session-start hook)
-  { src: "scripts/shared/project-env.js", dst: "shared/project-env.js" },
   // Hooks (project-local — registered in settings.local.json)
   { src: "scripts/hooks/vela-gate-keeper.js", dst: "hooks/vela-gate-keeper.js" },
   { src: "scripts/hooks/vela-gate-guard.js", dst: "hooks/vela-gate-guard.js" },
@@ -611,15 +596,31 @@ function install() {
     fs.mkdirSync(stateDir, { recursive: true });
   }
 
-  // ─── Deploy vela agent ───
+  // ─── Deploy vela agents to .claude/agents/ ───
+  // V6: PM + all role agents are deployed so PM can spawn them via Agent tool.
   const agentsDir = path.join(PROJECT_ROOT, ".claude", "agents");
   if (!fs.existsSync(agentsDir)) {
     fs.mkdirSync(agentsDir, { recursive: true });
   }
-  const pmSourcePath = path.join(PROJECT_ROOT, ".vela", "agents", "vela.md");
-  const pmTargetPath = path.join(agentsDir, "vela.md");
-  if (fs.existsSync(pmSourcePath)) {
-    fs.copyFileSync(pmSourcePath, pmTargetPath);
+  const CLAUDE_AGENTS = [
+    "vela.md",
+    "vela-researcher.md",
+    "vela-planner.md",
+    "vela-executor.md",
+    "vela-reviewer.md",
+    "vela-plan-checker.md",
+    "vela-verifier.md",
+    "vela-diff-summary.md",
+    "vela-learning.md",
+    "vela-sprint-planner.md",
+    "vela-analyzer.md",
+  ];
+  for (const agentFile of CLAUDE_AGENTS) {
+    const src = path.join(PROJECT_ROOT, ".vela", "agents", agentFile);
+    const dst = path.join(agentsDir, agentFile);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dst);
+    }
   }
 
   // ─── Create CLAUDE.md if not exists ───
@@ -627,15 +628,15 @@ function install() {
   if (!fs.existsSync(claudeMdPath)) {
     fs.writeFileSync(
       claudeMdPath,
-      `# Development Workflow — Vela
+      `# Development Workflow — Vela V6
 
 This project uses Vela for development governance.
 
 - To explore/read code: use normal tools freely (Explore mode).
-- To modify code: ALWAYS start with \`node .vela/cli/vela-pipeline.js run "<task>"\`
-- Follow pipeline steps in order. Do NOT use TaskCreate/TaskUpdate during pipeline execution.
-- Do NOT skip pipeline steps or create your own plans outside the pipeline.
-- vela-pipeline.js가 각 단계의 SDK agent를 자동 실행한다.
+- To modify code: ALWAYS start with \`node .vela/cli/vela-engine.js init "<task>"\` then follow the pipeline steps.
+- PM (vela agent) orchestrates the pipeline by spawning role agents via the Agent tool.
+- Follow pipeline steps in order. Do NOT skip steps or bypass the pipeline.
+- Do NOT modify pipeline-state.json directly — use vela-engine.js CLI only.
 `,
     );
   }

@@ -17,8 +17,11 @@
  *   VK-03/VK-04: Write/Edit blocking in read mode
  *   VK-07: PM mode — only Read/Glob/Grep allowed; Write/Edit blocked
  *   VK-08: Chain operator blocking (&&, ||, ;, |)
- *   VK-09: PM mode — Agent tool blocked (must use SDK pipeline, not direct Agent calls)
  *   VK-10: write mode — WebFetch/WebSearch blocked (network ops inconsistent with write isolation)
+ *
+ * NOTE (V6): VK-09 removed. In V6, PM uses the Agent tool directly to spawn role agents
+ * (vela-researcher, vela-planner, vela-executor, etc.) — this is the intended orchestration
+ * mechanism. Blocking Agent tool would prevent pipeline execution.
  */
 
 "use strict";
@@ -210,13 +213,6 @@ async function main() {
       // All other writes blocked in read mode
       process.exit(2);
     }
-  }
-
-  // ─── VK-09: PM mode — Agent tool blocked ──────────────────────
-  // PM must use SDK pipeline (vela-pipeline.js), not direct Claude Agent calls.
-  // Direct Agent tool use bypasses pipeline governance and state tracking.
-  if (toolName === "Agent" && config.persona === "pm") {
-    process.exit(2);
   }
 
   // ─── VK-10: write mode — WebFetch/WebSearch blocked ───────────

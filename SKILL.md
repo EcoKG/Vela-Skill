@@ -94,14 +94,18 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
    모든 요청은 standard 12-step 파이프라인을 거친다.
 
-4. **파이프라인 시작**
+4. **파이프라인 초기화**
    ```bash
-   node .vela/cli/vela-pipeline.js run "작업 설명" --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large>
    ```
 
 5. **파이프라인 진행**
-   SDK 오케스트레이터가 standard 12-step 파이프라인을 자동 순차 실행한다.
-   - Research→Plan→Execute→Review (SDK query() 기반)
+   PM이 `vela-engine.js`로 상태를 추적하며, Agent 도구로 역할별 에이전트를 순서대로 소환한다.
+   - research 단계: `Agent(subagent_type="vela-researcher")` → `Agent(subagent_type="vela-reviewer")`
+   - plan 단계: `Agent(subagent_type="vela-planner")` → 리뷰
+   - execute 단계: `Agent(subagent_type="vela-executor")` → 리뷰
+   - verify 단계: `Agent(subagent_type="vela-verifier")`
+   - 각 단계 완료 후 `node .vela/cli/vela-engine.js transition`으로 전이
 
 ---
 
@@ -120,18 +124,18 @@ node .vela/cli/vela-engine.js auto
 
 ### 2. 활성 파이프라인이 없을 때 → Auto 모드로 새 파이프라인 시작
 
-`/vela:start`와 동일하되 `--auto` 플래그를 추가한다:
+`/vela:start`와 동일하되 auto 플래그로 시작한다:
 
 1~3단계는 `/vela:start`와 동일.
 
-4. **파이프라인 시작 (auto 플래그 추가)**
+4. **파이프라인 초기화 (auto 플래그)**
    ```bash
-   node .vela/cli/vela-pipeline.js run "작업 설명" --type <code|code-bug|code-refactor|docs>
+   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --auto
    ```
 
 5. **자동 진행**
-   Orchestrator가 매 프롬프트에 `⚡ AUTO` directive를 주입한다.
-   - 일반 단계: 현재 단계를 완료한 뒤 즉시 transition 호출
+   PM이 각 단계를 Agent 도구로 실행하되, 사용자 확인 없이 자동으로 다음 단계로 전이한다.
+   - 일반 단계: 에이전트 완료 → 즉시 transition 호출
    - checkpoint 단계: plan-check 통과 확인 → record pass → transition 호출
 
 ### Auto 모드 중단 조건
@@ -179,49 +183,48 @@ PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 �
 
 ### 초기화 절차
 
-1. **언어 선택 질문**
-   사용자에게 CLI 도구의 스크립트 언어를 질문한다 (Node.js 또는 Python).
-   가장 빠른 처리가 가능한 것을 추천하되 최종 선택은 사용자가 한다.
-
-2. **디렉토리 구조 생성**
+1. **디렉토리 구조 생성**
    프로젝트 루트에 `.vela/` 디렉토리를 생성한다:
    ```
    .vela/
    ├── config.json              ← Vela 설정
-   ├── shared/                  ← SDK 공유 모듈
-   │   ├── sdk-runner.js        ← 공통 인프라 (인증, 폴백, rate limit, 격리)
-   │   ├── sdk-reviewer.js      ← Opus 단일 리뷰
-   │   ├── sdk-plan-checker.js  ← Haiku plan.md 구조 검증
-   │   ├── sdk-researcher.js    ← 3관점 병렬 분석
-   │   ├── sdk-executor.js      ← Sonnet TDD 실행
-   │   ├── sdk-analyzer.js      ← 5관점 병렬 코드 분석
-   │   ├── sdk-sprint-planner.js ← 스프린트 슬라이스 분해 (Sonnet)
+   ├── shared/                  ← 공유 유틸리티
    │   ├── sprint-manager.js    ← 스프린트 상태 관리 (CRUD, FSM, 큐)
-   │   ├── sdk-custom-tools.js  ← MCP 커스텀 도구 서버 팩토리
    │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
    │   ├── change-surface.js    ← 참조 무결성 검증 (diff 기반)
+   │   ├── project-env.js       ← 프로젝트 환경 감지
    │   └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
    ├── cli/                     ← 커스텀 CLI 도구
    │   ├── vela-analyze.js      ← 분석 보고서 CLI (deps/run/full/report)
    │   ├── vela-cost.js         ← 파이프라인 비용/메트릭
-   │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진
-   │   ├── vela-pipeline.js     ← SDK 오케스트레이터 (파이프라인 자동 실행)
-   │   ├── vela-report.js       ← 파이프라인 리포트/대시보드
-   │   ├── vela-sprint.js       ← 스프린트 CLI (run/status/resume/cancel)
-   │   └── vela-wave.js         ← Wave 병렬 그룹화 PoC
+   │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진 (핵심)
+   │   └── vela-report.js       ← 파이프라인 리포트/대시보드
+   ├── agents/                  ← 역할별 에이전트 정의
+   │   ├── vela.md              ← PM 에이전트
+   │   ├── vela-researcher.md   ← 리서처 (3관점 분석)
+   │   ├── vela-planner.md      ← 플래너 (plan.md 작성)
+   │   ├── vela-executor.md     ← 실행자 (TDD 구현)
+   │   ├── vela-reviewer.md     ← 리뷰어 (5차원 평가)
+   │   ├── vela-plan-checker.md ← plan 구조 검증
+   │   ├── vela-verifier.md     ← 테스트/린트 실행
+   │   ├── vela-diff-summary.md ← diff 5차원 검토
+   │   ├── vela-learning.md     ← 학습 패턴 추출
+   │   ├── vela-sprint-planner.md ← 스프린트 슬라이스 분해
+   │   └── vela-analyzer.md     ← 코드 분석 보고
    ├── cache/                   ← TreeNode SQLite 캐시
-   │   └── treenode.js          ← 캐시 관리자
+   │   └── treenode.js
    ├── templates/
    │   └── pipeline.json        ← 파이프라인 정의
-   ├── sprints/                  ← 스프린트 상태 파일 (sprint-*.json)
+   ├── sprints/                  ← 스프린트 상태 파일
    └── artifacts/               ← 파이프라인 실행 산출물
    ```
 
-3. **스크립트 배포**
+2. **스크립트 배포**
    이 스킬의 `scripts/` 디렉토리에 있는 파일들을 `.vela/`로 복사한다:
    - `scripts/shared/*` → `.vela/shared/`
    - `scripts/cli/*` → `.vela/cli/`
    - `scripts/cache/*` → `.vela/cache/`
+   - `scripts/agents/*` → `.vela/agents/`
    - `scripts/install.js` → `.vela/install.js`
    - `templates/*` → `.vela/templates/`
 
@@ -319,20 +322,22 @@ PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 �
    - "Opus" → `--model opus`
    - Dependencies만 선택 시 → `--model` 생략 (기본값 haiku 사용)
 
-4. **CLI 실행**
+4. **분석 실행**
 
+   `deps` 항목: `vela-analyze.js`로 npm 의존성 분석
    ```bash
-   node .vela/cli/vela-analyze.js full --items <comma-separated-items> --model <selected-model> --output ./vela-analysis-report.pdf
+   node .vela/cli/vela-analyze.js deps --output ./vela-analysis-report.pdf
    ```
 
-   예시:
-   ```bash
-   # deps + security + bugs 선택, haiku 모델
-   node .vela/cli/vela-analyze.js full --items deps,security,bugs --model haiku --output ./vela-analysis-report.pdf
-
-   # deps만 선택 (모델 선택 스킵)
-   node .vela/cli/vela-analyze.js full --items deps --output ./vela-analysis-report.pdf
+   코드 분석 항목(security/bugs/performance/code-quality/architecture): `vela-analyzer` Agent로 실행
    ```
+   Agent(subagent_type="vela-analyzer", prompt="
+     items: {comma-separated-items}
+     프로젝트를 분석하고 결과를 반환하라.
+   ")
+   ```
+
+   둘 다 선택된 경우: deps CLI 먼저 실행 후 analyzer Agent 실행, 결과 통합
 
 5. **결과 표시**
 
@@ -368,52 +373,35 @@ PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 �
 
 **rw-artifact 모드 (M023 신규)**: `read` 모드 기반에 artifactDir scope의 Write만 추가로 허용. `createArtifactPathGuard(artifactDir)` PreToolUse 훅이 separator-aware prefix check로 Write 경로를 제한. Edit/NotebookEdit는 차단 유지. research/verify 단계가 artifact를 쓰면서도 코드 변경은 차단된다.
 
-### 엔진 명령어
+### 엔진 명령어 (V6 — PM이 직접 사용)
 
-파이프라인 실행은 오케스트레이터를 통해 수행한다:
-
-```bash
-node .vela/cli/vela-pipeline.js run "작업 설명" [--type <type>]                    # 새 파이프라인 시작
-node .vela/cli/vela-pipeline.js resume                                              # 기존 파이프라인 재개
-node .vela/cli/vela-pipeline.js status                                              # 파이프라인 상태 조회
-node .vela/cli/vela-pipeline.js cancel                                              # 파이프라인 취소
-```
-
-내부 엔진 CLI (⚠️ 오케스트레이터가 내부적으로만 사용 — PM이 직접 호출하지 않는다):
+**V6에서 PM은 `vela-engine.js`를 직접 호출한다. `vela-pipeline.js`는 제거되었다.**
 
 ```bash
-node .vela/cli/vela-engine.js init "작업 설명"     # 파이프라인 초기화 (git 상태 체크)
-node .vela/cli/vela-engine.js state                 # 현재 상태
+node .vela/cli/vela-engine.js init "작업 설명" [--scale small|medium|large|ralph|hotfix]
+node .vela/cli/vela-engine.js state                 # 현재 상태 조회
 node .vela/cli/vela-engine.js transition            # 다음 단계로 전이
-node .vela/cli/vela-engine.js dispatch --role ROLE  # 에이전트 스펙 조회
-node .vela/cli/vela-engine.js record pass           # 결과 기록
+node .vela/cli/vela-engine.js record pass           # 단계 성공 기록
+node .vela/cli/vela-engine.js record reject         # 단계 실패 기록
 node .vela/cli/vela-engine.js branch                # 브랜치 생성 (branch 단계)
 node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commit 단계)
-node .vela/cli/vela-engine.js sub-transition         # execute sub-phase 전진
-node .vela/cli/vela-engine.js cancel                # 파이프라인 취소 (복구 안내 포함)
-node .vela/cli/vela-engine.js review                # SDK Opus 단일 리뷰
-node .vela/cli/vela-engine.js plan-check            # SDK plan.md 구조 검증 (Haiku)
-node .vela/cli/vela-engine.js research              # SDK 3-관점 병렬 리서치 (Haiku)
-node .vela/cli/vela-engine.js execute               # SDK 단일 실행 (Sonnet)
+node .vela/cli/vela-engine.js sub-transition        # execute sub-phase 전진
+node .vela/cli/vela-engine.js cancel                # 파이프라인 취소
 ```
 
 **옵션:**
 | 옵션 | 설명 |
 |------|------|
-| `--type <type>` | 작업 유형 (code/code-bug/code-refactor/docs) |
-| `--auto` | auto 모드 — 각 단계 완료 후 자동 transition. reject 2회 연속 시 중단. |
+| `--scale <scale>` | 파이프라인 규모 (small/medium/large/ralph/hotfix) |
+| `--auto` | auto 모드 활성화 |
 | `--force` | dirty tree 체크 스킵 |
 
-### 스프린트 명령어
+### 스프린트 (V6)
 
-멀티 슬라이스 스프린트 오케스트레이션:
-
-```bash
-node .vela/cli/vela-sprint.js run "<요청>"          # 스프린트 계획 + 순차 실행
-node .vela/cli/vela-sprint.js status [sprint-id]     # 스프린트 상태 조회
-node .vela/cli/vela-sprint.js resume [sprint-id]     # 중단된 스프린트 재개
-node .vela/cli/vela-sprint.js cancel [sprint-id]     # 활성 스프린트 취소
-```
+스프린트는 PM이 직접 처리한다:
+1. `Agent(subagent_type="vela-sprint-planner")` → sprint-plan.json 생성
+2. sprint-manager.js CLI로 슬라이스 상태 관리
+3. PM이 각 슬라이스를 독립 파이프라인으로 순차 실행
 
 ---
 
