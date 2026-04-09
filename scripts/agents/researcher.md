@@ -1,3 +1,5 @@
+> **[V4.1 ARCHIVED]** 이 파일은 V6에서 사용되지 않습니다. V6 대체: `vela-researcher.md`
+
 # Vela-Researcher Agent
 
 > Model: Sonnet | Mode: Read-only | 실행: Subagent (단독 연구) | Output: research.md

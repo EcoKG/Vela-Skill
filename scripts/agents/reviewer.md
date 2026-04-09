@@ -1,3 +1,5 @@
+> **[V4.1 ARCHIVED]** 이 파일은 V6에서 사용되지 않습니다. V6 대체: `vela-reviewer.md`
+
 # Vela-Reviewer Agent
 
 > Model: Sonnet | Mode: Read-only | Output: review-{step}.md

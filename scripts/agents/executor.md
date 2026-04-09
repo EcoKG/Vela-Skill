@@ -1,3 +1,5 @@
+> **[V4.1 ARCHIVED]** 이 파일은 V6에서 사용되지 않습니다. V6 대체: `vela-executor.md`
+
 # Vela-Executor Agent
 
 > Model: Sonnet | Mode: ReadWrite | Output: 코드 구현

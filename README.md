@@ -14,7 +14,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 - **Gate Keeper** + **Gate Guard** — PreToolUse 훅 이중 차단 (Fail-closed: 예외 발생 시 도구 차단)
 - **Reviewer Agent** (vela-reviewer) — 고품질 독립 평가 (5차원 20+/25)
 - **Permission deny/allow** — settings.local.json deny 패턴으로 절대 차단, allow 패턴으로 읽기 도구 자동 허용
-- **GUARD 0**: 파이프라인 중 TaskCreate 차단
+- **GUARD 3/13/14/15**: 커밋 차단(VG-03), pipeline.json 보호(VG-13), 시크릿 감지(VG-14), 서킷 브레이커(VG-15)
 - **pipeline-state.json + config.json 보호**: 직접 수정 불가
 
 ### 3. 🔭 추적 가능한 개발 (Traceable Development)
@@ -117,15 +117,14 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 | 모드 | 상태 | 허용 | 차단 |
 |------|------|------|------|
-| **⛵ Explore** | 파이프라인 없음 | 읽기, 탐색 | 쓰기, TaskCreate(파이프라인 중) |
-| **🧭 Develop** | 파이프라인 활성 | 단계에 따름 | 단계 건너뛰기, TaskCreate |
+| **⛵ Explore** | 파이프라인 없음 | 읽기, 탐색 | 쓰기 (Gate Keeper 차단) |
+| **🧭 Develop** | 파이프라인 활성 | 단계에 따름 | 단계 건너뛰기, 직접 소스 수정 |
 
 ### Research 모드 (Explore에서)
 
 깊은 분석 요청 시 AskUserQuestion으로 방식 선택:
 - **Solo** — 직접 분석, 가장 빠름
-- **Subagent** (Sonnet) — 독립 리서처 1명
-- **Teammate 3명** (Opus) — 경쟁가설 디버깅, 서로 가설 반박/검증
+- **Subagent** (Sonnet) — 독립 리서처 (vela-researcher 에이전트)
 
 분석 후 수정 필요 시 → 파이프라인 시작 / 추가 조사 / 완료 선택
 
@@ -283,43 +282,30 @@ Playwright HTML→PDF로 생성. 타이틀 페이지, severity별 색상 코딩(
 
 ---
 
-## 팀 메커니즘
+## 에이전트 아키텍처
 
 ### 모델 선택 전략
 
 | 작업 유형 | 모델 | 역할 |
 |----------|------|------|
 | 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
-| 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
+| 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer |
 | 설계/디버깅/분석 | **Opus** | Researcher, Planner |
 
-### Teammate vs Subagent
+### 에이전트 소환 패턴 (V6)
 
-| 조건 | 방식 | model |
-|------|------|-------|
-| 경쟁가설 디버깅 (리서치) | **Teammate** | `"opus"` |
-| CrossLayer/다중 파일 동시 수정 | **Teammate** | `"sonnet"` |
-| 독립 리뷰/점검 | **Subagent** | `"sonnet"` |
-| 단일 모듈 수정 | **Subagent** | `"sonnet"` |
-| 파일 탐색 | **Subagent** | `"haiku"` |
-| 설계/분석 | **Subagent** | `"opus"` |
+PM은 `Agent(subagent_type="vela-{role}")` 단일 호출로 역할 에이전트를 소환한다.
+V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 
-### 팀 규칙
-
-- **팀 크기**: 3~5명 (개발 팀원 + Conflict Manager 1명)
-- **태스크 배분**: 팀원당 5~6개
-- **파일 소유권**: 각 팀원에게 담당 파일 명시 부여
-- **에이전트 MD**: 목차(TOC) 기반 로딩 — 필요한 섹션만 선택적으로 읽기
-
-### CrossLayer Development
-
-다중 계층 작업 시 Teammate + Conflict Manager + Git Worktree:
-```
-TeamCreate → frontend-dev(Sonnet) + backend-dev(Sonnet) + db-dev(Sonnet) + conflict-manager(Sonnet)
-각 팀원: isolation: "worktree" + 담당 파일 + 5~6개 태스크
-팀원 간 SendMessage로 인터페이스 조율
-Conflict Manager가 최종 병합 + 충돌 해결
-```
+| 작업 | subagent_type | 모델 |
+|------|--------------|------|
+| 프로젝트 분석 | `vela-researcher` | sonnet |
+| 구현 계획 | `vela-planner` | sonnet |
+| 코드 구현 | `vela-executor` | sonnet |
+| 품질 리뷰 | `vela-reviewer` | sonnet |
+| 테스트 검증 | `vela-verifier` | sonnet |
+| diff 분석 | `vela-diff-summary` | sonnet |
+| 학습 추출 | `vela-learning` | sonnet |
 
 ### 승인 메커니즘 — 파일 기반
 
@@ -372,15 +358,10 @@ Auto 모드(`/vela auto` 또는 `--auto`)는 파이프라인을 완전 무인으
 
 | 가드 | 코드 | 규칙 |
 |------|------|------|
-| GUARD 0 | VG-00 | 파이프라인 중 TaskCreate/TaskUpdate 차단 |
-| GUARD 1 | VG-01 | research.md 없이 plan.md 불가 |
-| GUARD 2 | VG-02 | execute 전 소스코드 수정 불가 + pipeline-state.json 보호 + config.json 쓰기 차단 (VG-05) |
-| GUARD 3 | VG-03 | 빌드/테스트 실패 시 commit 불가. corrupt signals file 시 복구 안내 |
-| GUARD 5 | VG-05 | pipeline-state.json 직접 수정 불가 |
-| GUARD 7 | VG-07 | execute/commit/finalize에서만 git commit 허용 |
-| GUARD 8 | VG-08 | verify 완료 전 git push 차단 |
-| GUARD 11 | VG-11 | 비-team 단계에서 approval/review 작성 차단 |
-| GUARD 12 | VG-12 | execute 단계 PM 직접 소스 수정 차단 — 위임 강제 |
+| GUARD 3 | VG-03 | 빌드/테스트 실패 시 git commit 불가. corrupt tracker-signals.json 시 복구 안내 |
+| GUARD 13 | VG-13 | `.vela/templates/pipeline.json` 직접 수정 차단 — vela-engine CLI만 허용 |
+| GUARD 14 | VG-14 | Write 도구 내용에 시크릿 패턴 감지 시 차단 |
+| GUARD 15 | VG-15 | 연속 실패 5회 초과 시 circuit breaker 발동 — 모든 도구 차단 |
 
 ### 차단 시 자동 복구 (Block Recovery)
 
@@ -419,7 +400,7 @@ Gate Keeper와 Gate Guard의 모든 오류 경로는 fail-closed로 동작한다
 | 단계 | 선택 UI |
 |------|---------|
 | `/vela` 호출 | 파이프라인 시작 / 환경 구축만 |
-| Research 방식 | Solo / Subagent / Teammate 3명 (경쟁가설) |
+| Research 방식 | Solo / Subagent (vela-researcher) |
 | 파이프라인 규모 | Small / Medium / Large |
 | **Checkpoint** | 승인 / 변경 요청 / 취소 |
 | **Commit** | 이 메시지 / 수정 / diff 확인 |

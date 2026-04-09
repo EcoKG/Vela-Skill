@@ -90,7 +90,7 @@ function timestamp() {
  *   - Slice ID uniqueness
  *   - Slice status values are known
  *   - depends_on references point to existing slice IDs
- *   - No dependency cycles (Kahn's algorithm, pattern from vela-wave.js line 169)
+ *   - No dependency cycles (Kahn's algorithm)
  *
  * @param {object} plan
  * @returns {{ valid: boolean, errors?: string[] }}

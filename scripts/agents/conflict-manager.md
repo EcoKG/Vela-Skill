@@ -1,3 +1,5 @@
+> **[V4.1 ARCHIVED]** 이 파일은 V6에서 사용되지 않습니다. V6에서 conflict-manager는 별도 에이전트로 사용되지 않습니다.
+
 # Vela-Conflict Manager Agent
 
 > Model: Sonnet | Mode: ReadWrite | Output: 병합 결과
