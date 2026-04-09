@@ -5,6 +5,7 @@
 ## 새 파이프라인 시작
 ```bash
 node .vela/cli/vela-pipeline.js run "요청"
+node .vela/cli/vela-pipeline.js run "요청" --scale hotfix   # 수동 스케일 지정
 ```
 
 ## 기존 파이프라인 재개
@@ -14,25 +15,74 @@ node .vela/cli/vela-pipeline.js resume
 ```
 `resume`은 현재 단계부터 자동으로 이어서 실행한다. 완료된 단계는 skip된다.
 
-## Standard Pipeline
+---
+
+## 파이프라인 티어 — 작업 규모별 자동 선택
+
+요청 길이로 자동 감지. `--scale` 플래그로 수동 지정 가능.
+
+| 요청 규모 | scale | pipeline_type | 단계 흐름 | 특징 |
+|-----------|-------|---------------|-----------|------|
+| ≤ 10 단어 | small | trivial | init → execute → commit → finalize | 플래닝 없음 |
+| 11~30 단어 | medium | quick | init → plan → execute → verify → commit → finalize | 경량 플로우 |
+| > 30 단어 | large | standard | init → research → plan → plan-check → ... (전체 12단계) | 완전 파이프라인 |
+| --scale ralph | ralph | ralph | init → execute ↔ verify (최대 10회 반복) → commit → finalize | 버그 TDD 루프 |
+| --scale hotfix | hotfix | hotfix | init → execute → commit | 문서/README 수정 |
+
+**수동 지정 예시:**
+```bash
+node .vela/cli/vela-pipeline.js run "Fix null pointer in auth" --scale ralph
+node .vela/cli/vela-pipeline.js run "Update README" --scale hotfix
+node .vela/cli/vela-pipeline.js run "Add OAuth2" --scale large
+```
+
+---
+
+## Standard Pipeline (large scale)
 
 ```
 오케스트레이터가 자동 실행하는 흐름:
 
-[Research] — SDK Agent (Sonnet)
-1. 오케스트레이터가 Researcher SDK agent 실행
+[Research] — sdkResearch (Opus × 3 병렬)
+1. architecture / security / quality 3관점 병렬 분석
 2. 오케스트레이터가 자동 리뷰 실행 → review-research.md 생성
 3. approve/reject 자동 판정
 
-[Plan] — SDK Agent (Sonnet)
+[Plan] — SDK Agent (Sonnet, effort=high)
 4. 오케스트레이터가 Planner SDK agent 실행 → plan.md
 5. 오케스트레이터가 자동 리뷰 실행 → review-plan.md 생성
 6. approve/reject 자동 판정
 
-[Execute] — SDK Agent (Sonnet)
-7. 오케스트레이터가 Executor SDK agent 실행 → 코드 구현
-8. 오케스트레이터가 자동 리뷰 실행 → review-execute.md 생성
-9. approve/reject 자동 판정 (reject 시 리뷰 피드백과 함께 재실행)
+[Plan-check] — sdkPlanCheck (Haiku, structured output)
+7. plan.md 필수 섹션 구조 검증 (Architecture / Class Specification / Test Strategy)
+8. PASS/FAIL 판정 → plan-check.md 생성
+
+[Execute] — SDK Agent (Sonnet, effort=high)
+9. 오케스트레이터가 Executor SDK agent 실행 → 코드 구현
+10. 오케스트레이터가 자동 리뷰 실행 → review-execute.md 생성
+11. approve/reject 자동 판정 (reject 시 리뷰 피드백과 함께 재실행)
+
+[Verify] — sdkValidate (Sonnet)
+12. 테스트 실행, 린트/타입 체크 → verification.md
+13. FAIL 시 execute→review→verify 재시도 루프 진입 (최대 max_revisions 회)
+
+[Diff-summary] — sdkDiffSummary (Opus)
+[Learning] — sdkLearning (Haiku)
+[Commit / Finalize] — PM 자동 처리
+```
+
+## Quick Pipeline (medium scale)
+
+```
+init → plan → execute → verify → commit → finalize
+(research / plan-check / checkpoint / branch / diff-summary / learning 생략)
+```
+
+## Trivial Pipeline (small scale)
+
+```
+init → execute → commit → finalize
+(플래닝 없음. 단일 파일 간단 수정에 적합)
 ```
 
 ## 스프린트 실행 흐름
@@ -50,10 +100,6 @@ node .vela/cli/vela-pipeline.js resume
 5. 의존성이 충족된 슬라이스에 대해 vela-pipeline.js run 실행
 6. 완료된 슬라이스의 컨텍스트를 다음 슬라이스에 전달
 7. 모든 슬라이스 완료 시 스프린트 종료
-
-[Resume/Cancel] — 중단 복구
-- resume: 마지막 실행 지점부터 자동 재개
-- cancel: 진행 중인 스프린트 취소
 ```
 
 단일 요청으로 처리 가능하면 파이프라인, 다중 슬라이스 분해가 필요하면 스프린트를 사용한다.

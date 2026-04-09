@@ -1,8 +1,8 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "pipelines": {
     "standard": {
-      "description": "Full pipeline for all tasks",
+      "description": "Full 12-step pipeline — research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize",
       "steps": [
         {
           "id": "init",
@@ -170,18 +170,103 @@
           }
         }
       ]
+    },
+
+    "quick": {
+      "description": "Quick 6-step pipeline — plan → execute → verify → commit → finalize (no research/plan-check/checkpoint/branch/diff-summary/learning)",
+      "inherits": "standard",
+      "steps_only": ["init", "plan", "execute", "verify", "commit", "finalize"],
+      "overrides": {
+        "plan": {
+          "entry_gate": ["init_complete"],
+          "exit_gate": ["plan_md_exists", "plan_architecture_complete"]
+        },
+        "execute": {
+          "entry_gate": ["plan_md_exists"]
+        },
+        "commit": {
+          "entry_gate": ["verification_md_exists"]
+        }
+      }
+    },
+
+    "trivial": {
+      "description": "Trivial 4-step pipeline — execute → commit → finalize (no planning, no verification gates)",
+      "inherits": "standard",
+      "steps_only": ["init", "execute", "commit", "finalize"],
+      "overrides": {
+        "execute": {
+          "entry_gate": ["init_complete"],
+          "exit_gate": ["implementation_complete"],
+          "max_revisions": 3
+        },
+        "commit": {
+          "entry_gate": ["implementation_complete"]
+        }
+      }
+    },
+
+    "ralph": {
+      "description": "Ralph TDD loop — execute ↔ verify repeats up to 10× until tests pass, then commit",
+      "inherits": "standard",
+      "steps_only": ["init", "execute", "verify", "commit", "finalize"],
+      "overrides": {
+        "execute": {
+          "entry_gate": ["init_complete"],
+          "exit_gate": ["implementation_complete"],
+          "max_revisions": 10,
+          "sub_phases": ["test-write", "implement", "refactor"],
+          "sub_phase_tracking": true
+        },
+        "verify": {
+          "entry_gate": ["implementation_complete"],
+          "exit_gate": ["verification_md_exists"],
+          "max_revisions": 10,
+          "ralph_loop": true
+        },
+        "commit": {
+          "entry_gate": ["verification_md_exists"]
+        }
+      }
+    },
+
+    "hotfix": {
+      "description": "Hotfix 3-step pipeline — execute → commit only (docs/config/README changes, no review)",
+      "inherits": "standard",
+      "steps_only": ["init", "execute", "commit"],
+      "overrides": {
+        "execute": {
+          "entry_gate": ["init_complete"],
+          "exit_gate": ["implementation_complete"],
+          "max_revisions": 2,
+          "mode": "write"
+        },
+        "commit": {
+          "entry_gate": ["implementation_complete"],
+          "exit_gate": ["changes_committed"]
+        }
+      }
     }
   },
+
+  "scales": {
+    "small":  "trivial",
+    "medium": "quick",
+    "large":  "standard",
+    "ralph":  "ralph",
+    "hotfix": "hotfix"
+  },
+
   "modes": {
     "read": {
-      "allowed_tools": ["Read", "Glob", "Grep", "Agent"],
+      "allowed_tools": ["Read", "Glob", "Grep", "Bash", "WebSearch"],
       "blocked_tools": ["Edit", "Write", "NotebookEdit"],
       "bash_policy": "read_only",
       "treenode_cache": true
     },
     "write": {
-      "allowed_tools": ["Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep"],
-      "blocked_tools": [],
+      "allowed_tools": ["Read", "Write", "Glob", "Grep"],
+      "blocked_tools": ["Edit", "Bash", "NotebookEdit"],
       "bash_policy": "blocked",
       "treenode_cache": false
     },
@@ -192,13 +277,14 @@
       "treenode_cache": true
     },
     "rw-artifact": {
-      "allowed_tools": ["Read", "Glob", "Grep", "Write", "Agent"],
+      "allowed_tools": ["Read", "Glob", "Grep", "Bash", "WebSearch", "Write"],
       "blocked_tools": ["Edit", "NotebookEdit"],
       "bash_policy": "read_only",
       "treenode_cache": true,
       "artifact_write_only": true
     }
   },
+
   "git": {
     "gitignore_entries": [
       ".vela/cache/",
@@ -209,5 +295,14 @@
       ".vela/write-log.jsonl",
       "*.vela-tmp"
     ]
+  },
+
+  "presets": {
+    "auth":      { "scale": "large",  "task_type": "code",           "hint": "인증/권한/OAuth 구현" },
+    "api-crud":  { "scale": "medium", "task_type": "code",           "hint": "CRUD API 엔드포인트 추가" },
+    "bugfix":    { "scale": "ralph",  "task_type": "code-bug",       "hint": "버그 수정 (TDD 반복 루프)" },
+    "refactor":  { "scale": "medium", "task_type": "code-refactor",  "hint": "코드 리팩터링" },
+    "migration": { "scale": "large",  "task_type": "code",           "hint": "DB 마이그레이션/스키마 변경" },
+    "docs":      { "scale": "hotfix", "task_type": "docs",           "hint": "문서/README/주석 수정" }
   }
 }

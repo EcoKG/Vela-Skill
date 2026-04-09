@@ -108,7 +108,6 @@ function cmdInit() {
   const cleaned = cleanupCancelledArtifacts(24);
 
   const type = getFlag("--type") || "code";
-  const pipelineType = "standard";
 
   // Load pipeline definition (before creating any directories)
   const pipelineDef = loadPipelineDefinition();
@@ -118,6 +117,15 @@ function cmdInit() {
       error: "Pipeline definition not found. Run vela-init first.",
     });
   }
+
+  // Scale resolution: --scale flag > autoDetectScale > "large" fallback
+  // scales map in pipeline.json: { small: "trivial", medium: "quick", large: "standard", ... }
+  const scaleFlag = getFlag("--scale");
+  const scaleName = scaleFlag || autoDetectScale(request);
+  const scalesMap = pipelineDef.scales || {};
+  // scalesMap lookup: known scale names (small/medium/large/ralph/hotfix) → pipeline type.
+  // If scaleName is already a pipeline type (e.g. "standard"), fall through directly.
+  const pipelineType = scalesMap[scaleName] || scaleName || "standard";
 
   const steps = resolveSteps(pipelineDef, pipelineType);
   const firstStep = steps[0];
@@ -152,12 +160,12 @@ function cmdInit() {
 
   // Create pipeline state
   const state = {
-    version: "1.1",
+    version: "1.2",
     status: "active",
     pipeline_type: pipelineType,
     request: request,
     type: type,
-    scale: "standard",
+    scale: scaleName,
     current_step: firstStep.id,
     current_step_index: 0,
     steps: steps.map((s) => s.id),
@@ -185,7 +193,7 @@ function cmdInit() {
   const meta = {
     request,
     type,
-    scale: "standard",
+    scale: scaleName,
     pipeline_type: pipelineType,
     created_at: now.toISOString(),
   };
@@ -197,14 +205,14 @@ function cmdInit() {
     ok: true,
     command: "init",
     pipeline_type: pipelineType,
-    scale: "standard",
+    scale: scaleName,
     current_step: firstStep.id,
     current_mode: firstStep.mode,
     artifact_dir: artifactDir,
     steps: steps.map((s) => ({ id: s.id, name: s.name, mode: s.mode })),
     cleaned_cancelled: cleaned,
     message:
-      `Pipeline initialized. Current step: ${firstStep.name} (${firstStep.mode} mode)` +
+      `Pipeline initialized. Scale: ${scaleName} → ${pipelineType}. Current step: ${firstStep.name} (${firstStep.mode} mode)` +
       (cleaned > 0 ? ` (cleaned ${cleaned} cancelled artifact(s))` : ""),
   });
 }
@@ -229,6 +237,7 @@ function cmdState() {
     command: "state",
     active: true,
     pipeline_type: state.pipeline_type,
+    scale: state.scale || "standard",
     request: state.request,
     current_step: state.current_step,
     current_step_name: currentStepDef
