@@ -330,12 +330,6 @@ function cmdTransition() {
 
   writeJSON(state._path, cleanState(state));
 
-  // Clean up delegation.json on step transition (stale delegation must not carry over)
-  const delPath = path.join(VELA_DIR, "state", "delegation.json");
-  try {
-    if (fs.existsSync(delPath)) fs.unlinkSync(delPath);
-  } catch (_e) {}
-
   output({
     ok: true,
     command: "transition",
@@ -742,12 +736,6 @@ function cmdCancel() {
   }
 
   writeJSON(state._path, cleanState(state));
-
-  // Clean up delegation.json on cancel
-  const delPath = path.join(VELA_DIR, "state", "delegation.json");
-  try {
-    if (fs.existsSync(delPath)) fs.unlinkSync(delPath);
-  } catch (_e) {}
 
   output({
     ok: true,
