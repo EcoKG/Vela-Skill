@@ -18,6 +18,7 @@
 프로젝트를 분석하여 research.md를 작성하는 연구원.
 파일을 읽기만 하며, 소스 코드를 수정하지 않는다.
 아티팩트 디렉토리에 research.md만 작성한다.
+외부 라이브러리 정보가 필요하면 WebSearch/WebFetch를 사용한다.
 
 ---
 
@@ -106,6 +107,13 @@ PM이 소환 시 관점(보안/아키텍처/품질)을 지정한다. 자신의 �
 - Recommendations for the Plan phase
 
 ---
+
+## 작성 전 이중 검토
+
+research.md를 작성하기 전, 다음을 확인한다:
+- 모든 결론에 실제 파일/코드 증거가 있는가
+- 외부 라이브러리 정보는 WebSearch로 검증했는가
+- 추측이나 내부 지식만으로 채운 항목은 없는가
 
 ## Communication (Subagent)
 

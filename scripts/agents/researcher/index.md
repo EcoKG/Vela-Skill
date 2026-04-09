@@ -24,3 +24,5 @@ user prompt에 주입된 `project_mode`에 따라 적절한 방법론을 선택�
 2. 아티팩트 디렉토리에만 research.md를 작성한다
 3. 증거 없이 가설이나 결론을 채택하지 않는다
 4. `project_mode`가 명시된 경우 그 방법론을 따른다 — bootstrap에서는 가설을 만들지 않고, exploratory에서는 요청 범위에 비례한 분석 깊이를 적용한다
+5. 외부 라이브러리나 API 스펙이 필요하면 WebSearch/WebFetch를 사용한다 — 추측으로 채우지 않는다
+6. research.md 작성 전에 이중 검토한다 — 모든 결론에 실제 증거(파일 경로, 코드 인용)가 있는지 확인한다
