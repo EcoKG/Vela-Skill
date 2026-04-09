@@ -223,7 +223,7 @@ async function main() {
         lines.push("");
         lines.push("[SYSTEM INSTRUCTION FOR CLAUDE]");
         lines.push(`활성 파이프라인이 복원되었습니다 (단계: ${pipeline.current_step || "unknown"}).`);
-        lines.push("계속하려면: node .vela/cli/vela-pipeline.js resume");
+        lines.push("계속하려면: PM(vela.md)이 vela-engine.js state로 현재 단계를 확인하고 Agent 도구로 재개하세요.");
         lines.push("[END SYSTEM INSTRUCTION]");
       }
 

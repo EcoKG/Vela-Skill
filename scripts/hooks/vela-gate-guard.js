@@ -262,7 +262,7 @@ async function main() {
     const ext = path.extname(filePath).toLowerCase();
 
     if (CODE_EXTENSIONS.has(ext)) {
-      // Check for delegation — if delegation exists, PM delegated to SDK agent (allow)
+      // Check for delegation — if delegation exists, PM delegated to a role agent via Agent tool (allow)
       if (!hasDelegation(pipelineResult.artifactDir)) {
         // VG-12: no delegation, direct PM source modification → block
         process.exit(2);
