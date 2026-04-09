@@ -323,8 +323,7 @@ Conflict Manager가 최종 병합 + 충돌 해결
 
 ### 승인 메커니즘 — 파일 기반
 
-- **SDK 모드**: sdk-reviewer.js가 Opus 단일 리뷰 → review-{step}.md + approval-{step}.json 자동 생성
-- **비-SDK 모드**: Reviewer (Subagent, Sonnet) → `review-{step}.md` → PM → `approval-{step}.json`
+- PM이 `Agent(subagent_type="vela-reviewer")`를 호출 → `review-{step}.md` + `approval-{step}.json` 자동 생성
 - 엔진 exit gate가 파일 확인 → 없으면 transition 차단
 
 ---
@@ -333,22 +332,21 @@ Conflict Manager가 최종 병합 + 충돌 해결
 
 Auto 모드(`/vela auto` 또는 `--auto`)는 파이프라인을 완전 무인으로 실행한다.
 
-### SDK 오케스트레이터 자동화
+### V6 Auto 자동화
 
 | 메커니즘 | 동작 |
 |---------|------|
-| **단계별 Agent spawn** | vela-pipeline.js가 각 파이프라인 단계(research/plan/execute/review)에 맞는 SDK Agent를 spawn. 단계별 도구 화이트리스트와 시스템 프롬프트가 코드로 제어됨 |
-| **권한 제어** | `permissionMode: 'bypassPermissions'` + `disallowedTools`로 단계별 도구 접근 제어. PM/user 단계는 자동 진행 |
-| **실패 복구** | SDK Agent 실패 시 상태 보존 + 에러 기록. Rate limit 시 exponential backoff 재시도 |
-| **리뷰** | Opus 단일 리뷰 — 점수 ≥ 20/25 → 승인, 미달 → 거부 |
-| **상태 보존** | API 에러 시 파이프라인 상태 스냅샷을 artifact 디렉토리에 보존 |
+| **단계별 Agent 소환** | PM이 각 파이프라인 단계에서 `Agent(subagent_type=...)` 직접 호출. 훅이 도구 접근 제어 |
+| **실패 복구** | 에이전트 실패 시 PM이 상태를 보존하고 사용자에게 에스컬레이션 |
+| **리뷰** | vela-reviewer Agent — 점수 ≥ 20/25 → 승인, 미달 → 거부 |
+| **상태 보존** | vela-engine.js가 pipeline-state.json으로 단계별 상태 기록 |
 
 ### 자동 품질 검사
 
 | 메커니즘 | 동작 |
 |---------|------|
-| **SDK 리뷰** | sdk-reviewer.js가 review 단계에서 Opus 단일 리뷰 수행 |
-| **SDK plan-check** | sdk-plan-checker.js가 plan.md 구조를 자동 검증 |
+| **리뷰** | `Agent(vela-reviewer)` → review-{step}.md 작성 (5차원 채점) |
+| **plan-check** | `Agent(vela-plan-checker)` → plan.md 구조 자동 검증 |
 | **exit gate** | 엔진이 단계별 필수 산출물(review-*.md, approval-*.json) 존재를 확인 → 없으면 transition 차단 |
 
 ---
@@ -530,11 +528,7 @@ bash scripts/tests/test-gate-vk07.sh           # Gate Keeper VK-07
 # Auto 모드
 bash scripts/tests/test-auto-mode.sh           # Auto 모드 (16 assertions)
 bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성 검증
-bash scripts/tests/test-sdk-diff-summary.sh # 20 assertions — Opus 전체 diff 통합 검토
-bash scripts/tests/test-sdk-learning.sh     # 20 assertions — Haiku 학습 축적
 ```
-
-⚠️ SDK 테스트 스위트들은 공유 mock 디렉토리를 사용하므로 **순차 실행** 필수 (병렬 실행 시 mock collision 발생).
 
 ---
 
