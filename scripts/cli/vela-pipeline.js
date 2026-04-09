@@ -54,6 +54,9 @@ const { runSdkAgent } = require("../shared/sdk-runner");
 const { sdkDiffSummary } = require("../shared/sdk-diff-summary");
 const { sdkLearning } = require("../shared/sdk-learning");
 
+// ─── Project environment detection ───
+const { detectProjectEnvironment, formatEnvBlock } = require("../shared/project-env");
+
 // ─── TreeNode cache — path collector ───
 const { appendPaths } = require("../cache/treenode");
 
@@ -639,6 +642,53 @@ const EFFORT_MAP = {
 };
 
 /**
+ * Thinking budget per actor — extended thinking tokens for analysis-heavy steps.
+ * null means thinking disabled (default SDK behavior).
+ */
+const THINKING_MAP = {
+  researcher: { type: "enabled", budget_tokens: 8000 },
+  planner: { type: "enabled", budget_tokens: 10000 },
+  executor: null,
+  reviewer: null,
+};
+
+/**
+ * Read recent learning patterns from .vela/learnings/learnings.json.
+ * Returns formatted markdown block or empty string.
+ *
+ * @param {string} cwd - Working directory
+ * @param {number} [maxEntries=3] - Maximum learning items to include
+ * @returns {string}
+ */
+function buildLearningsBlock(cwd, maxEntries = 3) {
+  try {
+    const learningsPath = path.join(cwd, ".vela", "learnings", "learnings.json");
+    if (!fs.existsSync(learningsPath)) return "";
+
+    const raw = JSON.parse(fs.readFileSync(learningsPath, "utf-8"));
+    if (!raw || !Array.isArray(raw.learnings) || raw.learnings.length === 0) return "";
+
+    const items = raw.learnings
+      .slice(-3)
+      .reverse()
+      .flatMap((entry) => {
+        if (!entry || !Array.isArray(entry.patterns)) return [];
+        return entry.patterns
+          .filter((p) => p && (p.category === "weakness" || p.category === "recurring_issue" || p.category === "improvement"))
+          .slice(0, 2)
+          .map((p) => `- [${p.category}] ${p.description}${p.frequency !== "first_time" ? ` (${p.frequency})` : ""}`);
+      })
+      .slice(0, maxEntries);
+
+    if (items.length === 0) return "";
+
+    return ["## 이전 파이프라인 학습 (반드시 반영하라)", ...items, ""].join("\n");
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Build the user prompt for a specific pipeline step.
  *
  * @param {Object} stepDef - Step definition from pipeline.json
@@ -649,6 +699,27 @@ const EFFORT_MAP = {
 function buildStepPrompt(stepDef, state, artifactDir, reviewFeedback) {
   const request = state.request;
   const stepId = stepDef.id;
+
+  // ─── Project environment block ───────────────────────────
+  // Inject environment fingerprint for analysis-heavy steps so agents
+  // know the language, test runner, and linter without exploring first.
+  let envBlock = "";
+  if (["research", "plan", "execute", "verify"].includes(stepId)) {
+    try {
+      const env = detectProjectEnvironment(CWD);
+      if (env && env.language !== "unknown") {
+        envBlock = "\n" + formatEnvBlock(env) + "\n";
+      }
+    } catch { /* silent */ }
+  }
+
+  // ─── Learnings block ──────────────────────────────────────
+  // Inject recent pipeline learnings so agents avoid known pitfalls.
+  let learningsBlock = "";
+  if (["plan", "execute"].includes(stepId)) {
+    learningsBlock = buildLearningsBlock(CWD);
+    if (learningsBlock) learningsBlock = "\n" + learningsBlock;
+  }
 
   // Review feedback injection — when re-executing after a review rejection,
   // prepend the reviewer's feedback so the agent knows what to fix.
@@ -703,7 +774,7 @@ function buildStepPrompt(stepDef, state, artifactDir, reviewFeedback) {
       const modeDesc = modeDescriptions[mode] || modeDescriptions.exploratory;
       basePrompt = [
         `## 작업 요청\n${request}`,
-        "",
+        envBlock,
         `## 프로젝트 모드`,
         mode,
         "",
@@ -725,7 +796,8 @@ function buildStepPrompt(stepDef, state, artifactDir, reviewFeedback) {
     case "plan":
       basePrompt = [
         `## 작업 요청\n${request}`,
-        "",
+        envBlock,
+        learningsBlock,
         `## 선행 분석`,
         `${artifactDir}/research.md를 먼저 읽어라.`,
         "",
@@ -744,7 +816,8 @@ function buildStepPrompt(stepDef, state, artifactDir, reviewFeedback) {
     case "execute":
       basePrompt = [
         `## 작업 요청\n${request}`,
-        "",
+        envBlock,
+        learningsBlock,
         `## 구현 계획`,
         `${artifactDir}/plan.md를 먼저 읽어라.`,
         subPhaseBlock,
@@ -817,8 +890,9 @@ async function runStep(stepDef, state, reviewFeedback) {
   // Build user prompt — includes review feedback when retrying after rejection
   const userPrompt = buildStepPrompt(stepDef, state, artifactDir, reviewFeedback);
 
-  // Select model and budget
+  // Select model, effort, and thinking budget
   const model = MODEL_MAP[actor] || MODEL_VERSIONS.SONNET;
+  const thinking = THINKING_MAP[actor] || null;
   // Track used tools for observability
   const usedTools = [];
   const deniedTools = [];
@@ -898,7 +972,7 @@ async function runStep(stepDef, state, reviewFeedback) {
   // Execute SDK query
   const startMs = Date.now();
 
-  const sdkResult = await runSdkAgent({
+  const sdkOpts = {
     prompt: userPrompt,
     model,
     cwd: CWD,
@@ -907,7 +981,14 @@ async function runStep(stepDef, state, reviewFeedback) {
     disallowedTools: modeOptions.disallowedTools,
     hooks,
     effort: EFFORT_MAP[actor] || "medium",
-  });
+  };
+
+  // Extended thinking for analysis-heavy steps (research, plan)
+  if (thinking) {
+    sdkOpts.thinking = thinking;
+  }
+
+  const sdkResult = await runSdkAgent(sdkOpts);
 
   const durationMs = Date.now() - startMs;
 

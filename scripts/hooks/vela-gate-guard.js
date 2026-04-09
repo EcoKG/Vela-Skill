@@ -3,7 +3,7 @@
  * Vela Gate Guard — Claude Code PreToolUse Hook
  *
  * Enforces pipeline-step-level guard rules.
- * Implements VG-03, VG-12 guard rules (and more).
+ * Implements VG-03, VG-12, VG-13, VG-14, VG-15 guard rules.
  *
  * Exit codes:
  *   0 — allow the tool call
@@ -15,13 +15,19 @@
  * Guards:
  *   VG-03: Build/test failure check — corrupt signals file blocks git commit
  *   VG-12: PM direct source modification in execute step blocked
+ *   VG-13: Direct write to .vela/templates/pipeline.json (config tampering) blocked
+ *   VG-14: Write tool content containing secret patterns blocked
+ *   VG-15: Failure circuit breaker — too many consecutive failures blocks execution
  */
 
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
-const { CODE_EXTENSIONS } = require("./shared/constants");
+const { CODE_EXTENSIONS, SECRET_PATTERNS } = require("./shared/constants");
+
+// ─── VG-15: Circuit breaker threshold ─────────────────────────
+const CIRCUIT_BREAKER_THRESHOLD = 5;
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -109,6 +115,49 @@ function hasDelegation(artifactDir) {
 }
 
 /**
+ * VG-13: Check if a file path targets a protected Vela config file.
+ * Protected: .vela/templates/pipeline.json
+ * Returns true if the path is a protected config file.
+ */
+function isProtectedConfig(filePath, cwd) {
+  try {
+    const normalized = path.resolve(cwd, filePath).replace(/\\/g, "/");
+    const pipelineJson = path.resolve(cwd, ".vela", "templates", "pipeline.json").replace(/\\/g, "/");
+    return normalized === pipelineJson;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * VG-14: Check if Write tool content contains secret patterns.
+ * Returns true if a secret pattern is matched.
+ */
+function contentHasSecret(content) {
+  if (typeof content !== "string" || content.length === 0) return false;
+  for (const pattern of SECRET_PATTERNS) {
+    if (pattern.test(content)) return true;
+  }
+  return false;
+}
+
+/**
+ * VG-15: Check if the failure circuit is open (too many consecutive failures).
+ * Returns true if circuit is open and execution should be blocked.
+ */
+function isCircuitOpen(cwd) {
+  try {
+    const circuitPath = path.join(cwd, ".vela", "state", "circuit-open.json");
+    if (!fs.existsSync(circuitPath)) return false;
+    const data = JSON.parse(fs.readFileSync(circuitPath, "utf8"));
+    // Circuit is open if count >= threshold and step hasn't changed
+    return data && typeof data.count === "number" && data.count >= CIRCUIT_BREAKER_THRESHOLD;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if the tracker-signals file is valid JSON.
  * Returns: "ok" | "corrupt" | "absent"
  */
@@ -168,6 +217,34 @@ async function main() {
         process.exit(2);
       }
     }
+  }
+
+  // ─── VG-13: Protected config file write ───────────────────────
+  // Blocks direct writes to .vela/templates/pipeline.json (config tampering).
+  if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
+    const filePath =
+      (typeof toolInput.file_path === "string" && toolInput.file_path) ||
+      (typeof toolInput.path === "string" && toolInput.path) ||
+      "";
+    if (filePath && isProtectedConfig(filePath, cwd)) {
+      process.exit(2);
+    }
+  }
+
+  // ─── VG-14: Secret pattern detection in Write tool content ────
+  // Blocks Write calls whose content contains API keys, tokens, etc.
+  if (toolName === "Write") {
+    const content = typeof toolInput.content === "string" ? toolInput.content : "";
+    if (contentHasSecret(content)) {
+      process.exit(2);
+    }
+  }
+
+  // ─── VG-15: Failure circuit breaker ───────────────────────────
+  // Blocks tool execution when consecutive failure count >= threshold.
+  // Only enforced when a pipeline is active.
+  if (pipelineResult && isCircuitOpen(cwd)) {
+    process.exit(2);
   }
 
   // ─── VG-12: PM direct source modification in execute step ───
