@@ -51,12 +51,22 @@ const HYPOTHESIS_PREFIX = `# 경쟁가설 디버깅 — 반드시 이 절차를 
 
 `;
 
+// ─── Exclusion directive ───
+// Prevents SDK agents from exploring .vela/ pipeline internals as project source.
+const RESEARCHER_EXCLUSION_DIRECTIVE = `
+## 탐색 제외 디렉토리
+코드베이스 탐색 시 다음 디렉토리는 건너뛴다 — 프로젝트 소스 코드가 아님:
+- \`.vela/\` (Vela 파이프라인 내부 상태 및 아티팩트)
+- \`node_modules/\`, \`.git/\`, \`dist/\`, \`build/\`
+
+`;
+
 // ─── Perspective system prompts ───
 // Each combines HYPOTHESIS_PREFIX + perspective-specific instructions.
 // [PERSPECTIVE:xxx] marker at start enables test mock differentiation.
 
 const ARCHITECTURE_SYSTEM_PROMPT = `[PERSPECTIVE:architecture]
-
+${RESEARCHER_EXCLUSION_DIRECTIVE}
 ${HYPOTHESIS_PREFIX}# 아키텍처 관점 분석 가이드
 
 architecture-researcher로 소환된 경우 이 가이드를 **반드시** 따른다.
@@ -81,7 +91,7 @@ architecture-researcher로 소환된 경우 이 가이드를 **반드시** 따�
 `;
 
 const SECURITY_SYSTEM_PROMPT = `[PERSPECTIVE:security]
-
+${RESEARCHER_EXCLUSION_DIRECTIVE}
 ${HYPOTHESIS_PREFIX}# 보안 관점 분석 가이드
 
 security-researcher로 소환된 경우 이 가이드를 **반드시** 따른다.
@@ -105,7 +115,7 @@ security-researcher로 소환된 경우 이 가이드를 **반드시** 따른다
 `;
 
 const QUALITY_SYSTEM_PROMPT = `[PERSPECTIVE:quality]
-
+${RESEARCHER_EXCLUSION_DIRECTIVE}
 ${HYPOTHESIS_PREFIX}# 품질/성능 관점 분석 가이드
 
 quality-researcher로 소환된 경우 이 가이드를 **반드시** 따른다.

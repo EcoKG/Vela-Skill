@@ -164,6 +164,8 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  * @param {number} [opts.retryDelayMs=2000] - Base delay for exponential backoff (ms).
  * @param {boolean} [opts.heartbeat=true] - Emit heartbeat messages to stderr during execution.
  * @param {number} [opts.heartbeatIntervalMs=10000] - Heartbeat interval in milliseconds.
+ * @param {boolean} [opts.verbose=false] - Log all assistant messages (text, tool use, thinking)
+ *   to stderr during execution. Overridden by VELA_VERBOSE=1 env var.
  * @param {Object} [opts.outputFormat] - JSON schema for structured output (SDK outputFormat).
  * @param {string} [opts.effort] - Effort level ('low'|'medium'|'high') for cost/speed tradeoff.
  * @param {Object} [opts.thinking] - Thinking configuration (e.g. { type: 'enabled', budget_tokens: N }).
@@ -280,6 +282,12 @@ async function runSdkAgent(opts) {
       let resetsAt = null;
       const checkpoints = [];
 
+      // --- Verbose mode ---
+      // Enabled by opts.verbose or VELA_VERBOSE=1 env var.
+      // Logs all assistant messages (text, tool calls, thinking) to stderr
+      // so callers can see what the SDK agent is thinking and doing.
+      const verboseMode = opts.verbose === true || process.env.VELA_VERBOSE === "1";
+
       // --- Heartbeat timer ---
       // Emits periodic status to stderr so callers can verify the process is alive
       // during long-running SDK agent executions.
@@ -299,6 +307,26 @@ async function runSdkAgent(opts) {
 
       try {
         for await (const message of generator) {
+          // --- Verbose: log assistant messages to stderr ---
+          if (verboseMode && message.type === "assistant") {
+            const content =
+              message.message && message.message.content
+                ? message.message.content
+                : message.content || [];
+            for (const block of content) {
+              if (block.type === "thinking" && block.thinking) {
+                process.stderr.write(`[sdk-agent:think] ${block.thinking}\n`);
+              } else if (block.type === "text" && block.text) {
+                process.stderr.write(`[sdk-agent:text] ${block.text}\n`);
+              } else if (block.type === "tool_use") {
+                const inputStr = JSON.stringify(block.input || {});
+                process.stderr.write(
+                  `[sdk-agent:tool] ${block.name} ${inputStr}\n`,
+                );
+              }
+            }
+          }
+
           // Capture checkpoint UUIDs from user messages
           if (message.type === "user" && message.uuid) {
             checkpoints.push(message.uuid);
