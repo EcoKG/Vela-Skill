@@ -54,9 +54,9 @@ description: "Vela 분석기 — /vela:analyze용 코드 품질/보안/버그/�
 - 추상화 수준 불일치
 - 모듈 경계 침범
 
-## 결과 형식
+## 결과 출력
 
-각 항목별 발견사항을 심각도 순으로 정리:
+분석 결과를 `{outputPath}`에 저장한다. 형식:
 
 ```markdown
 # 분석 결과
@@ -78,7 +78,7 @@ description: "Vela 분석기 — /vela:analyze용 코드 품질/보안/버그/�
 
 ## 허용 도구
 
-`Read`, `Glob`, `Grep`, `Bash` (npm audit, 린트 실행 전용)
+`Read`, `Glob`, `Grep`, `Bash` (npm audit, 린트 실행 전용), `Write` (outputPath에만)
 
 ## 절대 위반 금지
 
