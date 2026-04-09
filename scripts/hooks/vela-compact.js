@@ -2,11 +2,13 @@
 /**
  * Vela Compact Hook — Claude Code PreCompact / PostCompact Hook
  *
- * PreCompact:  Saves active pipeline context to .vela/state/compact-context.json.
+ * PreCompact:  Saves rich pipeline + session context to .vela/state/compact-context.json.
+ *              Captures: active pipeline state, recent learnings, failure counter,
+ *              session analytics summary, and git context.
  *              Produces no stdout output (silent save).
  *
  * PostCompact: Reads saved context and injects it back as additionalContext
- *              so Claude Code restores pipeline state after compaction.
+ *              so Claude Code fully restores pipeline state after compaction.
  *
  * Exit codes:
  *   0 — continue (normal)
@@ -85,14 +87,78 @@ async function main() {
   const contextPath = path.join(stateDir, "compact-context.json");
 
   if (eventType === "PreCompact") {
-    // Save active pipeline context (silent — no stdout)
+    // Save rich pipeline + session context (silent — no stdout)
     try {
       const pipelineResult = findActivePipeline(cwd);
+
+      // Read recent learnings (top 3 patterns)
+      let learningsSummary = [];
+      try {
+        const learningsPath = path.join(cwd, ".vela", "learnings", "learnings.json");
+        if (fs.existsSync(learningsPath)) {
+          const raw = parseJsonSafe(fs.readFileSync(learningsPath, "utf8"));
+          if (raw && Array.isArray(raw.learnings)) {
+            learningsSummary = raw.learnings
+              .slice(-2)
+              .reverse()
+              .flatMap((entry) => {
+                if (!entry || !Array.isArray(entry.patterns)) return [];
+                return entry.patterns
+                  .filter((p) => p && (p.category === "weakness" || p.category === "recurring_issue"))
+                  .slice(0, 2)
+                  .map((p) => `[${p.category}] ${p.description}`);
+              })
+              .slice(0, 3);
+          }
+        }
+      } catch { /* skip */ }
+
+      // Read failure counter
+      let failureCounter = null;
+      try {
+        const counterPath = path.join(cwd, ".vela", "state", "failure-counter.json");
+        if (fs.existsSync(counterPath)) {
+          failureCounter = parseJsonSafe(fs.readFileSync(counterPath, "utf8"));
+        }
+      } catch { /* skip */ }
+
+      // Read session analytics summary
+      let analyticsSummary = null;
+      try {
+        const analyticsPath = path.join(cwd, ".vela", "state", "session-analytics.json");
+        if (fs.existsSync(analyticsPath)) {
+          const analytics = parseJsonSafe(fs.readFileSync(analyticsPath, "utf8"));
+          if (analytics && analytics.summary) {
+            analyticsSummary = {
+              totalCalls: analytics.summary.totalCalls || 0,
+              denials: analytics.summary.denials || 0,
+            };
+          }
+        }
+      } catch { /* skip */ }
+
+      // Read git context
+      let gitContext = null;
+      try {
+        const { execFileSync } = require("child_process");
+        const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+          cwd, stdio: ["pipe", "pipe", "pipe"], timeout: 3000,
+        }).toString().trim();
+        const lastCommit = execFileSync("git", ["log", "--oneline", "-1"], {
+          cwd, stdio: ["pipe", "pipe", "pipe"], timeout: 3000,
+        }).toString().trim();
+        gitContext = { branch, lastCommit };
+      } catch { /* skip */ }
+
       const context = {
         timestamp: new Date().toISOString(),
         cwd,
         activePipeline: pipelineResult ? pipelineResult.state : null,
         artifactDir: pipelineResult ? pipelineResult.artifactDir : null,
+        learningsSummary,
+        failureCounter,
+        analyticsSummary,
+        gitContext,
       };
       fs.mkdirSync(stateDir, { recursive: true });
       fs.writeFileSync(contextPath, JSON.stringify(context, null, 2), "utf8");
@@ -103,7 +169,7 @@ async function main() {
   }
 
   if (eventType === "PostCompact") {
-    // Read saved context and inject as additionalContext
+    // Read saved context and inject as rich additionalContext
     try {
       let savedContext = null;
       if (fs.existsSync(contextPath)) {
@@ -111,17 +177,54 @@ async function main() {
       }
 
       const pipeline = savedContext && savedContext.activePipeline;
-      const lines = ["⛵ Vela Pipeline Context (restored after compaction)"];
+      const SEP = "━".repeat(47);
+      const lines = ["⛵ Vela Pipeline Context (압축 후 복원)", SEP];
 
       if (pipeline) {
-        lines.push(`- Pipeline type: ${pipeline.pipeline_type || "unknown"}`);
-        lines.push(`- Current step: ${pipeline.current_step || "unknown"}`);
-        lines.push(`- Status: ${pipeline.status || "unknown"}`);
-        if (pipeline.request) {
-          lines.push(`- Request: ${pipeline.request}`);
+        const completedCount = Array.isArray(pipeline.completed_steps) ? pipeline.completed_steps.length : 0;
+        const totalSteps = Array.isArray(pipeline.steps) ? pipeline.steps.length : "?";
+        lines.push(`- 파이프라인: ${pipeline.pipeline_type || "standard"} | 단계: ${pipeline.current_step || "unknown"} (${completedCount + 1}/${totalSteps})`);
+        lines.push(`- 상태: ${pipeline.status || "unknown"}`);
+        if (pipeline.request) lines.push(`- 작업: ${pipeline.request}`);
+        if (pipeline.auto) lines.push("- 모드: ⚡ AUTO");
+        if (pipeline.git && pipeline.git.pipeline_branch) {
+          lines.push(`- 브랜치: ${pipeline.git.pipeline_branch}`);
         }
       } else {
-        lines.push("- No active pipeline at time of compaction.");
+        lines.push("- 압축 시점에 활성 파이프라인 없음.");
+      }
+
+      // Git context
+      if (savedContext && savedContext.gitContext) {
+        const g = savedContext.gitContext;
+        lines.push(`- Git: ${g.branch}${g.lastCommit ? ` | ${g.lastCommit}` : ""}`);
+      }
+
+      // Failure counter
+      if (savedContext && savedContext.failureCounter && savedContext.failureCounter.count > 0) {
+        lines.push(`- 실패 카운터: ${savedContext.failureCounter.count}회 (단계: ${savedContext.failureCounter.step})`);
+      }
+
+      // Analytics summary
+      if (savedContext && savedContext.analyticsSummary) {
+        const a = savedContext.analyticsSummary;
+        lines.push(`- 세션 통계: 툴 호출 ${a.totalCalls}회 | 차단 ${a.denials}회`);
+      }
+
+      // Learnings
+      if (savedContext && Array.isArray(savedContext.learningsSummary) && savedContext.learningsSummary.length > 0) {
+        lines.push("- 최근 학습:");
+        savedContext.learningsSummary.forEach((l) => lines.push(`  • ${l}`));
+      }
+
+      lines.push(SEP);
+
+      if (pipeline) {
+        lines.push("");
+        lines.push("[SYSTEM INSTRUCTION FOR CLAUDE]");
+        lines.push(`활성 파이프라인이 복원되었습니다 (단계: ${pipeline.current_step || "unknown"}).`);
+        lines.push("계속하려면: node .vela/cli/vela-pipeline.js resume");
+        lines.push("[END SYSTEM INSTRUCTION]");
       }
 
       const output = {

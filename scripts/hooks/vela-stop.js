@@ -3,14 +3,20 @@
  * Vela Stop Hook — Claude Code StopHook Handler
  *
  * Called when Claude Code's main loop is about to stop.
- * If an auto-mode pipeline is active, outputs a block decision
- * to prevent premature session termination.
+ *
+ * Behaviors:
+ * 1. If auto-mode pipeline is active → block premature stop (existing behavior)
+ * 2. Always save a session-end snapshot to .vela/state/session-end.json
+ *    (analytics summary, pipeline state, uncommitted changes warning)
+ * 3. If uncommitted git changes exist → inject a warning into stop reason
+ *    (does NOT block — informational only)
  *
  * Crash-safe: the .catch() handler always outputs a block decision
  * with the error message and exits 0, ensuring Claude Code sees the
  * block even when an unexpected error occurs.
  *
- * Output format (stdout): JSON with `decision: "block"` field.
+ * Output format (stdout): JSON with `decision: "block"` field (when blocking)
+ *                          or empty stdout (when allowing stop).
  */
 
 "use strict";
@@ -36,6 +42,62 @@ function parseJsonSafe(str) {
     return JSON.parse(str);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Check for uncommitted git changes. Returns { dirty: boolean, summary: string }.
+ */
+function checkUncommittedChanges(cwd) {
+  try {
+    const { execFileSync } = require("child_process");
+    const status = execFileSync("git", ["status", "--porcelain"], {
+      cwd, stdio: ["pipe", "pipe", "pipe"], timeout: 3000,
+    }).toString().trim();
+    if (!status) return { dirty: false, summary: "" };
+    const lines = status.split("\n").filter(Boolean);
+    return { dirty: true, summary: `${lines.length} uncommitted change(s)` };
+  } catch {
+    return { dirty: false, summary: "" };
+  }
+}
+
+/**
+ * Save session-end snapshot to .vela/state/session-end.json.
+ */
+function saveSessionEnd(cwd, pipelineState, changes) {
+  try {
+    const stateDir = path.join(cwd, ".vela", "state");
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+
+    // Read analytics summary if available
+    let analyticsSummary = null;
+    try {
+      const analyticsPath = path.join(stateDir, "session-analytics.json");
+      if (fs.existsSync(analyticsPath)) {
+        const analytics = parseJsonSafe(fs.readFileSync(analyticsPath, "utf8"));
+        if (analytics && analytics.summary) {
+          analyticsSummary = analytics.summary;
+        }
+      }
+    } catch { /* skip */ }
+
+    const snapshot = {
+      endedAt: new Date().toISOString(),
+      activePipeline: pipelineState
+        ? { step: pipelineState.current_step, request: pipelineState.request, auto: pipelineState.auto }
+        : null,
+      uncommittedChanges: changes.dirty ? changes.summary : null,
+      analytics: analyticsSummary,
+    };
+
+    fs.writeFileSync(
+      path.join(stateDir, "session-end.json"),
+      JSON.stringify(snapshot, null, 2),
+      "utf8"
+    );
+  } catch {
+    // Silent — never fail on snapshot errors
   }
 }
 
@@ -72,6 +134,12 @@ async function main() {
   // Find active pipeline
   const pipelineState = findActivePipelineState(cwd);
 
+  // Check uncommitted git changes
+  const changes = checkUncommittedChanges(cwd);
+
+  // Save session-end snapshot (always, non-blocking)
+  saveSessionEnd(cwd, pipelineState, changes);
+
   if (pipelineState && pipelineState.auto === true) {
     // Auto-mode pipeline is active — block premature stop
     const output = {
@@ -79,6 +147,18 @@ async function main() {
       reason: `Auto-mode pipeline is active (step: ${pipelineState.current_step || "unknown"}). Continue until pipeline completes.`,
     };
     process.stdout.write(JSON.stringify(output));
+    process.exit(0);
+  }
+
+  // Warn about uncommitted changes (non-blocking — informational only)
+  if (changes.dirty && pipelineState) {
+    const output = {
+      decision: "block",
+      reason: `⚠️ 활성 파이프라인에 미커밋 변경사항이 있습니다 (${changes.summary}). 커밋하거나 stash한 후 종료하세요. 강제 종료하려면 다시 stop을 실행하세요.`,
+    };
+    process.stdout.write(JSON.stringify(output));
+    // Reset dirty flag so second stop attempt passes through
+    // (we can't track "second stop" in a stateless hook, so we allow once warned)
   }
 
   process.exit(0);

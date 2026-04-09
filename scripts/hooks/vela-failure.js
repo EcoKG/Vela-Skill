@@ -5,12 +5,15 @@
  * Tracks consecutive tool failures per pipeline step.
  * Resets the counter when the pipeline step changes (step transition reset).
  *
- * State file: .vela/state/failure-counter.json
- *   { count: number, step: string }
+ * State files:
+ *   .vela/state/failure-counter.json — { count: number, step: string }
+ *   .vela/state/circuit-open.json    — { step, count, openAt } (created at threshold)
  *
  * Behavior:
  *   - On each tool failure: increment counter
- *   - On step change: reset counter to 1 (the current failure)
+ *   - On step change: reset counter to 1 (the current failure), close circuit
+ *   - At CIRCUIT_THRESHOLD consecutive failures: write circuit-open.json
+ *     (VG-15 gate guard reads this to block further execution)
  *   - Always exits 0 (failure tracking is observational, not blocking)
  */
 
@@ -18,6 +21,9 @@
 
 const fs = require("fs");
 const path = require("path");
+
+// ─── Circuit breaker threshold ──────────────────────────────
+const CIRCUIT_THRESHOLD = 5;
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -94,10 +100,18 @@ async function main() {
     counter = null;
   }
 
+  const circuitPath = path.join(stateDir, "circuit-open.json");
   let newCount;
-  if (!counter || counter.step !== currentStep) {
-    // Step transition (or first failure): reset to 1
+  const stepChanged = !counter || counter.step !== currentStep;
+
+  if (stepChanged) {
+    // Step transition (or first failure): reset to 1, close any open circuit
     newCount = 1;
+    try {
+      if (fs.existsSync(circuitPath)) {
+        fs.unlinkSync(circuitPath);
+      }
+    } catch { /* silent */ }
   } else {
     // Same step: increment
     newCount = (counter.count || 0) + 1;
@@ -113,6 +127,23 @@ async function main() {
     );
   } catch {
     // Silent — never block on failure tracking errors
+  }
+
+  // ─── Circuit breaker: open circuit at threshold ──────────
+  // Write circuit-open.json which VG-15 gate guard reads.
+  if (newCount >= CIRCUIT_THRESHOLD) {
+    try {
+      fs.mkdirSync(stateDir, { recursive: true });
+      fs.writeFileSync(
+        circuitPath,
+        JSON.stringify({
+          step: currentStep,
+          count: newCount,
+          openAt: new Date().toISOString(),
+        }, null, 2),
+        "utf8"
+      );
+    } catch { /* silent */ }
   }
 
   process.exit(0);

@@ -248,6 +248,16 @@ const FILE_MANIFEST = [
     src: "scripts/shared/change-surface.js",
     dst: "shared/change-surface.js",
   },
+  // Environment detection (used by pipeline + session-start hook)
+  { src: "scripts/shared/project-env.js", dst: "shared/project-env.js" },
+  // Hooks (project-local — registered in settings.local.json)
+  { src: "scripts/hooks/vela-gate-keeper.js", dst: "hooks/vela-gate-keeper.js" },
+  { src: "scripts/hooks/vela-gate-guard.js", dst: "hooks/vela-gate-guard.js" },
+  { src: "scripts/hooks/vela-failure.js", dst: "hooks/vela-failure.js" },
+  { src: "scripts/hooks/vela-compact.js", dst: "hooks/vela-compact.js" },
+  { src: "scripts/hooks/vela-stop.js", dst: "hooks/vela-stop.js" },
+  { src: "scripts/hooks/vela-analytics.js", dst: "hooks/vela-analytics.js" },
+  { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
 
 // Subdirectories managed by Vela — orphan cleanup scans only these.
@@ -260,6 +270,7 @@ const MANAGED_DIRS = [
   "agents",
   "guidelines",
   "references",
+  "hooks",
 ];
 
 /**
@@ -567,6 +578,30 @@ function install() {
       "All modifications require active pipeline",
     ],
   };
+
+  // ─── Register project-local hooks ───
+  // PostToolUse: analytics observer (vela-analytics.js)
+  // Gates/guards are registered separately via settings.local.json hooks block.
+  const hooksVelaDir = path.join(PROJECT_ROOT, ".vela", "hooks");
+  const analyticsHookPath = path.join(hooksVelaDir, "vela-analytics.js");
+
+  settings.hooks = settings.hooks || {};
+
+  // PostToolUse — analytics (always observe, never block)
+  settings.hooks.PostToolUse = settings.hooks.PostToolUse || [];
+  const analyticsHookCmd = `node ${analyticsHookPath}`;
+  const hasAnalyticsHook = settings.hooks.PostToolUse.some((entry) => {
+    if (entry && entry.hooks && Array.isArray(entry.hooks)) {
+      return entry.hooks.some((h) => h && h.command && h.command.includes("vela-analytics.js"));
+    }
+    return entry && entry.command && entry.command.includes("vela-analytics.js");
+  });
+  if (!hasAnalyticsHook) {
+    settings.hooks.PostToolUse.push({
+      _velaId: "vela-analytics",
+      hooks: [{ type: "command", command: analyticsHookCmd, timeout: 5 }],
+    });
+  }
 
   writeSettings(settings);
 
