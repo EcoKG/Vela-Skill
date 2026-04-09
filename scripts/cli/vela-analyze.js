@@ -47,16 +47,14 @@ function printUsage() {
   console.error(`Usage:
   node vela-analyze.js deps                          — Run dependency analysis (JSON stdout)
   node vela-analyze.js report --input <file> [--output <file>]  — Generate PDF report
-  node vela-analyze.js run --perspectives <list> [--model haiku|sonnet|opus]  — Run SDK code analysis
-  node vela-analyze.js full --items <list> [--model haiku|sonnet|opus] [--output <file>]  — Run combined analysis + PDF
+  node vela-analyze.js run --perspectives <list>  — V6: use Agent(subagent_type='vela-analyzer') instead
+  node vela-analyze.js full --items <list> [--output <file>]  — Run combined analysis + PDF
 
   run options:
     --perspectives  Comma-separated list of: security,bugs,performance,code-quality,architecture (required)
-    --model         Analysis model: haiku (default), sonnet, or opus
 
   full options:
     --items         Comma-separated list of: deps,security,bugs,performance,code-quality,architecture (required)
-    --model         Analysis model: haiku (default), sonnet, or opus
     --output        Output PDF path (default: ./vela-report-{timestamp}.pdf)`);
 }
 
@@ -574,17 +572,13 @@ async function main() {
         process.exit(1);
       }
 
-      const { sdkAnalyze } = require(
-        path.join(__dirname, "..", "shared", "sdk-analyzer.js"),
-      );
-      const result = await sdkAnalyze({
+      // V6: Code analysis is performed by vela-analyzer agent via Agent tool.
+      console.log(JSON.stringify({
+        ok: true,
+        v6_note: "In V6, use Agent(subagent_type='vela-analyzer') directly. This CLI stub is a no-op.",
         perspectives: requested,
-        cwd: process.cwd(),
-        model: MODEL_MAP[modelName],
-      });
-
-      console.log(JSON.stringify(result, null, 2));
-      process.exit(result.ok ? 0 : 1);
+      }, null, 2));
+      process.exit(0);
       break;
     }
 
@@ -661,28 +655,14 @@ async function main() {
         }
       }
 
-      // Run SDK analysis if any perspectives requested
+      // V6: Code analysis perspectives are handled by Agent(subagent_type='vela-analyzer').
+      // In full mode, only deps analysis runs via CLI; perspective analysis is a no-op stub.
       if (sdkPerspectives.length > 0) {
-        try {
-          const { sdkAnalyze } = require(
-            path.join(__dirname, "..", "shared", "sdk-analyzer.js"),
-          );
-          const sdkResult = await sdkAnalyze({
-            perspectives: sdkPerspectives,
-            cwd: process.cwd(),
-            model: MODEL_MAP[fullModelName],
-          });
-          combinedData.codeAnalysis = sdkResult;
-        } catch (err) {
-          combinedData.codeAnalysis = {
-            ok: false,
-            error: err.message,
-            perspectives: [],
-            totalCost: 0,
-            totalDurationMs: 0,
-            model: MODEL_MAP[fullModelName],
-          };
-        }
+        combinedData.codeAnalysis = {
+          ok: true,
+          v6_note: "In V6, use Agent(subagent_type='vela-analyzer') directly. This stub is a no-op.",
+          perspectives: sdkPerspectives,
+        };
       }
 
       // Determine overall ok status

@@ -12,24 +12,18 @@ Vela가 `BLOCKED [코드]` 메시지를 반환하면, 아래 테이블에 따라
 | VK-04 | 읽기 모드에서 쓰기 | `vela-engine transition` → 쓰기 가능 단계 |
 | VK-05 | 민감 파일 | .env.example 사용 |
 | VK-06 | 시크릿 감지 | 환경변수로 대체 |
-| VK-07 | PM 소스코드 직접 수정 | `vela-pipeline.js`로 실행 위임 |
+| VK-07 | PM 소스코드 직접 수정 | `Agent(subagent_type="vela-executor")`로 실행 위임 |
+| VK-08 | 체인 연산자 (`&&`, `\|\|`, `;`, `\|`) | 단일 명령으로 분리하여 순차 실행 |
+| VK-10 | write 모드에서 WebFetch/WebSearch | research 단계에서 조회하거나, researcher 재호출 |
 
 ## Gate Guard (VG-*)
 
 | 코드 | 사유 | 복구 |
 |------|------|------|
-| VG-EXPLORE | Explore에서 쓰기 | /vela start |
-| VG-00 | TaskCreate | 파이프라인 단계를 따른다 |
-| VG-01 | research 없이 plan | research 먼저 |
-| VG-02 | execute 전 소스 수정 | transition → execute |
-| VG-03 | 테스트 실패 commit | 테스트 수정 후 재실행 |
-| VG-04 | verification 없이 report | verification 먼저 |
-| VG-05 | pipeline-state.json | vela-engine transition |
-| VG-06 | 리비전 한도 | transition 또는 사용자 승인 |
-| VG-07 | 잘못된 단계 git commit | commit 단계에서 실행 |
-| VG-08 | verify 전 push | verify 완료 후 |
-| VG-11 | 비-team 단계 approval | team 단계에서 작성 |
-| VG-12 | PM 직접 소스 수정 | `vela-pipeline.js`로 실행 위임 |
+| VG-03 | corrupt tracker-signals.json → git commit 불가 | `.vela/tracker-signals.json` 삭제 또는 유효한 JSON으로 복구 |
+| VG-13 | `.vela/templates/pipeline.json` 직접 수정 | `vela-engine` CLI로 상태 전이. pipeline.json은 직접 수정 금지 |
+| VG-14 | Write 내용에 시크릿 패턴 | 시크릿을 환경변수로 대체 후 재시도 |
+| VG-15 | 연속 실패 5회 → 서킷 브레이커 | AskUserQuestion으로 사용자에게 보고. 사용자가 `.vela/state/circuit-open.json` 삭제 시 복구 |
 
 ## 원칙
 1. **절대 재시도 금지** — 같은 도구+같은 입력은 같은 차단

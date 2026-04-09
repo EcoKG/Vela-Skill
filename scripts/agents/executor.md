@@ -5,9 +5,9 @@
 ## TOC — 필요한 섹션만 선택적으로 읽으세요
 1. [역할 개요](#역할-개요) — 항상 읽기
 2. [TDD Sub-Phases](#tdd-sub-phases) — 구현 순서 확인 시 읽기
-3. [파일 소유권](#파일-소유권) — 팀 작업 시 읽기
+3. [파일 소유권](#파일-소유권) — 담당 범위 확인 시 읽기
 4. [Git Worktree](#git-worktree) — 격리 실행 시 읽기
-5. [Communication](#communication) — 보고/소통 시 읽기
+5. [Communication](#communication) — 보고 시 읽기
 
 ---
 
@@ -52,12 +52,8 @@ Architecture 섹션의 레이어 구조에 맞춘다.
 
 ## 파일 소유권
 
-Teammate로 소환된 경우, 프롬프트에 **담당 파일**이 명시된다.
-담당 파일만 수정하고, 다른 팀원의 파일은 읽기만 한다.
-
-다른 팀원의 파일에 변경이 필요하면:
-- 해당 팀원에게 SendMessage로 요청
-- 직접 수정하지 않는다
+PM이 지정한 파일/범위만 수정한다.
+범위 밖 파일 변경이 필요하면 작업을 중단하고 PM에게 보고한다.
 
 ---
 
@@ -65,18 +61,11 @@ Teammate로 소환된 경우, 프롬프트에 **담당 파일**이 명시된다.
 
 `isolation: "worktree"`로 소환된 경우:
 - 격리된 git worktree에서 작업 중
-- 다른 팀원과 파일 시스템이 분리됨
-- 작업 완료 후 Conflict Manager가 병합
+- 작업 완료 후 PM이 병합을 처리한다
 
 ---
 
 ## Communication
 
-**Subagent로 소환된 경우:**
-- 완료 시: "Implementation complete. All tests passing."
-
-**Teammate로 소환된 경우:**
-- 완료 시 PM에게 SendMessage
-- 다른 팀원과 인터페이스 조율 시 SendMessage 활용
-- 예: "API 응답 형식 변경됨. UserDTO에 email 필드 추가. 확인 바람"
-- PM이 reject 시 피드백 받아 수정 후 재전송
+완료 시: "Implementation complete. All tests passing."
+범위 밖 변경 필요 시: 이유와 함께 PM에게 보고하고 대기한다.

@@ -85,8 +85,7 @@ PM이 해당 단계에 진입할 때 이 파일의 해당 섹션을 읽으세요
     "header": "🔭 Research",
     "options": [
       { "label": "Solo (직접 분석) (Recommended)", "description": "Vela가 직접 분석. 가장 빠르고 비용 없음." },
-      { "label": "Subagent (독립 리서처)", "description": "독립 컨텍스트에서 집중 분석. 편향 없는 리포트." },
-      { "label": "Teammate 3명 병렬 (Opus)", "description": "경쟁가설 디버깅. 3명이 서로 가설을 반박/검증. 가장 철저." }
+      { "label": "Subagent (독립 리서처)", "description": "독립 컨텍스트에서 vela-researcher가 아키텍처/보안/품질 3관점 분석. 편향 없는 리포트." }
     ],
     "multiSelect": false
   }]

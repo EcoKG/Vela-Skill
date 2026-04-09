@@ -16,7 +16,6 @@
 - unit / integration / e2e 커버리지
 - 엣지 케이스
 
-## ## Task Distribution (Teammate 사용 시, 필수)
-- 팀원별 담당 파일/디렉토리
-- 팀원별 5~6개 태스크 목록
-- 인터페이스 경계 (팀원 간 의존 지점)
+## ## Implementation Steps (선택)
+- 순서가 있는 구체적 구현 단계
+- 파일별 변경 내용 요약

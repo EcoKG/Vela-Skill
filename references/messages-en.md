@@ -2,7 +2,7 @@
 
 ## Orchestrator
 - `⛵ Vela — Explore mode. Reads allowed, writes blocked.`
-- `🧭 To modify code: node .vela/cli/vela-pipeline.js run "<task>" [--type TYPE]`
+- `🧭 To modify code: use /vela:start or run node .vela/cli/vela-engine.js init "<task>"`
 
 ## Gate Keeper
 - `⛵ [Vela] ✦ BLOCKED: Write operation in read-only mode.`
@@ -16,7 +16,7 @@
 
 ## AskUserQuestion Labels
 - Pipeline start / Environment setup only
-- Solo (direct analysis) / Subagent / 3 Teammates parallel (competing hypothesis)
+- Solo (direct analysis) / Subagent (independent researcher)
 - Pipeline start / Sprint start
 - Approve / Request changes / Cancel pipeline
 - Use this message / Edit / Review diff first

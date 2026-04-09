@@ -2,6 +2,12 @@
   "version": "1.0",
   "engine": "vela",
   "language": "ko",
+  "sandbox": {
+    "enabled": true
+  },
+  "gate_guard": {
+    "enabled": true
+  },
   "changeSurface": {
     "enabled": true,
     "excludePaths": [

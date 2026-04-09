@@ -44,32 +44,23 @@ description: "📊 Vela 분석 보고서 — 의존성, 보안, 버그, 성능, 
    | Code Quality | `code-quality` |
    | Architecture | `architecture` |
 
-3. **모델 선택 (SDK 분석 항목이 있을 때만)**
+3. **코드 분석 항목 처리 (V6)**
 
-   Dependencies만 선택된 경우 모델 선택을 건너뛴다 (deps는 npm CLI 기반이므로 모델 불필요).
+   Dependencies만 선택된 경우: CLI만 실행 (npm audit 기반, 모델 불필요).
    Security, Bugs, Performance, Code Quality, Architecture 중 하나라도 선택되었으면:
+   `Agent(subagent_type="vela-analyzer")`를 직접 호출하여 분석을 수행한다.
 
-   ```json
-   {
-     "questions": [
-       {
-         "question": "분석 모델을 선택하세요 (Dependencies는 모델 불필요):",
-         "header": "🤖 Model",
-         "options": [
-           { "label": "Haiku (Recommended)", "description": "빠르고 저렴한 분석. 대부분의 경우 충분" },
-           { "label": "Sonnet", "description": "더 정밀한 분석. 비용 ↑" },
-           { "label": "Opus", "description": "최고 정밀도. 복잡한 코드베이스에 적합" }
-         ],
-         "multiSelect": false
-       }
-     ]
-   }
+   ```
+   Agent(
+     subagent_type="vela-analyzer",
+     prompt="분석 요청: {perspectives}, 프로젝트 경로: {cwd}, 출력 경로: {artifactDir}/analysis.md"
+   )
    ```
 
-4. **CLI 실행**
+4. **CLI 실행 (deps 항목 포함 시)**
 
    ```bash
-   node .vela/cli/vela-analyze.js full --items <comma-separated-items> --model <selected-model> --output ./vela-analysis-report.pdf
+   node .vela/cli/vela-analyze.js full --items <comma-separated-items> --output ./vela-analysis-report.pdf
    ```
 
 5. **결과 표시**

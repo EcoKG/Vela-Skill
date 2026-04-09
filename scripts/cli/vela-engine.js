@@ -15,11 +15,11 @@
  *   branch [--mode auto|prompt|none]               — Create feature branch
  *   commit [--message TEXT]                        — Commit changes
  *   cancel                                         — Cancel active pipeline
- *   review                                         — Run SDK 2-stage code review
- *   wave-execute                                    — Run wave-parallel execution of plan.md tasks
- *   validate                                       — Run SDK code validation (tests, lint, type check)
+ *   review                                         — V6 stub (use Agent vela-reviewer)
+ *   wave-execute                                   — V6 stub (use Agent vela-executor)
+ *   validate                                       — V6 stub (use Agent vela-verifier)
  *
- * Team coordination uses Claude Code Agent Teams (SendMessage).
+ * V6: PM orchestrates via Agent(subagent_type=...) directly.
  * Approval tracked via file artifacts (approval-{step}.json).
  *
  * All commands output JSON to stdout.
@@ -313,9 +313,8 @@ function cmdTransition() {
   state.current_step_index = currentIdx + 1;
   state.updated_at = new Date().toISOString();
 
-  // Agent Teams: no in-memory team state needed.
-  // Team coordination is handled via Agent Teams (SendMessage)
-  // and file-based artifacts (approval-{step}.json, review-{step}.md).
+  // V6: no in-memory team state needed.
+  // PM orchestrates via Agent(subagent_type=...) + file artifacts (approval-{step}.json, review-{step}.md).
 
   // Initialize sub-phase tracking if step has sub_phases and tracking enabled
   if (nextStep.sub_phases && nextStep.sub_phase_tracking) {
@@ -329,12 +328,6 @@ function cmdTransition() {
   }
 
   writeJSON(state._path, cleanState(state));
-
-  // Clean up delegation.json on step transition (stale delegation must not carry over)
-  const delPath = path.join(VELA_DIR, "state", "delegation.json");
-  try {
-    if (fs.existsSync(delPath)) fs.unlinkSync(delPath);
-  } catch (_e) {}
 
   output({
     ok: true,
@@ -438,9 +431,8 @@ function cmdRecord() {
   output(result);
 }
 
-// cmdTeamDispatch and cmdTeamRecord REMOVED — replaced by Agent Teams.
-// Team coordination now uses SendMessage between agents.
-// Approval tracked via file-based artifacts (approval-{step}.json).
+// cmdTeamDispatch and cmdTeamRecord REMOVED (V4.1).
+// V6: PM orchestrates via Agent(subagent_type=...) + file artifacts.
 
 function cmdSubTransition() {
   const state = findActiveState();
@@ -742,12 +734,6 @@ function cmdCancel() {
   }
 
   writeJSON(state._path, cleanState(state));
-
-  // Clean up delegation.json on cancel
-  const delPath = path.join(VELA_DIR, "state", "delegation.json");
-  try {
-    if (fs.existsSync(delPath)) fs.unlinkSync(delPath);
-  } catch (_e) {}
 
   output({
     ok: true,
@@ -1129,19 +1115,14 @@ async function cmdReview() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { sdkReview } = require("../shared/sdk-reviewer.js");
-  const result = await sdkReview({
-    step: state.current_step,
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: Review is performed by PM via Agent(subagent_type="vela-reviewer").
+  // This command is kept as a no-op stub for backwards compatibility.
   output({
-    ok: result.ok,
+    ok: true,
     command: "review",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-reviewer') directly. This stub is a no-op.",
+    artifactDir,
+    current_step: state.current_step,
   });
 }
 
@@ -1169,13 +1150,13 @@ async function cmdPlanCheck() {
     });
   }
 
-  const { sdkPlanCheck } = require("../shared/sdk-plan-checker.js");
-  const result = await sdkPlanCheck({ artifactDir, cwd: CWD });
-
+  // V6: Plan-check is performed by PM via Agent(subagent_type="vela-plan-checker").
   output({
-    ok: result.ok,
+    ok: true,
     command: "plan-check",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-plan-checker') directly. This stub is a no-op.",
+    artifactDir,
+    planPath,
   });
 }
 
@@ -1210,19 +1191,13 @@ async function cmdExecute() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { sdkExecute } = require("../shared/sdk-executor.js");
-  const result = await sdkExecute({
-    step: state.current_step,
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: Execute is performed by PM via Agent(subagent_type="vela-executor").
   output({
-    ok: result.ok,
+    ok: true,
     command: "execute",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-executor') directly. This stub is a no-op.",
+    artifactDir,
+    current_step: state.current_step,
   });
 }
 
@@ -1267,18 +1242,12 @@ async function cmdWaveExecute() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { executeWaves } = require("../shared/wave-executor.js");
-  const result = await executeWaves({
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: wave-execute removed (wave-executor.js deleted). Stub for compatibility.
   output({
-    ok: result.ok,
+    ok: true,
     command: "wave-execute",
-    ...result,
+    v6_note: "Wave execution removed in V6. Use Agent(subagent_type='vela-executor') instead.",
+    artifactDir,
   });
 }
 
@@ -1298,13 +1267,13 @@ async function cmdResearch() {
 
   const step = state.current_step || "unknown";
 
-  const { sdkResearch } = require("../shared/sdk-researcher.js");
-  const result = await sdkResearch({ step, artifactDir, cwd: CWD });
-
+  // V6: Research is performed by vela-researcher agent via Agent tool.
   output({
-    ok: result.ok,
+    ok: true,
     command: "research",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-researcher') directly. This CLI stub is a no-op.",
+    artifactDir,
+    current_step: step,
   });
 }
 
@@ -1314,10 +1283,6 @@ async function cmdValidate() {
     return output({ ok: false, error: "No active pipeline." });
   }
 
-  // Determine step — use current step or 'verify' as default
-  const pipelineDef = loadPipelineDefinition();
-  const steps = resolveSteps(pipelineDef, state.pipeline_type);
-  const currentStepDef = steps.find((s) => s.id === state.current_step);
   const step = state.current_step || "verify";
 
   const artifactDir = state._artifactDir;
@@ -1328,25 +1293,19 @@ async function cmdValidate() {
     });
   }
 
-  const pipelineSlug = path.basename(artifactDir);
-  const { sdkValidate } = require("../shared/sdk-validator.js");
-  const result = await sdkValidate({
-    step,
-    artifactDir,
-    cwd: CWD,
-    pipelineSlug,
-  });
-
+  // V6: Validation is performed by vela-verifier agent via Agent tool.
   output({
-    ok: result.ok,
+    ok: true,
     command: "validate",
-    ...result,
+    v6_note: "In V6, use Agent(subagent_type='vela-verifier') directly. This CLI stub is a no-op.",
+    artifactDir,
+    current_step: step,
   });
 }
 
 // ─── Helpers ───
 
-// getOrCreateTeam REMOVED — Agent Teams handles team state via SendMessage.
+// getOrCreateTeam REMOVED (V4.1). V6 uses Agent(subagent_type=...) directly.
 
 function findActiveState() {
   if (!fs.existsSync(ARTIFACTS_DIR)) return null;

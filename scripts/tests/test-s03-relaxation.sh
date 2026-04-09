@@ -125,7 +125,7 @@ create_pipeline() {
   local step="${2:-execute}"
   local status="${3:-active}"
   local date_dir
-  date_dir="$(date +%Y-%m-%d)_001_test"
+  date_dir="$(date +%Y%m%d)T$(date +%H%M%S)-test"
   ARTIFACT_DIR="$PROJECT/.vela/artifacts/$date_dir"
   mkdir -p "$ARTIFACT_DIR"
 
@@ -155,27 +155,26 @@ echo "⛵ S03 Pipeline Relaxation & Gate Bug Fix Tests"
 echo "════════════════════════════════════════════════"
 
 # ═══════════════════════════════════════════════════
-# 1. VG-12 standard pipeline write blocking
+# 1. VG-12 제거(V6) — gate_guard 활성화 시 VG-13 동작 확인
 # ═══════════════════════════════════════════════════
 echo ""
-echo "── 1. VG-12 standard pipeline + no delegation → blocked ──"
+echo "── 1. gate_guard enabled → VG-13 blocks pipeline.json write ──"
 
 setup_sandbox
 create_pipeline "standard" "execute" "active"
 
-STANDARD_WRITE=$(cat <<EOF
+PIPELINE_JSON_WRITE=$(cat <<EOF
 {
   "tool_name": "Write",
-  "tool_input": {"file_path": "$PROJECT/src/fix.js", "content": "fixed"},
+  "tool_input": {"file_path": "$PROJECT/.vela/templates/pipeline.json", "content": "{}"},
   "session_id": "test-session",
   "cwd": "$PROJECT"
 }
 EOF
 )
 
-assert_exit "VG-12: standard pipeline + execute + no delegation → exit 2 (blocked)" 2 \
-  "$GATE_GUARD" "$STANDARD_WRITE"
-
+assert_exit "VG-13: .vela/templates/pipeline.json write → exit 2 (blocked)" 2 \
+  "$GATE_GUARD" "$PIPELINE_JSON_WRITE"
 # ═══════════════════════════════════════════════════
 # 3. CODE_EXTENSIONS config exclusion
 # ═══════════════════════════════════════════════════

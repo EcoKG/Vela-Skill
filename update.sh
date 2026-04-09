@@ -96,15 +96,6 @@ if [ "$LOCAL_FLAG" = "--local" ]; then
     echo "  🧭 Updating local project: $(pwd)/.vela/"
     sync_local_project "$TMP"
 
-    # Optional: Update Claude Agent SDK globally
-    if command -v npm &>/dev/null; then
-      npm install -g @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null && {
-        echo "  ✅ Claude Agent SDK updated globally"
-      } || {
-        echo "  ⚠ Claude Agent SDK not updated"
-      }
-    fi
-
     echo "  ✦ Local project updated"
   else
     echo "  ⚠ No .vela/ found in current directory. Use /vela init first."

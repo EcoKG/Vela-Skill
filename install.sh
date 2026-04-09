@@ -80,7 +80,7 @@ if [ -d "$TMP/.claude-plugin" ]; then
 fi
 
 # ─── Note: No Agent Teams env injection needed ───
-# Vela uses SDK query() orchestrator (vela-pipeline.js), not Claude Code hooks.
+# Vela V6 uses Claude Code native Agent tool for orchestration (no external SDK).
 # CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is not required.
 
 # ─── Install npm dependencies globally (SQLite backends for TreeNode cache) ───
@@ -100,16 +100,6 @@ if command -v npm &>/dev/null; then
 
   # Install Playwright Chromium browser binary
   npx playwright install chromium 2>/dev/null || echo "  ⚠ Playwright chromium install failed"
-fi
-
-# ─── Optional: Install Claude Agent SDK (enables SDK orchestrator mode) ───
-if command -v npm &>/dev/null; then
-  echo "  🔌 Installing Claude Agent SDK (optional)..."
-  npm install -g @anthropic-ai/claude-agent-sdk --no-audit --no-fund 2>/dev/null && {
-    echo "  ✅ Claude Agent SDK installed globally"
-  } || {
-    echo "  ⚠ Claude Agent SDK not installed — CLI mode will be used (fully functional)"
-  }
 fi
 
 # ─── Source shared deploy functions ───
