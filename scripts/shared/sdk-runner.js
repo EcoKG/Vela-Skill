@@ -290,9 +290,9 @@ async function runSdkAgent(opts) {
         opts.verbose !== false && process.env.VELA_VERBOSE !== "0";
 
       // --- Heartbeat timer ---
-      // Emits periodic status to stderr so callers can verify the process is alive
-      // during long-running SDK agent executions.
-      const heartbeatEnabled = opts.heartbeat !== false;
+      // Emits periodic status to stderr so callers can verify the process is alive.
+      // Disabled when verboseMode is on — real-time tool/text logs already prove liveness.
+      const heartbeatEnabled = opts.heartbeat !== false && !verboseMode;
       const heartbeatMs = opts.heartbeatIntervalMs || 10000;
       let heartbeatTimer = null;
       if (heartbeatEnabled) {
