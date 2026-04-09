@@ -110,7 +110,6 @@ const FILE_MANIFEST = [
     src: "scripts/agents/conflict-manager.md",
     dst: "agents/conflict-manager.md",
   },
-  { src: "scripts/agents/vela-pm.md", dst: "agents/vela-pm.md" },
   // V6 role agents (deployed to .vela/agents/ AND .claude/agents/)
   { src: "scripts/agents/vela-researcher.md", dst: "agents/vela-researcher.md" },
   { src: "scripts/agents/vela-planner.md", dst: "agents/vela-planner.md" },

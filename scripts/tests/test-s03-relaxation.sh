@@ -125,7 +125,7 @@ create_pipeline() {
   local step="${2:-execute}"
   local status="${3:-active}"
   local date_dir
-  date_dir="$(date +%Y-%m-%d)_001_test"
+  date_dir="$(date +%Y%m%d)T$(date +%H%M%S)-test"
   ARTIFACT_DIR="$PROJECT/.vela/artifacts/$date_dir"
   mkdir -p "$ARTIFACT_DIR"
 
