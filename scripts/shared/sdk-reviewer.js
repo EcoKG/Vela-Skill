@@ -29,7 +29,7 @@
 const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
-const { MODEL_VERSIONS } = require("./constants");
+const { MODEL_VERSIONS, VELA_EXCLUSION_DIRECTIVE } = require("./constants");
 const worktreeManager = require("./worktree-manager");
 
 // ─── Score regex — matches vela-subagent-stop.js patterns ───
@@ -144,7 +144,7 @@ const OPUS_MODEL = MODEL_VERSIONS.OPUS;
 
 // Shared sections reused across all three prompts
 const _PROMPT_HEADER = `# Reviewer Agent
-
+${VELA_EXCLUSION_DIRECTIVE}
 이 지시는 **절대적**이다. 예외 없이 따라야 한다.
 
 ## 역할

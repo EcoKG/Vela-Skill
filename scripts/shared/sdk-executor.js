@@ -23,7 +23,7 @@
 const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
-const { MODEL_VERSIONS } = require("./constants");
+const { MODEL_VERSIONS, VELA_EXCLUSION_DIRECTIVE } = require("./constants");
 const worktreeManager = require("./worktree-manager");
 
 // ─── Constants ───
@@ -33,7 +33,7 @@ const SONNET_MODEL = MODEL_VERSIONS.SONNET;
 // The entire executor context must be in the system prompt.
 // Content sourced from: scripts/agents/executor.md + scripts/agents/executor/tdd.md
 const EXECUTOR_SYSTEM_PROMPT = `# Vela-Executor Agent
-
+${VELA_EXCLUSION_DIRECTIVE}
 > Model: Sonnet | Mode: ReadWrite | Output: 코드 구현
 
 ## 역할 개요

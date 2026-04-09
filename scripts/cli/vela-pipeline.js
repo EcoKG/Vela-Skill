@@ -1442,11 +1442,12 @@ async function executeStepLoop(steps, stepResults, totalCost) {
   // Acquire lock — prevents duplicate run/resume from colliding
   acquireLock();
 
-  // Ensure lock is released on exit (normal, error, or signal)
+  // Ensure lock is released on exit (normal, error, or signal).
+  // Use once() to avoid listener accumulation on repeated calls.
   const cleanup = () => releaseLock();
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => { cleanup(); process.exit(130); });
-  process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+  process.once("exit", cleanup);
+  process.once("SIGINT", () => { cleanup(); process.exit(130); });
+  process.once("SIGTERM", () => { cleanup(); process.exit(143); });
 
   try {
   for (let i = 0; i < steps.length; i++) {
@@ -2172,8 +2173,10 @@ module.exports = {
 };
 
 if (require.main === module) {
-  main().catch((err) => {
-    console.error(`Fatal error: ${err.message}`);
-    process.exit(1);
-  });
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(`Fatal error: ${err.message}`);
+      process.exit(1);
+    });
 }

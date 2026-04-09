@@ -121,6 +121,28 @@ function _getLanguageDirective(cwd) {
 }
 
 /**
+ * Format a tool call for verbose logging — shows only the key argument per tool type.
+ *
+ * @param {string} name - Tool name
+ * @param {Object} input - Tool input object
+ * @returns {string} Formatted log line (without newline)
+ */
+function _formatToolCall(name, input) {
+  const i = input || {};
+  switch (name) {
+    case 'Read':      return `📄 Read: ${i.file_path || '?'}${i.limit ? ` (${i.limit}L)` : ''}`;
+    case 'Write':     return `✏️  Write: ${i.file_path || '?'}`;
+    case 'Edit':      return `✏️  Edit: ${i.file_path || '?'}`;
+    case 'Bash':      return `🔧 Bash: ${(i.command || '?').slice(0, 80)}`;
+    case 'Grep':      return `🔍 Grep: "${i.pattern || '?'}" in ${i.path || '.'}`;
+    case 'Glob':      return `🗂  Glob: ${i.pattern || '?'}`;
+    case 'WebSearch': return `🌐 Search: ${i.query || '?'}`;
+    case 'WebFetch':  return `🌐 Fetch: ${i.url || '?'}`;
+    default:          return `🔩 ${name}: ${JSON.stringify(i).slice(0, 80)}`;
+  }
+}
+
+/**
  * Compute retry delay with exponential backoff, clamped to [1000, 60000]ms.
  * If resetsAt timestamp is available and in the future, uses that instead.
  *
@@ -316,14 +338,13 @@ async function runSdkAgent(opts) {
                 : message.content || [];
             for (const block of content) {
               if (block.type === "thinking" && block.thinking) {
-                process.stderr.write(`[sdk-agent:think] ${block.thinking}\n`);
+                const preview = block.thinking.replace(/\n+/g, ' ').slice(0, 150);
+                process.stderr.write(`[sdk] 🤔 ${preview}…\n`);
               } else if (block.type === "text" && block.text) {
-                process.stderr.write(`[sdk-agent:text] ${block.text}\n`);
+                const preview = block.text.replace(/\n+/g, ' ').slice(0, 150);
+                process.stderr.write(`[sdk] 💬 ${preview}${block.text.length > 150 ? '…' : ''}\n`);
               } else if (block.type === "tool_use") {
-                const inputStr = JSON.stringify(block.input || {});
-                process.stderr.write(
-                  `[sdk-agent:tool] ${block.name} ${inputStr}\n`,
-                );
+                process.stderr.write(`[sdk] ${_formatToolCall(block.name, block.input)}\n`);
               }
             }
           }
