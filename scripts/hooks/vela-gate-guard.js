@@ -3,7 +3,7 @@
  * Vela Gate Guard — Claude Code PreToolUse Hook
  *
  * Enforces pipeline-step-level guard rules.
- * Implements VG-03, VG-12, VG-13, VG-14, VG-15 guard rules.
+ * Implements VG-03, VG-13, VG-14, VG-15 guard rules.
  *
  * Exit codes:
  *   0 — allow the tool call
@@ -14,17 +14,21 @@
  *
  * Guards:
  *   VG-03: Build/test failure check — corrupt signals file blocks git commit
- *   VG-12: PM direct source modification in execute step blocked
  *   VG-13: Direct write to .vela/templates/pipeline.json (config tampering) blocked
  *   VG-14: Write tool content containing secret patterns blocked
  *   VG-15: Failure circuit breaker — too many consecutive failures blocks execution
+ *
+ * NOTE (V6): VG-12 removed. In V6, PM delegates to role agents via Agent(subagent_type=...)
+ * and does NOT directly write source files. Role agent subagents inherit the same hooks/config,
+ * so a delegation.json mechanism cannot distinguish PM context from executor context.
+ * PM write protection is handled by VK-07 (gate-keeper: read mode blocks Write/Edit).
  */
 
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
-const { CODE_EXTENSIONS, SECRET_PATTERNS } = require("./shared/constants");
+const { SECRET_PATTERNS } = require("./shared/constants");
 
 // ─── VG-15: Circuit breaker threshold ─────────────────────────
 const CIRCUIT_BREAKER_THRESHOLD = 5;
@@ -100,17 +104,6 @@ function findActivePipeline(cwd) {
     return null;
   } catch {
     return null;
-  }
-}
-
-/**
- * Check if delegation.json exists in the artifact directory.
- */
-function hasDelegation(artifactDir) {
-  try {
-    return fs.existsSync(path.join(artifactDir, "delegation.json"));
-  } catch {
-    return false;
   }
 }
 
@@ -245,29 +238,6 @@ async function main() {
   // Only enforced when a pipeline is active.
   if (pipelineResult && isCircuitOpen(cwd)) {
     process.exit(2);
-  }
-
-  // ─── VG-12: PM direct source modification in execute step ───
-  if (
-    config.persona === "pm" &&
-    pipelineResult &&
-    pipelineResult.state.current_step === "execute" &&
-    (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit")
-  ) {
-    // Check if the file being written is a source code file
-    const filePath =
-      (typeof toolInput.file_path === "string" && toolInput.file_path) ||
-      (typeof toolInput.path === "string" && toolInput.path) ||
-      "";
-    const ext = path.extname(filePath).toLowerCase();
-
-    if (CODE_EXTENSIONS.has(ext)) {
-      // Check for delegation — if delegation exists, PM delegated to a role agent via Agent tool (allow)
-      if (!hasDelegation(pipelineResult.artifactDir)) {
-        // VG-12: no delegation, direct PM source modification → block
-        process.exit(2);
-      }
-    }
   }
 
   // Default: allow

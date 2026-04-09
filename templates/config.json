@@ -5,6 +5,9 @@
   "sandbox": {
     "enabled": true
   },
+  "gate_guard": {
+    "enabled": true
+  },
   "changeSurface": {
     "enabled": true,
     "excludePaths": [
