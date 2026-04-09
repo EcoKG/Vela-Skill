@@ -16,10 +16,10 @@
  *   commit [--message TEXT]                        — Commit changes
  *   cancel                                         — Cancel active pipeline
  *   review                                         — V6 stub (use Agent vela-reviewer)
- *   wave-execute                                    — Run wave-parallel execution of plan.md tasks
+ *   wave-execute                                   — V6 stub (use Agent vela-executor)
  *   validate                                       — V6 stub (use Agent vela-verifier)
  *
- * Team coordination uses Claude Code Agent Teams (SendMessage).
+ * V6: PM orchestrates via Agent(subagent_type=...) directly.
  * Approval tracked via file artifacts (approval-{step}.json).
  *
  * All commands output JSON to stdout.
@@ -313,9 +313,8 @@ function cmdTransition() {
   state.current_step_index = currentIdx + 1;
   state.updated_at = new Date().toISOString();
 
-  // Agent Teams: no in-memory team state needed.
-  // Team coordination is handled via Agent Teams (SendMessage)
-  // and file-based artifacts (approval-{step}.json, review-{step}.md).
+  // V6: no in-memory team state needed.
+  // PM orchestrates via Agent(subagent_type=...) + file artifacts (approval-{step}.json, review-{step}.md).
 
   // Initialize sub-phase tracking if step has sub_phases and tracking enabled
   if (nextStep.sub_phases && nextStep.sub_phase_tracking) {
@@ -432,9 +431,8 @@ function cmdRecord() {
   output(result);
 }
 
-// cmdTeamDispatch and cmdTeamRecord REMOVED — replaced by Agent Teams.
-// Team coordination now uses SendMessage between agents.
-// Approval tracked via file-based artifacts (approval-{step}.json).
+// cmdTeamDispatch and cmdTeamRecord REMOVED (V4.1).
+// V6: PM orchestrates via Agent(subagent_type=...) + file artifacts.
 
 function cmdSubTransition() {
   const state = findActiveState();
@@ -1307,7 +1305,7 @@ async function cmdValidate() {
 
 // ─── Helpers ───
 
-// getOrCreateTeam REMOVED — Agent Teams handles team state via SendMessage.
+// getOrCreateTeam REMOVED (V4.1). V6 uses Agent(subagent_type=...) directly.
 
 function findActiveState() {
   if (!fs.existsSync(ARTIFACTS_DIR)) return null;
