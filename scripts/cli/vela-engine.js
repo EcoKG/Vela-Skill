@@ -15,9 +15,9 @@
  *   branch [--mode auto|prompt|none]               — Create feature branch
  *   commit [--message TEXT]                        — Commit changes
  *   cancel                                         — Cancel active pipeline
- *   review                                         — Run SDK 2-stage code review
+ *   review                                         — V6 stub (use Agent vela-reviewer)
  *   wave-execute                                    — Run wave-parallel execution of plan.md tasks
- *   validate                                       — Run SDK code validation (tests, lint, type check)
+ *   validate                                       — V6 stub (use Agent vela-verifier)
  *
  * Team coordination uses Claude Code Agent Teams (SendMessage).
  * Approval tracked via file artifacts (approval-{step}.json).
@@ -1297,10 +1297,6 @@ async function cmdValidate() {
     return output({ ok: false, error: "No active pipeline." });
   }
 
-  // Determine step — use current step or 'verify' as default
-  const pipelineDef = loadPipelineDefinition();
-  const steps = resolveSteps(pipelineDef, state.pipeline_type);
-  const currentStepDef = steps.find((s) => s.id === state.current_step);
   const step = state.current_step || "verify";
 
   const artifactDir = state._artifactDir;

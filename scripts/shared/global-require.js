@@ -8,7 +8,7 @@
  * Usage:
  *   const { globalRequire, globalImport } = require('./shared/global-require');
  *   const playwright = globalRequire('playwright');
- *   const sdk = await globalImport('@anthropic-ai/claude-agent-sdk');
+ *   const pw = await globalImport('playwright');
  */
 
 const path = require("path");
