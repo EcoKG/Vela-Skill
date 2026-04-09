@@ -357,7 +357,7 @@ PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 �
 | plan-check | read | — | 계획 검증 (plan-check.md 생성) |
 | checkpoint | read | — | 사용자 승인 대기 |
 | **branch** | read | — | feature 브랜치 생성 (git) |
-| execute | readwrite | Executor/Teammate → Reviewer → PM 판단 | 구현 |
+| execute | readwrite | Executor(Subagent) → Reviewer → PM 판단 | 구현 |
 | verify | rw-artifact | — | 독립 검증 (verification.md 생성, artifactDir scope Write 허용) |
 | **commit** | read | — | 변경사항 원자적 커밋 (git) |
 | finalize | write | — | 보고서 생성, 선택적 PR |
@@ -476,12 +476,7 @@ PM → Agent(subagent_type="vela-reviewer", prompt="step: {step}, artifactDir: {
 
 #### 에이전트 지시사항 (`.vela/agents/`)
 
-- `researcher.md` (Sonnet, Subagent) — 프로젝트 분석, research.md 작성
-- `planner.md` (Sonnet, Subagent) — 아키텍처 설계, plan.md 작성
-- `executor.md` (Sonnet, Subagent/Teammate) — TDD 기반 코드 구현
-- `reviewer.md` (Sonnet, Subagent) — 독립 품질 점검, review-{step}.md 작성
-- `leader.md` — PM 승인 판단 가이드 (별도 에이전트 아님)
-- `conflict-manager.md` (Sonnet, Teammate) — git 충돌 관리, 병합
+V6 에이전트 파일은 모두 `vela-{role}.md` 형식이다. 위 역할 에이전트 목록 참조.
 
 #### 승인 메커니즘 — 파일 기반
 
@@ -582,55 +577,37 @@ node .vela/cli/vela-engine.js commit --message "custom message"
 | 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
 | 설계/디버깅/분석 | **Opus** | Researcher, Planner |
 
-## Teammate vs Subagent 구분
+## 에이전트 소환 패턴 (V6)
 
-**Teammate** = 에이전트 간 소통(SendMessage)이 필요한 작업.
-**Subagent** = 독립적, 단일 결과물 생산. 소통 불필요.
+PM은 `Agent(subagent_type="vela-{role}")` 단일 호출로 역할 에이전트를 소환한다.
+V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 
-| 조건 | 방식 | model 파라미터 |
-|------|------|---------------|
-| 프로젝트 분석 (리서치) | **Subagent** | `"sonnet"` |
-| 다중 파일/CrossLayer 동시 수정 | **Teammate** | `"sonnet"` |
-| 독립 리뷰/점검 | **Subagent** | `"sonnet"` |
-| 단일 모듈 수정 | **Subagent** | `"sonnet"` |
-| 파일 탐색 | **Subagent** | `"haiku"` |
-| 설계/디버깅 분석 | **Subagent** | `"sonnet"` |
+| 작업 | subagent_type | model 파라미터 |
+|------|--------------|---------------|
+| 프로젝트 분석 | `vela-researcher` | `"sonnet"` |
+| 구현 계획 | `vela-planner` | `"sonnet"` |
+| 코드 구현 | `vela-executor` | `"sonnet"` |
+| 품질 리뷰 | `vela-reviewer` | `"sonnet"` |
+| 테스트 검증 | `vela-verifier` | `"sonnet"` |
 
-## 팀 구성 규칙
-
-- **팀 크기**: 3~5명 (개발 팀원 + Conflict Manager 1명)
-- **태스크 배분**: 팀원당 5~6개
-- **파일 소유권**: 각 팀원에게 담당 파일/디렉토리 명시 부여. 동일 파일 중복 수정 금지
-
-### 에이전트 소환 — 목차 기반 로딩
-
-에이전트 MD 파일은 **목차(TOC) 기반**으로 구성. 전체를 읽지 않고 필요한 섹션만 선택적으로 읽는다.
+### 에이전트 소환 예시
 
 ```
-Agent 도구:
-  name: "executor"
-  model: "sonnet"
-  prompt: ".vela/agents/executor.md의 목차(첫 15줄)를 읽고,
-           현재 작업에 필요한 섹션만 선택적으로 읽으세요.
-           담당 파일: {files}
-           태스크: {task_list}
-           아티팩트 경로: {artifact_dir}"
+Agent(
+  subagent_type="vela-executor",
+  prompt="
+    request: {요청}
+    artifactDir: {artifactDir}
+    planPath: {artifactDir}/plan.md
+    <task>
+      <role>executor</role>
+      <action>plan.md의 Class Specification에 따라 TDD로 구현한다.</action>
+      <verify>npm test</verify>
+      <done>모든 테스트 통과 + task-summary.md 생성</done>
+    </task>
+  "
+)
 ```
-
-### CrossLayer Development
-
-다중 계층 작업 시 Teammate + Conflict Manager + Git Worktree 활용:
-
-```
-TeamCreate: "vela-crosslayer"
-
-Teammate "frontend-dev" (Sonnet) — 담당: src/components/, src/pages/
-Teammate "backend-dev" (Sonnet)  — 담당: src/api/, src/services/
-Teammate "db-dev" (Sonnet)       — 담당: sql/, src/repositories/
-Teammate "conflict-manager" (Sonnet) — 인터페이스 감시 + 병합
-```
-
-각 팀원은 `isolation: "worktree"`로 격리 실행. 팀원 간 SendMessage로 인터페이스 조율.
 
 ### 리서치 — 프로젝트 분석
 
