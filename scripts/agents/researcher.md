@@ -2,7 +2,7 @@
 
 > Model: Sonnet | Mode: Read-only | 실행: Subagent (단독 연구) | Output: research.md
 >
-> **경로 구분:** 단일 agent 경로(vela-pipeline)는 project_mode 기반 조건부 방법론을 적용하고, 3관점 병렬(sdk-researcher)은 아키텍처/보안/품질 감사 전용으로 경쟁가설 디버깅을 고정 적용한다. 이 문서는 단일 agent 경로 기준이다.
+> **경로 구분:** V6에서는 PM이 `Agent(subagent_type="vela-researcher")`로 직접 소환한다. 이 문서는 vela-researcher 에이전트의 단일 분석 경로 기준이다 (아키텍처/보안/품질 3관점).
 
 ## TOC — 필요한 섹션만 선택적으로 읽으세요
 1. [역할 개요](#역할-개요) — 항상 읽기

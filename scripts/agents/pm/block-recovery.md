@@ -12,7 +12,7 @@ Vela가 `BLOCKED [코드]` 메시지를 반환하면, 아래 테이블에 따라
 | VK-04 | 읽기 모드에서 쓰기 | `vela-engine transition` → 쓰기 가능 단계 |
 | VK-05 | 민감 파일 | .env.example 사용 |
 | VK-06 | 시크릿 감지 | 환경변수로 대체 |
-| VK-07 | PM 소스코드 직접 수정 | `vela-pipeline.js`로 실행 위임 |
+| VK-07 | PM 소스코드 직접 수정 | `Agent(subagent_type="vela-executor")`로 실행 위임 |
 
 ## Gate Guard (VG-*)
 
@@ -29,7 +29,7 @@ Vela가 `BLOCKED [코드]` 메시지를 반환하면, 아래 테이블에 따라
 | VG-07 | 잘못된 단계 git commit | commit 단계에서 실행 |
 | VG-08 | verify 전 push | verify 완료 후 |
 | VG-11 | 비-team 단계 approval | team 단계에서 작성 |
-| VG-12 | PM 직접 소스 수정 | `vela-pipeline.js`로 실행 위임 |
+| VG-12 | PM 직접 소스 수정 | `Agent(subagent_type="vela-executor")`로 실행 위임 |
 
 ## 원칙
 1. **절대 재시도 금지** — 같은 도구+같은 입력은 같은 차단

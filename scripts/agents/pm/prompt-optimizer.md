@@ -89,7 +89,7 @@ Reflection 출력 후 `.vela/references/interactive-ui.md`의 **"프롬프트 �
 - **"원본으로 진행"** → 원본 프롬프트로 실행 방식 결정
 - **"취소"** → 절차 중단
 
-승인된 프롬프트가 `vela-pipeline.js run`의 request가 된다.
+승인된 프롬프트가 `vela-engine.js init`의 request가 되고, PM이 Agent 도구로 파이프라인을 진행한다.
 
 ---
 

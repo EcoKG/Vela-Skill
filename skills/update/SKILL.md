@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 이 명령은 다음을 수행한다:
 - 글로벌 스킬 업데이트 (`~/.claude/skills/vela/`)
 - 서브스킬 플랫 설치 (`~/.claude/skills/vela-init/`, `vela-start/`, `vela-auto/`, `vela-analyze/`, `vela-git-clean/`, `vela-update/`)
-- 글로벌 npm 의존성 업데이트 (playwright, sql.js, better-sqlite3, claude-agent-sdk)
+- 글로벌 npm 의존성 업데이트 (playwright, sql.js, better-sqlite3)
 - Playwright Chromium 바이너리 설치
 - **현재 워크스페이스의 `.vela/` 디렉토리를 글로벌 스킬 기준으로 재동기화**
 

@@ -1,43 +1,33 @@
-# 모델 선택 전략 — SDK 자동 선택
+# 모델 선택 전략 — V6 Agent 도구 기반
 
-vela-pipeline.js 오케스트레이터가 각 단계의 모델을 자동 선택한다. PM이 모델을 직접 지정하지 않는다.
+V6에서는 PM이 각 단계를 Agent 도구로 직접 실행한다. 모델 선택은 각 역할 에이전트의 시스템 프롬프트에서 자체적으로 처리한다.
 
-## 단계별 실행 경로 및 모델
+## 단계별 실행 경로
 
-각 단계는 **전용 SDK 모듈** 또는 **제네릭 runStep()**으로 실행된다.
-전용 모듈은 단계에 최적화된 모델·프롬프트·병렬성을 사용한다.
+| 단계 | 역할 에이전트 | 권장 모델 | 특징 |
+|------|-------------|----------|------|
+| research | `vela-researcher` | Sonnet | 아키텍처/보안/품질 3관점 분석 |
+| plan | `vela-planner` | Sonnet | 설계, Architecture/ClassSpec/TestStrategy 필수 |
+| plan-check | `vela-plan-checker` | Haiku | plan.md 구조 검증 (PASS/FAIL) |
+| execute | `vela-executor` | Sonnet | TDD 3단계 구현 |
+| verify | `vela-verifier` | Sonnet | 테스트/린트/타입 체크 |
+| review | `vela-reviewer` | Sonnet | 5차원 채점 (점수 ≥ 20/25 → 승인) |
+| diff-summary | `vela-diff-summary` | Sonnet | 전체 diff 통합 검토 |
+| learning | `vela-learning` | Haiku | 파이프라인 학습 축적 |
+| sprint-plan | `vela-sprint-planner` | Sonnet | 대규모 요청 슬라이스 분해 |
 
-| 단계 | 실행 경로 | 모델 | 특징 |
-|------|-----------|------|------|
-| research | sdkResearch() | **Opus × 3 병렬** | architecture / security / quality 관점 동시 분석 |
-| plan | runStep() generic | Sonnet | 설계, effort=high, thinking=10000 tokens |
-| plan-check | sdkPlanCheck() | **Haiku** | plan.md 구조 검증 (structured output) |
-| execute | runStep() generic | Sonnet | 코드 구현, effort=high |
-| verify | sdkValidate() | **Sonnet** | 테스트/린트/타입 체크 전용 에이전트 |
-| review | sdkReview() | **Opus** | 5차원 채점 (점수 ≥ 20/25 → 승인) |
-| diff-summary | sdkDiffSummary() | **Opus** | 전체 diff 통합 검토 |
-| learning | sdkLearning() | **Haiku** | 파이프라인 학습 축적 |
+## PM 오케스트레이션 패턴
 
-## 전용 SDK 모듈 vs 제네릭 runStep
-
-**전용 모듈이 있는 단계**는 해당 모듈이 직접 호출된다. vela-pipeline.js의 MODEL_MAP/EFFORT_MAP은
-제네릭 runStep()을 사용하는 단계(plan, execute)에만 적용된다.
+PM은 각 단계에서 다음과 같이 Agent 도구를 호출한다:
 
 ```
-research  → sdk-researcher.js  (OPUS_MODEL 내장, 3-parallel Promise.allSettled)
-plan-check → sdk-plan-checker.js (HAIKU_MODEL 내장, structured output schema)
-verify    → sdk-validator.js   (SONNET_MODEL 내장, bypassPermissions)
-review    → sdk-reviewer.js    (OPUS_MODEL 내장, 5-dimension scoring)
-diff-summary → sdk-diff-summary.js (OPUS_MODEL 내장)
-learning  → sdk-learning.js   (HAIKU_MODEL 내장)
+Agent(
+  subagent_type="vela-researcher",
+  prompt="request: {요청}, artifactDir: {artifactDir}, cwd: {cwd}"
+)
 ```
 
-## 리뷰 동작 (관찰용 참고)
-
-오케스트레이터가 자동으로 리뷰를 처리한다:
-- Opus 단일 호출로 5차원 채점 (점수 ≥ 20/25 → 승인)
-- reject 시 오케스트레이터가 피드백을 주입하여 자동 재실행
-- PM은 리뷰에 개입하지 않는다
+모델을 직접 지정할 필요는 없다. 각 역할 에이전트가 자신의 작업에 적합한 도구와 접근 방식을 자체적으로 결정한다.
 
 ## 스케일별 단계 구성
 
