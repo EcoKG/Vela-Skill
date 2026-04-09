@@ -165,7 +165,7 @@ function computeRetryDelay(attempt, baseDelayMs, resetsAt) {
  * @param {boolean} [opts.heartbeat=true] - Emit heartbeat messages to stderr during execution.
  * @param {number} [opts.heartbeatIntervalMs=10000] - Heartbeat interval in milliseconds.
  * @param {boolean} [opts.verbose=false] - Log all assistant messages (text, tool use, thinking)
- *   to stderr during execution. Overridden by VELA_VERBOSE=1 env var.
+ *   to stderr during execution. Overridden by VELA_VERBOSE=0 env var (set 0 to silence).
  * @param {Object} [opts.outputFormat] - JSON schema for structured output (SDK outputFormat).
  * @param {string} [opts.effort] - Effort level ('low'|'medium'|'high') for cost/speed tradeoff.
  * @param {Object} [opts.thinking] - Thinking configuration (e.g. { type: 'enabled', budget_tokens: N }).
@@ -283,10 +283,11 @@ async function runSdkAgent(opts) {
       const checkpoints = [];
 
       // --- Verbose mode ---
-      // Enabled by opts.verbose or VELA_VERBOSE=1 env var.
-      // Logs all assistant messages (text, tool calls, thinking) to stderr
-      // so callers can see what the SDK agent is thinking and doing.
-      const verboseMode = opts.verbose === true || process.env.VELA_VERBOSE === "1";
+      // ON by default so Claude Code always shows SDK agent activity in the UI.
+      // Disable with VELA_VERBOSE=0 env var (e.g. in automated test pipelines).
+      // opts.verbose:false also silences it programmatically.
+      const verboseMode =
+        opts.verbose !== false && process.env.VELA_VERBOSE !== "0";
 
       // --- Heartbeat timer ---
       // Emits periodic status to stderr so callers can verify the process is alive
