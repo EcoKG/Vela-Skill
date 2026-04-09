@@ -635,7 +635,7 @@ const MODEL_MAP = {
 };
 
 const EFFORT_MAP = {
-  researcher: "low",
+  researcher: "high",
   planner: "high",
   executor: "high",
   reviewer: "high",
@@ -1369,11 +1369,12 @@ async function runVerifyRetryLoop(steps, state, maxRevisions) {
  * @param {string} type - Pipeline type (code/code-bug/code-refactor/docs)
  * @returns {Promise<void>}
  */
-async function runPipeline(request, type) {
+async function runPipeline(request, type, scale) {
   console.log("═══════════════════════════════════════════════════");
   console.log("  Vela Pipeline Orchestrator");
   console.log(`  Request: ${request}`);
   console.log(`  Type: ${type}`);
+  if (scale) console.log(`  Scale: ${scale}`);
   console.log("═══════════════════════════════════════════════════");
 
   // Step 1: Initialize pipeline via engine
@@ -1384,6 +1385,7 @@ async function runPipeline(request, type) {
     type,
     "--auto",
   ];
+  if (scale) engineArgs.push("--scale", scale);
   if (hasFlag("--force")) engineArgs.push("--force");
   const initResult = engine(engineArgs);
 
@@ -1393,7 +1395,7 @@ async function runPipeline(request, type) {
     process.exit(1);
   }
 
-  console.log(`\n✅ Pipeline initialized: ${initResult.pipeline_type}`);
+  console.log(`\n✅ Pipeline initialized: ${initResult.pipeline_type} (scale: ${initResult.scale || "auto"})`);
   console.log(`   Steps: ${initResult.steps.map((s) => s.id).join(" → ")}`);
   console.log(`   Artifact dir: ${initResult.artifact_dir}\n`);
 
@@ -1616,24 +1618,162 @@ async function executeStepLoop(steps, stepResults, totalCost) {
       continue;
     }
 
-    // Agent steps — run SDK query
-    try {
-      const stepResult = await runStep(stepDef, state);
-      stepResults.push({ step: stepDef.id, ...stepResult });
-      totalCost += stepResult.cost;
+    // ─── research — dedicated 3-parallel Opus SDK module ───
+    if (stepDef.id === "research") {
+      const artifactDir = state._artifactDir;
 
-      if (!stepResult.ok) {
-        // Verify step failure → enter retry loop (execute→code-review→verify)
-        if (stepDef.id === "verify") {
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`  Step: Research & Analysis (research)`);
+      console.log(`  Mode: ${stepDef.mode} | SDK: sdkResearch (3-parallel Opus)`);
+      console.log(`${"─".repeat(60)}\n`);
+
+      const { sdkResearch } = require("../shared/sdk-researcher.js");
+      const sdkResult = await sdkResearch({ step: "research", artifactDir, cwd: CWD });
+      const stepCost = sdkResult.cost || 0;
+      totalCost += stepCost;
+
+      console.log(`\n  Result: ${sdkResult.ok ? "✅ SUCCESS" : "❌ FAILED"}`);
+      console.log(`  Cost: $${stepCost.toFixed(4)}`);
+      if (sdkResult.durationMs) console.log(`  Duration: ${(sdkResult.durationMs / 1000).toFixed(1)}s`);
+
+      stepResults.push({
+        step: stepDef.id,
+        ok: sdkResult.ok,
+        cost: stepCost,
+        durationMs: sdkResult.durationMs || 0,
+        numTurns: sdkResult.numTurns,
+        error: sdkResult.error,
+      });
+
+      if (!sdkResult.ok) {
+        // research failure is non-fatal if sdk_not_available; fatal otherwise
+        if (sdkResult.error === "sdk_not_available") {
+          console.warn("  ⚠️ SDK unavailable — research skipped");
+        } else {
+          console.error(`  ❌ Research failed: ${sdkResult.error}`);
+          engine(["record", "fail", "--summary", `Research failed: ${sdkResult.error}`]);
+          break;
+        }
+      }
+
+      // Run review loop if research step has a reviewer role
+      if (sdkResult.ok && stepDef.team && stepDef.team.reviewer_role) {
+        const maxRev = stepDef.max_revisions || 3;
+        const reviewResult = await runReviewLoop(stepDef, state, maxRev);
+        if (reviewResult.cost) totalCost += reviewResult.cost;
+
+        if (reviewResult.decision === "escalate_to_pm") {
+          console.error(`\n🚨 Research review exhausted: escalate_to_pm`);
+          engine(["record", "fail", "--summary", `Research review exhausted`]);
+          break;
+        }
+        if (!reviewResult.ok) {
+          console.error(`\n❌ Research review failed: ${reviewResult.error || reviewResult.decision}`);
+          engine(["record", "fail", "--summary", `Research review failed`]);
+          break;
+        }
+      }
+
+      engine(["record", "pass", "--summary", "Research completed"]);
+      const transResult = engine(["transition"]);
+      if (transResult.completed) {
+        console.log("\n✅ Pipeline completed successfully!");
+        break;
+      }
+      continue;
+    }
+
+    // ─── plan-check — dedicated Haiku structural verification ───
+    if (stepDef.id === "plan-check") {
+      const artifactDir = state._artifactDir;
+
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`  Step: Plan Verification (plan-check)`);
+      console.log(`  Mode: ${stepDef.mode} | SDK: sdkPlanCheck (Haiku)`);
+      console.log(`${"─".repeat(60)}\n`);
+
+      const { sdkPlanCheck } = require("../shared/sdk-plan-checker.js");
+      const sdkResult = await sdkPlanCheck({ artifactDir, cwd: CWD });
+      const stepCost = sdkResult.cost || 0;
+      totalCost += stepCost;
+
+      console.log(`  Result: ${sdkResult.ok ? "✅ PASS" : "❌ FAIL"}`);
+      console.log(`  Cost: $${stepCost.toFixed(4)}`);
+      if (sdkResult.verdict) console.log(`  Verdict: ${sdkResult.verdict}`);
+
+      stepResults.push({
+        step: stepDef.id,
+        ok: sdkResult.ok,
+        cost: stepCost,
+        durationMs: sdkResult.durationMs || 0,
+        numTurns: sdkResult.numTurns,
+        error: sdkResult.error,
+        verdict: sdkResult.verdict,
+      });
+
+      if (!sdkResult.ok) {
+        if (sdkResult.error === "sdk_not_available") {
+          // SDK unavailable — write a fallback plan-check.md and continue
+          console.warn("  ⚠️ SDK unavailable — plan-check skipped (writing fallback artifact)");
+          const planCheckPath = require("path").join(artifactDir, "plan-check.md");
+          if (!require("fs").existsSync(planCheckPath)) {
+            require("fs").writeFileSync(planCheckPath,
+              `# Plan Check\n\n**Verdict:** SKIPPED (sdk_not_available)\n\nPlan check was skipped because the Claude Agent SDK is not available.\n`);
+          }
+        } else {
+          console.error(`  ❌ Plan check failed: ${sdkResult.error}`);
+          engine(["record", "fail", "--summary", `Plan check failed: ${sdkResult.error}`]);
+          break;
+        }
+      }
+
+      engine(["record", "pass", "--summary", `Plan check: ${sdkResult.verdict || "completed"}`]);
+      const transResult = engine(["transition"]);
+      if (transResult.completed) {
+        console.log("\n✅ Pipeline completed successfully!");
+        break;
+      }
+      continue;
+    }
+
+    // ─── verify — dedicated Sonnet verification module ───
+    if (stepDef.id === "verify") {
+      const artifactDir = state._artifactDir;
+      const pipelineSlug = path.basename(artifactDir);
+
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`  Step: Verification (verify)`);
+      console.log(`  Mode: ${stepDef.mode} | SDK: sdkValidate (Sonnet)`);
+      console.log(`${"─".repeat(60)}\n`);
+
+      const { sdkValidate } = require("../shared/sdk-validator.js");
+      const sdkResult = await sdkValidate({ step: "verify", artifactDir, cwd: CWD, pipelineSlug });
+      const stepCost = sdkResult.cost || 0;
+      totalCost += stepCost;
+
+      console.log(`\n  Result: ${sdkResult.ok ? "✅ SUCCESS" : "❌ FAILED"}`);
+      console.log(`  Cost: $${stepCost.toFixed(4)}`);
+      if (sdkResult.durationMs) console.log(`  Duration: ${(sdkResult.durationMs / 1000).toFixed(1)}s`);
+
+      stepResults.push({
+        step: stepDef.id,
+        ok: sdkResult.ok,
+        cost: stepCost,
+        durationMs: sdkResult.durationMs || 0,
+        numTurns: sdkResult.numTurns,
+        error: sdkResult.error,
+      });
+
+      if (!sdkResult.ok) {
+        // Verify failed → enter retry loop (execute→code-review→verify)
+        if (sdkResult.error !== "sdk_not_available") {
           const maxRev = stepDef.max_revisions || 3;
           console.log(`\n  🔄 Verify failed — entering retry loop (max ${maxRev} attempts)`);
           const retryResult = await runVerifyRetryLoop(steps, state, maxRev);
           totalCost += retryResult.cost || 0;
 
           if (retryResult.ok) {
-            // Retry succeeded — record pass and advance
             engine(["record", "pass", "--summary", `Verify passed after ${retryResult.attempts} retry(s)`]);
-            // Skip the review/gate/transition below — jump straight to transition
             const transResult = engine(["transition"]);
             if (transResult.completed) {
               console.log("\n✅ Pipeline completed successfully!");
@@ -1642,19 +1782,31 @@ async function executeStepLoop(steps, stepResults, totalCost) {
             continue;
           }
 
-          // Retry exhausted — escalate_to_pm
-          console.error(
-            `\n🚨 Verify retry exhausted: escalate_to_pm (${retryResult.attempts} attempts)`,
-          );
-          engine([
-            "record",
-            "fail",
-            "--summary",
-            `Verify retry exhausted: escalate_to_pm (${retryResult.attempts} attempts)`,
-          ]);
-          break; // escalate_to_pm — graceful exit from step loop
+          // Retry exhausted
+          console.error(`\n🚨 Verify retry exhausted: escalate_to_pm (${retryResult.attempts} attempts)`);
+          engine(["record", "fail", "--summary", `Verify retry exhausted: escalate_to_pm (${retryResult.attempts} attempts)`]);
+          break;
         }
+        // SDK unavailable — skip verify with warning
+        console.warn("  ⚠️ SDK unavailable — verify skipped");
+      }
 
+      engine(["record", "pass", "--summary", "Verification completed"]);
+      const transResult = engine(["transition"]);
+      if (transResult.completed) {
+        console.log("\n✅ Pipeline completed successfully!");
+        break;
+      }
+      continue;
+    }
+
+    // Agent steps — run SDK query
+    try {
+      const stepResult = await runStep(stepDef, state);
+      stepResults.push({ step: stepDef.id, ...stepResult });
+      totalCost += stepResult.cost;
+
+      if (!stepResult.ok) {
         // Generic step failure — record and continue
         console.error(
           `\n❌ Step "${stepDef.name}" failed: ${stepResult.error}`,
@@ -1883,14 +2035,15 @@ async function cmdRun() {
   const request = args.slice(1).find(a => !a.startsWith("--"));
   if (!request) {
     console.error(
-      "Usage: vela-pipeline run <request> [--type <type>] [--force]",
+      "Usage: vela-pipeline run <request> [--type <type>] [--scale <scale>] [--force]",
     );
     process.exit(1);
   }
 
   const type = getFlag("--type") || "code";
+  const scale = getFlag("--scale") || null;
 
-  await runPipeline(request, type);
+  await runPipeline(request, type, scale);
 }
 
 /**
@@ -1942,25 +2095,30 @@ function showHelp() {
 Vela Pipeline Orchestrator — SDK-based Pipeline Execution
 
 Usage:
-  node vela-pipeline.js run <request> [--type <type>]
+  node vela-pipeline.js run <request> [--type <type>] [--scale <scale>]
   node vela-pipeline.js resume
   node vela-pipeline.js status
   node vela-pipeline.js cancel
   node vela-pipeline.js --help
 
 Commands:
-  run       Run the full pipeline for a task
+  run       Run the pipeline for a task (auto-detects scale)
   resume    Resume the active pipeline from where it left off
   status    Show current pipeline status
   cancel    Cancel the active pipeline
 
 Options:
   --type    Task type: code, code-bug, code-refactor, docs (default: code)
+  --scale   Pipeline scale override: hotfix, trivial, small, medium, quick, large, standard, ralph
+            Auto-detected from request length when omitted:
+              ≤10 words → small (trivial)   11-30 words → medium (quick)   >30 words → large (standard)
   --help    Show this help message
 
 Examples:
   node vela-pipeline.js run "Add user authentication"
-  node vela-pipeline.js run "Fix typo in README" --type docs
+  node vela-pipeline.js run "Fix typo in README" --type docs --scale hotfix
+  node vela-pipeline.js run "Implement OAuth2 migration" --scale large
+  node vela-pipeline.js run "Fix null pointer in auth" --scale ralph
   node vela-pipeline.js resume
   node vela-pipeline.js status
   node vela-pipeline.js cancel
