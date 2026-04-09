@@ -2,7 +2,7 @@
 
 ## Gate Keeper (수문장) — Claude Code PreToolUse 훅
 
-`vela-gate-keeper.js`가 Claude Code PreToolUse 훅으로 동작. 모든 도구 호출 전에 실행되어 R/W 모드를 강제한다 (VK-01~08).
+`vela-gate-keeper.js`가 Claude Code PreToolUse 훅으로 동작. 모든 도구 호출 전에 실행되어 R/W 모드를 강제한다 (VK-01~10).
 
 ### 게이트 규칙
 
@@ -15,6 +15,7 @@
 | GATE 5 | — | 경로 경고 | node_modules 등 제외 경로 쓰기 시 경고 (차단 아님) |
 | GATE 6 | VK-07 | PM 속독 | PM은 Read/Glob/Grep 허용, Write/Edit 차단 (read 모드 단계: init/commit/plan-check 등) |
 | GATE 7 | VK-08 | 체인 연산자 차단 | SAFE_BASH_READ 명령에서 `&&`, `||`, `;`, `|` 연산자 감지 시 차단 (`ls && rm -rf /` 방지) |
+| GATE 8 | VK-10 | write 모드 네트워크 차단 | write 모드(plan/finalize 단계)에서 WebFetch/WebSearch 차단 — 웹 조회는 research 단계에서 수행 |
 
 > **NOTE (V6)**: VK-09 제거됨. V6에서 PM은 `Agent(subagent_type=...)` 도구로 역할 에이전트를 직접 소환한다. Agent 도구 차단은 파이프라인 실행을 막으므로 VK-09는 불필요.
 
@@ -27,7 +28,7 @@ Gate Keeper 콜백의 모든 오류 경로(잘못된 입력, 미처리 예외)�
 | 모드 | 허용 | 차단 |
 |------|------|------|
 | read | Read, Glob, Grep, Agent | Edit, Write, NotebookEdit, Bash(쓰기) |
-| write | Read, Write, Edit, NotebookEdit, Glob, Grep | Bash |
+| write | Read, Write, Edit, NotebookEdit, Glob, Grep | Bash, WebFetch, WebSearch |
 | readwrite | Read, Write, Edit, NotebookEdit, Glob, Grep, Agent | Bash(제한적) |
 | rw-artifact | Read, Glob, Grep, Bash(읽기), Write(artifactDir만) | Edit, NotebookEdit |
 
