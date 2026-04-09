@@ -27,7 +27,7 @@
 "use strict";
 
 const { runSdkAgent } = require("./sdk-runner");
-const { MODEL_VERSIONS } = require("./constants");
+const { MODEL_VERSIONS, VELA_EXCLUSION_DIRECTIVE } = require("./constants");
 
 // ─── Model Constants ───
 const HAIKU_MODEL = MODEL_VERSIONS.HAIKU;
@@ -339,15 +339,7 @@ const VALID_PERSPECTIVE_KEYS = Object.keys(PERSPECTIVES);
 // ─── Inject exclusion directive into all perspective system prompts ───
 // Prevents SDK agents from exploring .vela/ pipeline internals as if they
 // were project source code. Injected after the [PERSPECTIVE:xxx] marker line.
-const EXCLUSION_DIRECTIVE = `
-## 탐색 제외 디렉토리
-코드베이스 탐색 시 다음 디렉토리는 건너뛴다 — 프로젝트 소스 코드가 아님:
-- \`.vela/\` (Vela 파이프라인 내부 상태 및 아티팩트)
-- \`node_modules/\`
-- \`.git/\`
-- \`dist/\`, \`build/\`, \`out/\`
-
-`;
+const EXCLUSION_DIRECTIVE = VELA_EXCLUSION_DIRECTIVE;
 
 for (const key of VALID_PERSPECTIVE_KEYS) {
   // Insert after the first line ([PERSPECTIVE:xxx]\n)

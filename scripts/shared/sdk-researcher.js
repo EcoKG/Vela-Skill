@@ -27,7 +27,7 @@
 const fs = require("fs");
 const path = require("path");
 const { runSdkAgent } = require("./sdk-runner");
-const { MODEL_VERSIONS } = require("./constants");
+const { MODEL_VERSIONS, VELA_EXCLUSION_DIRECTIVE } = require("./constants");
 
 // ─── Constants ───
 const OPUS_MODEL = MODEL_VERSIONS.OPUS;
@@ -53,13 +53,7 @@ const HYPOTHESIS_PREFIX = `# 경쟁가설 디버깅 — 반드시 이 절차를 
 
 // ─── Exclusion directive ───
 // Prevents SDK agents from exploring .vela/ pipeline internals as project source.
-const RESEARCHER_EXCLUSION_DIRECTIVE = `
-## 탐색 제외 디렉토리
-코드베이스 탐색 시 다음 디렉토리는 건너뛴다 — 프로젝트 소스 코드가 아님:
-- \`.vela/\` (Vela 파이프라인 내부 상태 및 아티팩트)
-- \`node_modules/\`, \`.git/\`, \`dist/\`, \`build/\`
-
-`;
+const RESEARCHER_EXCLUSION_DIRECTIVE = VELA_EXCLUSION_DIRECTIVE;
 
 // ─── Perspective system prompts ───
 // Each combines HYPOTHESIS_PREFIX + perspective-specific instructions.
