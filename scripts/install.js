@@ -237,6 +237,7 @@ const FILE_MANIFEST = [
   // Hooks (project-local — registered in settings.local.json)
   { src: "scripts/hooks/vela-gate-keeper.js", dst: "hooks/vela-gate-keeper.js" },
   { src: "scripts/hooks/vela-gate-guard.js", dst: "hooks/vela-gate-guard.js" },
+  { src: "scripts/hooks/vela-session-start.js", dst: "hooks/vela-session-start.js" },
   { src: "scripts/hooks/vela-failure.js", dst: "hooks/vela-failure.js" },
   { src: "scripts/hooks/vela-compact.js", dst: "hooks/vela-compact.js" },
   { src: "scripts/hooks/vela-stop.js", dst: "hooks/vela-stop.js" },
@@ -564,28 +565,62 @@ function install() {
   };
 
   // ─── Register project-local hooks ───
-  // PostToolUse: analytics observer (vela-analytics.js)
-  // Gates/guards are registered separately via settings.local.json hooks block.
   const hooksVelaDir = path.join(PROJECT_ROOT, ".vela", "hooks");
-  const analyticsHookPath = path.join(hooksVelaDir, "vela-analytics.js");
 
   settings.hooks = settings.hooks || {};
 
-  // PostToolUse — analytics (always observe, never block)
-  settings.hooks.PostToolUse = settings.hooks.PostToolUse || [];
-  const analyticsHookCmd = `node ${analyticsHookPath}`;
-  const hasAnalyticsHook = settings.hooks.PostToolUse.some((entry) => {
-    if (entry && entry.hooks && Array.isArray(entry.hooks)) {
-      return entry.hooks.some((h) => h && h.command && h.command.includes("vela-analytics.js"));
-    }
-    return entry && entry.command && entry.command.includes("vela-analytics.js");
-  });
-  if (!hasAnalyticsHook) {
-    settings.hooks.PostToolUse.push({
-      _velaId: "vela-analytics",
-      hooks: [{ type: "command", command: analyticsHookCmd, timeout: 5 }],
+  /**
+   * Register a hook if not already registered.
+   * Uses _velaId as idempotency key so re-running install is safe.
+   */
+  function registerHook(event, velaId, command, timeout) {
+    settings.hooks[event] = settings.hooks[event] || [];
+    const already = settings.hooks[event].some((entry) => {
+      if (entry._velaId === velaId) return true;
+      if (entry && entry.hooks && Array.isArray(entry.hooks)) {
+        return entry.hooks.some((h) => h && h.command && h.command.includes(velaId));
+      }
+      return entry && entry.command && entry.command.includes(velaId);
     });
+    if (!already) {
+      settings.hooks[event].push({
+        _velaId: velaId,
+        hooks: [{ type: "command", command, timeout }],
+      });
+    }
   }
+
+  // PreToolUse — gate-keeper (mode enforcement, VK-01~08)
+  registerHook("PreToolUse", "vela-gate-keeper",
+    `node ${path.join(hooksVelaDir, "vela-gate-keeper.js")}`, 10);
+
+  // PreToolUse — gate-guard (pipeline guards, VG-03~15)
+  registerHook("PreToolUse", "vela-gate-guard",
+    `node ${path.join(hooksVelaDir, "vela-gate-guard.js")}`, 10);
+
+  // SessionStart — inject pipeline context at session start
+  registerHook("SessionStart", "vela-session-start",
+    `node ${path.join(hooksVelaDir, "vela-session-start.js")}`, 15);
+
+  // ToolError — failure counter + circuit breaker
+  registerHook("ToolError", "vela-failure",
+    `node ${path.join(hooksVelaDir, "vela-failure.js")}`, 5);
+
+  // Stop — block premature stop in auto-mode + session snapshot
+  registerHook("Stop", "vela-stop",
+    `node ${path.join(hooksVelaDir, "vela-stop.js")}`, 10);
+
+  // PreCompact — save pipeline context before compaction
+  registerHook("PreCompact", "vela-compact-pre",
+    `node ${path.join(hooksVelaDir, "vela-compact.js")}`, 10);
+
+  // PostCompact — restore pipeline context after compaction
+  registerHook("PostCompact", "vela-compact-post",
+    `node ${path.join(hooksVelaDir, "vela-compact.js")}`, 10);
+
+  // PostToolUse — analytics (always observe, never block)
+  registerHook("PostToolUse", "vela-analytics",
+    `node ${path.join(hooksVelaDir, "vela-analytics.js")}`, 5);
 
   writeSettings(settings);
 
@@ -924,15 +959,33 @@ function upgrade() {
     }
   }
 
-  // Also update the PM agent in .claude/agents/
-  const pmSrc = path.join(velaDir, "agents", "vela.md");
-  const pmDst = path.join(PROJECT_ROOT, ".claude", "agents", "vela.md");
-  if (fs.existsSync(pmSrc) && fs.existsSync(path.dirname(pmDst))) {
-    try {
-      fs.copyFileSync(pmSrc, pmDst);
-      results.updated.push(".claude/agents/vela.md");
-    } catch (e) {
-      results.errors.push(`.claude/agents/vela.md: ${e.message}`);
+  // Also update all V6 agents in .claude/agents/
+  const agentsDir = path.join(PROJECT_ROOT, ".claude", "agents");
+  if (fs.existsSync(agentsDir)) {
+    const CLAUDE_AGENTS = [
+      "vela.md",
+      "vela-researcher.md",
+      "vela-planner.md",
+      "vela-executor.md",
+      "vela-reviewer.md",
+      "vela-plan-checker.md",
+      "vela-verifier.md",
+      "vela-diff-summary.md",
+      "vela-learning.md",
+      "vela-sprint-planner.md",
+      "vela-analyzer.md",
+    ];
+    for (const agentFile of CLAUDE_AGENTS) {
+      const src = path.join(velaDir, "agents", agentFile);
+      const dst = path.join(agentsDir, agentFile);
+      if (fs.existsSync(src)) {
+        try {
+          fs.copyFileSync(src, dst);
+          results.updated.push(`.claude/agents/${agentFile}`);
+        } catch (e) {
+          results.errors.push(`.claude/agents/${agentFile}: ${e.message}`);
+        }
+      }
     }
   }
 

@@ -131,17 +131,6 @@ const MODEL_VERSIONS = {
   OPUS: "opus",
 };
 
-// Exclusion directive injected into SDK agent system prompts.
-// Prevents agents from exploring .vela/ pipeline internals as if they were project source code.
-const VELA_EXCLUSION_DIRECTIVE = `
-## 탐색 제외 디렉토리 — 절대 읽지 않는다
-코드베이스 분석 시 아래 디렉토리는 완전히 건너뛴다. 프로젝트 소스 코드가 아니다:
-- \`.vela/\` — 파이프라인 내부 상태. 프롬프트에 명시된 특정 파일(예: plan.md)만 직접 읽는다.
-  Glob, Grep, ls, find로 \`.vela/\` 디렉토리 자체를 탐색하지 않는다.
-- \`node_modules/\`, \`.git/\`, \`dist/\`, \`build/\`, \`out/\`
-
-`;
-
 module.exports = {
   MODEL_VERSIONS,
   CODE_EXTENSIONS,
@@ -152,5 +141,4 @@ module.exports = {
   SECRET_PATTERNS,
   SAFE_BASH_READ,
   BASH_WRITE_PATTERNS,
-  VELA_EXCLUSION_DIRECTIVE,
 };
