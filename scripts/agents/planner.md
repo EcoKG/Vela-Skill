@@ -36,25 +36,23 @@ research.md를 기반으로 구체적 구현 계획(plan.md)을 작성하는 설
 - unit / integration / e2e 커버리지
 - 엣지 케이스
 
-### ## Task Distribution (Teammate 사용 시)
-- 팀원별 담당 파일/디렉토리
-- 팀원별 5~6개 태스크 목록
-- 인터페이스 경계 (팀원 간 의존 지점)
+### ## Implementation Steps (선택)
+- 구현 순서와 단계별 작업 목록
+- 파일/모듈별 변경 범위
 
 ---
 
 ## CrossLayer 설계
 
 다중 계층(프론트/백/DB 등) 작업 시 추가 설계:
-- 계층별 담당 팀원 배정
+- 계층별 변경 범위 (단일 Executor가 순차 처리)
 - 계층 간 인터페이스 정의 (API contract, DTO, DB schema)
-- 병렬 개발 가능한 순서와 의존 관계
-- Conflict Manager의 병합 전략
+- 구현 순서와 의존 관계
 
 ---
 
 ## Communication (Subagent)
 
-Subagent로 소환되므로 SendMessage 불가. 결과 텍스트로 반환:
+결과 텍스트로 반환:
 - 완료 시 반환: "Plan complete. plan.md written to {artifact_dir}"
 - PM이 reject 시 새 Subagent로 재소환되어 피드백 반영

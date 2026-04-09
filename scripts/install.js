@@ -99,17 +99,8 @@ const FILE_MANIFEST = [
   { src: "scripts/cache/treenode.js", dst: "cache/treenode.js" },
   // Root-level managed files
   { src: "scripts/statusline.sh", dst: "statusline.sh" },
-  // Top-level agent files — PM + role agents
+  // PM agent file
   { src: "scripts/agents/vela.md", dst: "agents/vela.md" },
-  { src: "scripts/agents/researcher.md", dst: "agents/researcher.md" },
-  { src: "scripts/agents/planner.md", dst: "agents/planner.md" },
-  { src: "scripts/agents/executor.md", dst: "agents/executor.md" },
-  { src: "scripts/agents/reviewer.md", dst: "agents/reviewer.md" },
-  { src: "scripts/agents/leader.md", dst: "agents/leader.md" },
-  {
-    src: "scripts/agents/conflict-manager.md",
-    dst: "agents/conflict-manager.md",
-  },
   // V6 role agents (deployed to .vela/agents/ AND .claude/agents/)
   { src: "scripts/agents/vela-researcher.md", dst: "agents/vela-researcher.md" },
   { src: "scripts/agents/vela-planner.md", dst: "agents/vela-planner.md" },
@@ -191,8 +182,7 @@ const FILE_MANIFEST = [
     src: "scripts/agents/executor/worktree.md",
     dst: "agents/executor/worktree.md",
   },
-  // Agent tree — Planner
-  { src: "scripts/agents/planner/index.md", dst: "agents/planner/index.md" },
+  // Agent tree — Planner (only files read by vela-planner.md)
   {
     src: "scripts/agents/planner/spec-format.md",
     dst: "agents/planner/spec-format.md",
@@ -201,24 +191,10 @@ const FILE_MANIFEST = [
     src: "scripts/agents/planner/crosslayer.md",
     dst: "agents/planner/crosslayer.md",
   },
-  // Agent tree — Reviewer
-  { src: "scripts/agents/reviewer/index.md", dst: "agents/reviewer/index.md" },
+  // Agent tree — Reviewer (only files read by vela-reviewer.md)
   {
     src: "scripts/agents/reviewer/scoring.md",
     dst: "agents/reviewer/scoring.md",
-  },
-  // Agent tree — Conflict Manager
-  {
-    src: "scripts/agents/conflict-manager/index.md",
-    dst: "agents/conflict-manager/index.md",
-  },
-  {
-    src: "scripts/agents/conflict-manager/merge-procedure.md",
-    dst: "agents/conflict-manager/merge-procedure.md",
-  },
-  {
-    src: "scripts/agents/conflict-manager/interface-watch.md",
-    dst: "agents/conflict-manager/interface-watch.md",
   },
   // Guidelines
   { src: "scripts/guidelines/index.md", dst: "guidelines/index.md" },
@@ -1055,7 +1031,6 @@ function validate() {
     "agents/executor",
     "agents/planner",
     "agents/reviewer",
-    "agents/conflict-manager",
   ];
   for (const dir of requiredDirs) {
     const dirPath = path.join(velaDir, dir);
