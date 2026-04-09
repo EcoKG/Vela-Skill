@@ -1,8 +1,8 @@
 # Gate Keeper & Gate Guard 상세
 
-## Gate Keeper (수문장) — SDK PreToolUse 콜백
+## Gate Keeper (수문장) — Claude Code PreToolUse 훅
 
-SDK 오케스트레이터(`vela-pipeline.js`)의 PreToolUse 콜백으로 구현. 모든 SDK Agent의 도구 호출 전에 실행되어 R/W 모드를 강제한다.
+`vela-gate-keeper.js`가 Claude Code PreToolUse 훅으로 동작. 모든 도구 호출 전에 실행되어 R/W 모드를 강제한다 (VK-01~08).
 
 ### 게이트 규칙
 

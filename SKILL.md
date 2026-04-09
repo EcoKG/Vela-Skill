@@ -83,7 +83,7 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
    - PM이 수집 정보를 조립하여 명확한 프롬프트 작성
    - PM이 이해 확인(Reflection) 출력 — 대상/작업/범위 요약
    - AskUserQuestion으로 "맞다 — 진행" / "수정 필요" 확인
-   - 승인된 프롬프트가 `vela-pipeline.js run`의 request가 된다
+   - 승인된 프롬프트가 `vela-engine.js init`의 request가 되고, PM이 Agent 도구로 파이프라인을 진행한다
 
 3. **작업 유형 선택**
    type은 선택 사항 (기본값: code):
@@ -150,20 +150,11 @@ node .vela/cli/vela-engine.js auto
 
 `/vela sprint` (또는 `/vela:sprint`)은 대규모 작업을 여러 슬라이스로 분해하여 순차 실행하는 스프린트 오케스트레이션이다.
 
-### 명령어
+### 절차 (V6)
 
-```bash
-node .vela/cli/vela-sprint.js run "<요청>"          # 스프린트 계획 + 전체 슬라이스 순차 실행
-node .vela/cli/vela-sprint.js status [sprint-id]     # 스프린트 상태 및 슬라이스별 진행률
-node .vela/cli/vela-sprint.js resume [sprint-id]     # 중단된 스프린트 재개
-node .vela/cli/vela-sprint.js cancel [sprint-id]     # 활성 스프린트 취소
-```
-
-### 절차
-
-1. **스프린트 계획**: `sdk-sprint-planner.js`(Sonnet)가 요청을 분석하여 의존성 그래프 기반 슬라이스로 분해한다.
-2. **순차 실행**: 각 슬라이스를 `vela-pipeline.js run`으로 독립 파이프라인 실행한다 (CLI bridge, K025).
-3. **컨텍스트 전달**: 완료된 의존 슬라이스의 결과를 후속 슬라이스에 `buildSliceContext`로 주입한다.
+1. **스프린트 계획**: PM이 `Agent(subagent_type="vela-sprint-planner")`를 호출하여 요청을 의존성 그래프 기반 슬라이스로 분해한다 → `sprint-{timestamp}.json` 생성.
+2. **순차 실행**: 각 슬라이스를 독립 파이프라인으로 PM이 직접 실행한다 (Agent 도구 체인).
+3. **컨텍스트 전달**: 완료된 의존 슬라이스의 결과(artifacts)를 후속 슬라이스 프롬프트에 포함한다.
 4. **상태 추적**: `sprint-manager.js`가 스프린트 FSM 상태와 슬라이스별 진행률을 `.vela/sprints/sprint-*.json`에 기록한다.
 
 ### 실행 모드 결정 — 파이프라인 vs 스프린트
@@ -457,47 +448,31 @@ node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js sub-transition
 ```
 
-### 3단계 검증 — SDK 기반
+### 3단계 검증 — Agent 도구 기반 (V6)
 
-Vela는 `@anthropic-ai/claude-agent-sdk`를 사용하여 리뷰, 리서치, 계획 검증, 실행을 엔진 CLI에서 직접 수행한다.
+PM이 Claude Code 네이티브 Agent 도구로 역할 에이전트를 직접 소환하여 각 단계를 실행한다.
 
-#### SDK 모드 검증 흐름
+#### V6 검증 흐름
 
 ```
-엔진이 SDK Review 직접 실행 (review 커맨드)
-  → Opus 단일 리뷰: 점수 ≥ 20 → approve, < 20 → reject
+PM → Agent(subagent_type="vela-reviewer", prompt="step: {step}, artifactDir: {dir}")
   → review-{step}.md 작성 → approval-{step}.json 자동 생성
-     ├─ approve → transition 호출
-     └─ reject → Worker에게 피드백 전달 → 재작업
+     ├─ APPROVE (점수 ≥ 20/25) → PM이 vela-engine transition 호출
+     └─ REJECT → Worker에게 피드백 전달 → 재작업 → 리뷰 재실행
 ```
 
-#### SDK 커맨드
+#### 역할 에이전트 목록
 
-| 커맨드 | 모델 | 설명 |
-|--------|------|------|
-| `review` | Opus (단일) | 코드/산출물 리뷰, 5차원 채점 (≥20/25 승인) |
-| `plan-check` | Haiku | plan.md 구조 검증 (필수 섹션 + 200byte 최소 분량) |
-| `research` | Haiku × 3 (병렬) | 아키텍처/보안/품질 3-관점 병렬 분석 |
-| `execute` | Sonnet | TDD 기반 코드 구현 (readwrite 권한) |
-
-각 커맨드는 `runSdkAgent()`를 통해 SDK를 호출한다:
-- `settingSources: []` — SDK 에이전트에 Vela 설정이 로드되지 않음 (재귀 방지)
-- `permissionMode: 'bypassPermissions'` — 엔진 제어 하에 자동 실행
-- 인증은 `process.env.ANTHROPIC_API_KEY` 상속
-
-#### 비-SDK 폴백 모드
-
-SDK가 설치되지 않은 환경(`@anthropic-ai/claude-agent-sdk` 미설치)에서는 기존 Subagent/Teammate 방식으로 자동 폴백한다:
-
-```
-PM이 Worker 소환 (Teammate 또는 Subagent)
-  → Worker: 작업 수행 → 산출물 작성
-  → PM이 Reviewer 소환 (Sonnet)
-  → Reviewer: review-{step}.md 작성
-  → PM이 approve/reject 판단
-```
-
-SDK 설치 여부는 sdk-runner.js 실행 시 자동 감지되며, 미설치 시 `{ ok: false, error: 'sdk_not_available' }`을 반환하고 기존 Subagent/Teammate 방식으로 폴백한다.
+| 에이전트 | 역할 | 산출물 |
+|---------|------|--------|
+| `vela-researcher` | 아키텍처/보안/품질 3관점 분석 | `research.md` |
+| `vela-planner` | plan.md 작성 | `plan.md` |
+| `vela-plan-checker` | plan.md 구조 검증 | `plan-check.md` |
+| `vela-executor` | TDD 기반 코드 구현 | `task-summary.md` |
+| `vela-reviewer` | 5차원 채점 (≥20/25 승인) | `review-{step}.md` |
+| `vela-verifier` | 테스트/린트/타입 체크 | `verification.md` |
+| `vela-diff-summary` | diff 5차원 통합 검토 | `diff-summary.md` |
+| `vela-learning` | 학습 패턴 추출 | `learning.md` |
 
 #### 에이전트 지시사항 (`.vela/agents/`)
 
@@ -647,7 +622,7 @@ Agent 도구:
 다중 계층 작업 시 Teammate + Conflict Manager + Git Worktree 활용:
 
 ```
-TeamCreate: "vela-pipeline"
+TeamCreate: "vela-crosslayer"
 
 Teammate "frontend-dev" (Sonnet) — 담당: src/components/, src/pages/
 Teammate "backend-dev" (Sonnet)  — 담당: src/api/, src/services/
@@ -689,43 +664,39 @@ Opus + effort:high + thinking:adaptive로 직접 분석 (model-strategy.md 참�
 
 ---
 
-## SDK 오케스트레이터 제어 구조
+## V6 오케스트레이션 구조
 
-Vela는 `@anthropic-ai/claude-agent-sdk`의 `query()` API를 사용하여 파이프라인을 직접 제어한다. SDK 콜백으로 보안 규칙을 인라인 적용하며, 별도 훅 프로세스를 spawn하지 않는다.
+Vela V6는 Claude Code 네이티브 Agent 도구로 파이프라인을 제어한다. 외부 SDK 의존성 없음.
 
-### 오케스트레이터 아키텍처
+### 아키텍처
 
 ```
-vela-pipeline.js (오케스트레이터)
-  ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI bridge 호출
-  ├── sdk-runner.js (SDK 인프라: 인증/폴백/rate limit/격리)
-  ├── sdk-reviewer.js (Opus 단일 리뷰)
-  ├── sdk-plan-checker.js (plan 검증)
-  ├── sdk-researcher.js (3관점 분석)
-  ├── sdk-executor.js (코드 구현)
-  └── SDK hooks 콜백 (Gate Keeper/Guard 역할)
-       ├── createBashGuard() — R/W 모드 Bash 차단
-       ├── createSensitiveFileGuard() — 민감 파일 보호
-       ├── createSecretGuard() — 시크릿 패턴 차단
-       ├── createProtectedBranchGuard() — 보호 브랜치 차단
-       └── createArtifactPathGuard() — rw-artifact 모드 Write 경로 제한 (M023)
+PM (vela.md agent)
+  ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI 호출
+  ├── Agent(vela-researcher) → research.md
+  ├── Agent(vela-planner)    → plan.md
+  ├── Agent(vela-plan-checker) → plan-check.md
+  ├── Agent(vela-executor)   → 코드 구현 (TDD)
+  ├── Agent(vela-reviewer)   → review-{step}.md
+  ├── Agent(vela-verifier)   → verification.md
+  ├── Agent(vela-diff-summary) → diff-summary.md
+  └── Agent(vela-learning)   → learning.md
+
+Hooks (Claude Code PreToolUse/PostToolUse/SessionStart/Stop):
+  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)
+  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)
+  ├── vela-session-start.js (파이프라인 상태 주입)
+  ├── vela-stop.js          (auto 모드 중 중단 방지)
+  ├── vela-failure.js       (연속 실패 circuit breaker)
+  └── vela-analytics.js    (도구 사용 비용 추적)
 ```
 
-### SDK 콜백 기반 보안 규칙
+### 보안 규칙 (훅 기반)
 
-SDK `query()`의 `hooks` 파라미터로 보안 규칙을 인라인 적용한다:
-
-| 콜백 | 역할 | 대응하는 규칙 |
-|------|------|--------------|
-| `createBashGuard()` | read 모드에서 쓰기 명령 차단 | Gate Keeper GUARD 1-3 |
-| `createSensitiveFileGuard()` | .env, secrets 등 민감 파일 보호 | Gate Keeper GUARD 4-6 |
-| `createSecretGuard()` | API 키, 토큰 등 시크릿 패턴 차단 | Gate Guard 규칙 |
-| `createProtectedBranchGuard()` | main/master 직접 커밋 방지 | Gate Keeper GUARD 7-9 |
-| `createArtifactPathGuard()` | rw-artifact 모드에서 Write를 artifactDir scope로 제한 (separator-aware prefix check) | M023 — research/verify artifact 쓰기 허용 |
-
-### SDK 미설치 시 폴백
-
-`@anthropic-ai/claude-agent-sdk`가 설치되지 않은 환경에서는 기존 Subagent/Teammate 방식으로 자동 폴백한다. SDK 모듈은 `{ ok: false, error: 'sdk_not_available' }`을 반환하고, 오케스트레이터가 비-SDK 경로로 전환한다.
+| 훅 | 역할 | 규칙 |
+|----|------|------|
+| `vela-gate-keeper.js` | 모드별 Bash/Write/Edit 차단 | VK-01~08 |
+| `vela-gate-guard.js` | 단계 순서 강제, PM 직접 수정 차단 | VG-03~15 |
 
 ---
 
