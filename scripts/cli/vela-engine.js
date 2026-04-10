@@ -305,6 +305,12 @@ function cmdTransition() {
     if (fs.existsSync(circuitPath)) fs.unlinkSync(circuitPath);
   } catch { /* silent */ }
 
+  // Reset review gate state for the step we're leaving
+  try {
+    const gateStatePath = path.join(CWD, ".vela", "state", `review-gate-${state.current_step}.json`);
+    if (fs.existsSync(gateStatePath)) fs.unlinkSync(gateStatePath);
+  } catch { /* silent */ }
+
   // Advance to next step
   const nextStep = steps[currentIdx + 1];
   state.current_step = nextStep.id;

@@ -87,6 +87,11 @@ Agent(subagent_type="vela-researcher", prompt="
   review-research.md를 생성하라.
 ")
 → 리뷰 결과 확인 (approve: 20+/25 && CRITICAL 0개)
+→ [REVIEW GATE] Stop hook이 자동으로 재검증 라운드를 관리한다.
+  - APPROVE 후 Stop 시 vela-review-gate.js가 설정된 횟수(기본 3회)만큼 재검증 요청
+  - block 메시지를 받으면: Agent(vela-reviewer)를 다시 호출하여 재검증
+  - REJECT가 나오면: researcher를 재호출하여 수정 후 재검증 (실패 카운터 별도)
+  - 모든 재검증 완료 후(block 없이 stop 허용): record pass → transition
 → node .vela/cli/vela-engine.js record pass
 → node .vela/cli/vela-engine.js transition
 ```
@@ -100,6 +105,7 @@ Agent(subagent_type="vela-planner", prompt="
   {artifactDir}/plan.md를 생성하라.
 ")
 → Agent(subagent_type="vela-reviewer", prompt="step: plan, ...")
+→ [REVIEW GATE] research 단계와 동일한 재검증 루프 적용
 → record pass → transition
 ```
 
@@ -137,7 +143,9 @@ Agent(subagent_type="vela-executor", prompt="
   {reviewFeedback가 있으면 포함}
 ")
 → Agent(subagent_type="vela-reviewer", prompt="step: execute, ...")
-→ APPROVE: record pass → transition
+→ APPROVE: [REVIEW GATE] Stop hook이 자동으로 재검증 라운드 관리
+  - block 메시지 수신 시: Agent(vela-reviewer) 재호출 (설정된 횟수까지)
+  - 모든 재검증 완료 후: record pass → transition
 → REJECT: reviewFeedback 추출 → executor 재호출 (max_revisions=5)
 → max_revisions 소진 시 AskUserQuestion
 ```

@@ -534,7 +534,8 @@ PM (vela.md agent)
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
   ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]
   ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)     [PreToolUse]
-  └── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
+  ├── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
+  └── vela-review-gate.js  (APPROVE 후 N회 재검증 강제)   [Stop]
 ```
 
 ### 보안 규칙 (훅 기반)

@@ -1357,7 +1357,7 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js"];
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1399,6 +1399,8 @@ function registerGlobalHooks(hooksSourceDir) {
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
   addGlobalHook("Stop", "vela-gate-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
+  addGlobalHook("Stop", "vela-review-gate",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 15);
 
   writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
 }

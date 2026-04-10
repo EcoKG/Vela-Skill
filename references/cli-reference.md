@@ -83,3 +83,28 @@ node .vela/cli/vela-cost.js        # 파이프라인 비용 리포트
 node .vela/cli/vela-report.js                    # JSON 리포트
 node .vela/cli/vela-report.js --html report.html # HTML 대시보드
 ```
+
+## 글로벌 훅 (Stop / PreToolUse)
+
+설치 시 `~/.claude/settings.json`에 자동 등록. 모든 프로젝트에 적용되며, 활성 Vela 파이프라인이 없는 프로젝트에서는 즉시 통과.
+
+| 훅 | 이벤트 | 역할 |
+|----|--------|------|
+| `vela-gate-keeper.js` | PreToolUse | VK-01~08: 모드별 도구 제한 |
+| `vela-gate-guard.js` | PreToolUse | VG-03~15: 단계 순서 강제, 서킷 브레이커 |
+| `vela-stop.js` | Stop | Auto 모드 파이프라인 중 조기 종료 차단 |
+| `vela-review-gate.js` | Stop | APPROVE 후 N회 재검증 강제 (기본 3회) |
+
+### review_gate 설정 (.vela/config.json)
+
+```json
+"review_gate": {
+  "enabled": true,
+  "validation_rounds": 3,
+  "steps": ["research", "execute", "plan"]
+}
+```
+
+- `validation_rounds`: APPROVE 후 추가 검증 횟수 (기본 3)
+- `steps`: 재검증 적용 단계 목록
+- Gate 상태: `.vela/state/review-gate-{step}.json` (transition 시 자동 삭제)

@@ -8,6 +8,11 @@
   "gate_guard": {
     "enabled": true
   },
+  "review_gate": {
+    "enabled": true,
+    "validation_rounds": 3,
+    "steps": ["research", "execute", "plan"]
+  },
   "changeSurface": {
     "enabled": true,
     "excludePaths": [
