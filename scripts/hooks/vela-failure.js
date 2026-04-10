@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
- * Vela Failure Hook — Claude Code PostToolUse Failure Handler
+ * Vela Failure Hook — Claude Code PostToolUse Error Tracker
  *
- * Tracks consecutive tool failures per pipeline step.
- * Resets the counter when the pipeline step changes (step transition reset).
+ * Registered as PostToolUse (ToolError is not a valid Claude Code hook event).
+ * Fires on every tool call; only increments counter when tool_response
+ * indicates an actual error (exit code, error message patterns, is_error).
  *
  * State files:
  *   .vela/state/failure-counter.json — { count: number, step: string }
  *   .vela/state/circuit-open.json    — { step, count, openAt } (created at threshold)
  *
  * Behavior:
- *   - On each tool failure: increment counter
- *   - On step change: reset counter to 1 (the current failure), close circuit
+ *   - On each tool error: increment counter
+ *   - On step change: reset counter to 1, close circuit
  *   - At CIRCUIT_THRESHOLD consecutive failures: write circuit-open.json
  *     (VG-15 gate guard reads this to block further execution)
  *   - Always exits 0 (failure tracking is observational, not blocking)
@@ -76,11 +77,42 @@ function findActivePipelineState(cwd) {
   }
 }
 
+// ─── Error detection ─────────────────────────────────────────
+
+/**
+ * Determine if the tool call resulted in an actual error.
+ * PostToolUse receives tool_response — check for error indicators.
+ */
+function isToolError(input) {
+  // Explicit is_error flag
+  if (input.is_error === true) return true;
+
+  const resp = input.tool_response;
+  if (!resp) return false;
+
+  const s = typeof resp === "string" ? resp : JSON.stringify(resp);
+
+  // Bash: non-zero exit code
+  if (/Exit code [1-9]\d*/.test(s)) return true;
+  // Explicit error patterns (not gate-keeper denials which are handled separately)
+  if (/^Error:|error occurred|failed to|ENOENT|EACCES|EPERM|command not found/im.test(s)) return true;
+  // Structured error response
+  if (typeof resp === "object" && resp !== null && resp.is_error === true) return true;
+
+  return false;
+}
+
 // ─── Main ────────────────────────────────────────────────────
 
 async function main() {
   const raw = await readStdin();
   const input = parseJsonSafe(raw) || {};
+
+  // Only track actual errors, not successful tool calls
+  if (!isToolError(input)) {
+    process.exit(0);
+    return;
+  }
 
   const cwd = (typeof input.cwd === "string" && input.cwd) || process.cwd();
   const stateDir = path.join(cwd, ".vela", "state");

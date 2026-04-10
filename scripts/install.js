@@ -576,8 +576,10 @@ function install() {
   registerHook("SessionStart", "vela-session-start",
     `node ${path.join(hooksVelaDir, "vela-session-start.js")}`, 15);
 
-  // NOTE: ToolError is not a valid Claude Code hook event — vela-failure.js
-  // is invoked via PostToolUse instead (tool errors appear in PostToolUse results).
+  // ToolError is not a valid Claude Code hook event.
+  // vela-failure.js is registered as PostToolUse and detects errors via tool_response.
+  registerHook("PostToolUse", "vela-failure",
+    `node ${path.join(hooksVelaDir, "vela-failure.js")}`, 5);
 
   // Stop — block premature stop in auto-mode + session snapshot
   registerHook("Stop", "vela-stop",
