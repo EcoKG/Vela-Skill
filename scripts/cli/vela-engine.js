@@ -44,14 +44,11 @@ const commands = {
   init: cmdInit,
   state: cmdState,
   transition: cmdTransition,
-  dispatch: cmdDispatch,
   record: cmdRecord,
-  "sub-transition": cmdSubTransition,
   branch: cmdBranch,
   commit: cmdCommit,
   cancel: cmdCancel,
   history: cmdHistory,
-  auto: cmdAuto,
   "clean-scan": cmdCleanScan,
   "clean-exec": cmdCleanExec,
 };
@@ -344,34 +341,6 @@ function cmdTransition() {
   });
 }
 
-function cmdDispatch() {
-  const state = findActiveState();
-  if (!state) {
-    return output({ ok: false, error: "No active pipeline." });
-  }
-
-  const role = getFlag("--role") || state.current_step;
-  const pipelineDef = loadPipelineDefinition();
-  const steps = resolveSteps(pipelineDef, state.pipeline_type);
-  const stepDef = steps.find((s) => s.id === state.current_step);
-
-  output({
-    ok: true,
-    command: "dispatch",
-    step: state.current_step,
-    role: role,
-    mode: stepDef ? stepDef.mode : "read",
-    artifact_dir: state._artifactDir,
-    context: {
-      request: state.request,
-      type: state.type,
-      scale: state.scale,
-      completed_steps: state.completed_steps,
-      pipeline_type: state.pipeline_type,
-    },
-  });
-}
-
 function cmdRecord() {
   const verdict = getArg(0);
   if (!verdict || !["pass", "fail", "reject"].includes(verdict.toLowerCase())) {
@@ -456,61 +425,6 @@ function cmdRecord() {
   }
 
   output(result);
-}
-
-// cmdTeamDispatch and cmdTeamRecord REMOVED (V4.1).
-// V6: PM orchestrates via Agent(subagent_type=...) + file artifacts.
-
-function cmdSubTransition() {
-  const state = findActiveState();
-  if (!state) {
-    return output({ ok: false, error: "No active pipeline." });
-  }
-
-  const currentStep = state.current_step;
-  if (!state.sub_phases || !state.sub_phases[currentStep]) {
-    return output({
-      ok: false,
-      error: `Step "${currentStep}" does not have sub-phase tracking.`,
-    });
-  }
-
-  const sp = state.sub_phases[currentStep];
-  const currentIdx = sp.current_index;
-
-  if (currentIdx >= sp.phases.length - 1) {
-    return output({
-      ok: true,
-      command: "sub-transition",
-      step: currentStep,
-      completed: true,
-      message: `All sub-phases completed for "${currentStep}".`,
-    });
-  }
-
-  // Mark current sub-phase as completed
-  if (!sp.completed_phases.includes(sp.current_phase)) {
-    sp.completed_phases.push(sp.current_phase);
-  }
-
-  // Advance
-  const previousPhase = sp.current_phase;
-  sp.current_index = currentIdx + 1;
-  sp.current_phase = sp.phases[sp.current_index];
-
-  state.updated_at = new Date().toISOString();
-  writeJSON(state._path, cleanState(state));
-
-  output({
-    ok: true,
-    command: "sub-transition",
-    step: currentStep,
-    previous_phase: previousPhase,
-    current_phase: sp.current_phase,
-    remaining: sp.phases.slice(sp.current_index + 1),
-    completed: false,
-    message: `Sub-phase advanced: ${previousPhase} → ${sp.current_phase}`,
-  });
 }
 
 function cmdBranch() {
@@ -705,39 +619,6 @@ function cmdCommit() {
     branch: state.git.current_branch || state.git.pipeline_branch,
     files_in_diff: status.split("\n").length,
     message: `Committed: ${commitMessage} (${commitHash.substring(0, 7)})`,
-  });
-}
-
-function cmdAuto() {
-  const state = findActiveState();
-  if (!state) {
-    return output({
-      ok: false,
-      command: "auto",
-      error: "No active pipeline.",
-      message: 'Start a pipeline first: vela-engine init "task"',
-    });
-  }
-
-  const wasAuto = state.auto === true;
-  state.auto = !wasAuto;
-
-  // Reset reject counter when enabling auto mode
-  if (state.auto) {
-    state.auto_reject_count = 0;
-  }
-
-  state.updated_at = new Date().toISOString();
-  writeJSON(state._path, cleanState(state));
-
-  return output({
-    ok: true,
-    command: "auto",
-    auto: state.auto,
-    previous: wasAuto,
-    message: state.auto
-      ? "⚡ Auto mode ON — 파이프라인이 자동으로 진행됩니다."
-      : "⏸ Auto mode OFF — 수동 모드로 전환되었습니다.",
   });
 }
 

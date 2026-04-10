@@ -542,46 +542,6 @@ async function main() {
       break;
     }
 
-    case "run": {
-      const perspectivesRaw = getFlag("--perspectives");
-      if (!perspectivesRaw) {
-        console.error(
-          "Error: --perspectives <list> is required for the run subcommand.",
-        );
-        console.error(`  Valid perspectives: ${VALID_PERSPECTIVES.join(", ")}`);
-        printUsage();
-        process.exit(1);
-      }
-
-      const requested = perspectivesRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const invalid = requested.filter((p) => !VALID_PERSPECTIVES.includes(p));
-      if (invalid.length > 0) {
-        console.error(`Error: Unknown perspective(s): ${invalid.join(", ")}`);
-        console.error(`  Valid perspectives: ${VALID_PERSPECTIVES.join(", ")}`);
-        process.exit(1);
-      }
-
-      const modelName = getFlag("--model") || "haiku";
-      if (!(modelName in MODEL_MAP)) {
-        console.error(
-          `Error: Unknown model "${modelName}". Valid values: ${Object.keys(MODEL_MAP).join(", ")}`,
-        );
-        process.exit(1);
-      }
-
-      // V6: Code analysis is performed by vela-analyzer agent via Agent tool.
-      console.log(JSON.stringify({
-        ok: true,
-        v6_note: "In V6, use Agent(subagent_type='vela-analyzer') directly. This CLI stub is a no-op.",
-        perspectives: requested,
-      }, null, 2));
-      process.exit(0);
-      break;
-    }
-
     case "full": {
       // ─── Validate --items flag ───
       const VALID_ITEMS = ["deps", ...VALID_PERSPECTIVES];
