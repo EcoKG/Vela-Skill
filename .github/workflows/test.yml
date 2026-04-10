@@ -5,50 +5,66 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable extra diagnostics'
+        required: false
+        default: 'false'
+
+# Cancel in-progress runs on the same branch when a new commit lands.
+# Prevents piling up 3+ parallel runs when someone force-pushes or rebases,
+# and makes sure the PR comment we sticky-update reflects the latest commit.
+concurrency:
+  group: vela-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    # Only the permissions we actually use — sticky PR comments need
+    # pull-requests:write, everything else is read.
     permissions:
       contents: read
       pull-requests: write
 
+    # Job-level env: make every child shell inherit `commit.gpgsign=false`
+    # so any transitive `git commit` calls in tests or fixtures don't try
+    # to hit a signing hook that doesn't exist on the runner.
+    env:
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: commit.gpgsign
+      GIT_CONFIG_VALUE_0: 'false'
+
     steps:
+      # ───────────────────────────────────────────────────────────
+      # 0. Diagnostics (fail-open — always run, cheap)
+      # ───────────────────────────────────────────────────────────
       - name: Runner diagnostics
         id: s_runner
         continue-on-error: true
         run: |
           set +e
-          echo "=== runner ==="
+          echo "::group::runner"
           uname -a
-          echo "=== bash ==="
+          echo "::endgroup::"
+          echo "::group::bash"
           bash --version | head -1
-          echo "=== pwd ==="
-          pwd
-          ls -la
-          echo "=== env ==="
-          env | grep -i 'github\|runner' | head -20
-          echo "STEP_OK"
+          echo "::endgroup::"
+          echo "::group::tools"
+          node --version 2>&1 || echo "(node not yet installed)"
+          git --version
+          shellcheck --version 2>&1 | head -2 || echo "(no shellcheck yet)"
+          echo "::endgroup::"
 
       - name: Checkout
         id: s_checkout
         continue-on-error: true
         uses: actions/checkout@v4
-
-      - name: Post-checkout diagnostics
-        id: s_postcheckout
-        continue-on-error: true
-        run: |
-          set +e
-          echo "=== git ==="
-          git --version
-          git log -1 --oneline 2>&1 || echo "(git log failed)"
-          echo "=== repo layout ==="
-          ls -la || echo "(ls failed)"
-          ls scripts/tests/ 2>&1 || echo "(no tests dir)"
-          ls scripts/hooks/ 2>&1 || echo "(no hooks dir)"
-          echo "STEP_OK"
+        with:
+          fetch-depth: 1
 
       - name: Setup Node
         id: s_node_setup
@@ -57,16 +73,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Node diagnostics
-        id: s_node
+      - name: Install shellcheck
+        id: s_sc_install
         continue-on-error: true
         run: |
-          set +e
-          node --version 2>&1 || echo "(node missing)"
-          which node 2>&1 || echo "(node not in PATH)"
-          echo "STEP_OK"
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version | head -2
 
-      - name: Configure git
+      - name: Configure git identity
         id: s_gitconfig
         continue-on-error: true
         run: |
@@ -74,7 +91,10 @@ jobs:
           git config --global user.name "Vela CI"
           git config --global commit.gpgsign false
 
-      - name: Syntax check
+      # ───────────────────────────────────────────────────────────
+      # 1. Static checks (syntax + lint + meta-wiring)
+      # ───────────────────────────────────────────────────────────
+      - name: Syntax check — Node.js files
         id: s_syntax
         continue-on-error: true
         run: |
@@ -82,55 +102,113 @@ jobs:
           node --check scripts/install.js
           node --check scripts/cli/vela-engine.js
           node --check scripts/cli/vela-analyze.js
-          for hook in scripts/hooks/*.js; do
-            echo "checking $hook"
-            node --check "$hook"
+          for f in scripts/hooks/*.js scripts/shared/*.js scripts/cache/*.js; do
+            [ -f "$f" ] || continue
+            echo "  checking $f"
+            node --check "$f"
           done
 
-      - name: V6 purity
+      - name: Shellcheck — test scripts
+        id: s_sc
+        continue-on-error: true
+        run: |
+          set -e
+          # Exclusions:
+          #   SC2086  — intentional word splitting in test fixtures
+          #   SC2016  — single quotes for node -e heredocs
+          #   SC1091  — not following sourced files (deploy-common.sh)
+          #   SC2155  — declare+assign on same line is readable for short locals
+          shellcheck \
+            --severity=warning \
+            --exclude=SC2086,SC2016,SC1091,SC2155 \
+            scripts/tests/*.sh \
+            scripts/deploy-common.sh \
+            install.sh \
+            update.sh
+
+      - name: Meta — every test-*.sh must be wired into this workflow
+        id: s_meta
+        continue-on-error: true
+        run: |
+          set -e
+          MISSING=0
+          for f in scripts/tests/test-*.sh; do
+            name=$(basename "$f")
+            if ! grep -q "$name" .github/workflows/test.yml; then
+              echo "::error file=.github/workflows/test.yml::test script $name exists but is not referenced in the workflow"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -eq 0 ]; then
+            echo "✅ all $(ls scripts/tests/test-*.sh | wc -l) test files are wired in"
+          fi
+          exit $MISSING
+
+      # ───────────────────────────────────────────────────────────
+      # 2. Unit / integration test suites (each with id + log file)
+      # ───────────────────────────────────────────────────────────
+      - name: V6 purity (V4.1 residue detector)
         id: s_purity
         continue-on-error: true
-        run: bash scripts/tests/test-v6-purity.sh
+        run: |
+          bash scripts/tests/test-v6-purity.sh 2>&1 | tee /tmp/v6-purity.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Gate Keeper
+      - name: Gate Keeper (VK-01~08)
         id: s_gk
         continue-on-error: true
-        run: bash scripts/tests/test-gate-keeper.sh
+        run: |
+          bash scripts/tests/test-gate-keeper.sh 2>&1 | tee /tmp/gate-keeper.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Gate VK-07
+      - name: Gate VK-07 (PM speed-read)
         id: s_vk07
         continue-on-error: true
-        run: bash scripts/tests/test-gate-vk07.sh
+        run: |
+          bash scripts/tests/test-gate-vk07.sh 2>&1 | tee /tmp/gate-vk07.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Chain operators
+      - name: Chain operators (VK-08)
         id: s_chain
         continue-on-error: true
-        run: bash scripts/tests/test-chain-operators.sh
+        run: |
+          bash scripts/tests/test-chain-operators.sh 2>&1 | tee /tmp/chain-operators.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Fail-closed
+      - name: Fail-closed hook behavior
         id: s_fc
         continue-on-error: true
-        run: bash scripts/tests/test-fail-closed.sh
+        run: |
+          bash scripts/tests/test-fail-closed.sh 2>&1 | tee /tmp/fail-closed.log
+          exit ${PIPESTATUS[0]}
 
-      - name: S03 relaxation
+      - name: S03 relaxation (VG-13 + cost + stop)
         id: s_s03
         continue-on-error: true
-        run: bash scripts/tests/test-s03-relaxation.sh
+        run: |
+          bash scripts/tests/test-s03-relaxation.sh 2>&1 | tee /tmp/s03-relaxation.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Review Gate
+      - name: Review Gate (vela-review-gate.js — V2-4)
         id: s_rg
         continue-on-error: true
-        run: bash scripts/tests/test-review-gate.sh
+        run: |
+          bash scripts/tests/test-review-gate.sh 2>&1 | tee /tmp/review-gate.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Engine record
+      - name: Engine record (circuit breaker + auto + revisions)
         id: s_er
         continue-on-error: true
-        run: bash scripts/tests/test-engine-record.sh
+        run: |
+          bash scripts/tests/test-engine-record.sh 2>&1 | tee /tmp/engine-record.log
+          exit ${PIPESTATUS[0]}
 
       - name: Sprint manager
         id: s_sm
         continue-on-error: true
-        run: bash scripts/tests/test-sprint-manager.sh
+        run: |
+          bash scripts/tests/test-sprint-manager.sh 2>&1 | tee /tmp/sprint-manager.log
+          exit ${PIPESTATUS[0]}
 
       - name: Full pipeline scenario (E2E)
         id: s_fp
@@ -153,103 +231,237 @@ jobs:
           bash scripts/tests/test-auto-mode.sh 2>&1 | tee /tmp/auto-mode.log
           exit ${PIPESTATUS[0]}
 
-      - name: Change surface
+      - name: Change surface (reference integrity)
         id: s_cs
         continue-on-error: true
         run: |
-          echo "=== rg version ==="
+          echo "::group::tool versions"
           rg --version 2>&1 || echo "(rg not found)"
-          echo "=== git version ==="
           git --version
-          echo "=== test output ==="
+          echo "::endgroup::"
           bash scripts/tests/test-change-surface.sh 2>&1 | tee /tmp/change-surface.log
           exit ${PIPESTATUS[1]}
 
       - name: Worktree manager
         id: s_wm
         continue-on-error: true
-        run: bash scripts/tests/test-worktree-manager.sh
+        run: |
+          bash scripts/tests/test-worktree-manager.sh 2>&1 | tee /tmp/worktree-manager.log
+          exit ${PIPESTATUS[0]}
 
-      - name: Post per-step outcome summary as PR comment
+      # ───────────────────────────────────────────────────────────
+      # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
+      #    artifact upload on failure
+      # ───────────────────────────────────────────────────────────
+      - name: Build report (outcomes + PASS/FAIL counts)
+        id: s_report
+        if: always()
+        env:
+          R_RUNNER: ${{ steps.s_runner.outcome }}
+          R_CHECKOUT: ${{ steps.s_checkout.outcome }}
+          R_NODE_SETUP: ${{ steps.s_node_setup.outcome }}
+          R_SC_INSTALL: ${{ steps.s_sc_install.outcome }}
+          R_GITCONFIG: ${{ steps.s_gitconfig.outcome }}
+          R_SYNTAX: ${{ steps.s_syntax.outcome }}
+          R_SHELLCHECK: ${{ steps.s_sc.outcome }}
+          R_META: ${{ steps.s_meta.outcome }}
+          R_PURITY: ${{ steps.s_purity.outcome }}
+          R_GK: ${{ steps.s_gk.outcome }}
+          R_VK07: ${{ steps.s_vk07.outcome }}
+          R_CHAIN: ${{ steps.s_chain.outcome }}
+          R_FC: ${{ steps.s_fc.outcome }}
+          R_S03: ${{ steps.s_s03.outcome }}
+          R_RG: ${{ steps.s_rg.outcome }}
+          R_ER: ${{ steps.s_er.outcome }}
+          R_SM: ${{ steps.s_sm.outcome }}
+          R_FP: ${{ steps.s_fp.outcome }}
+          R_IF: ${{ steps.s_if.outcome }}
+          R_AM: ${{ steps.s_am.outcome }}
+          R_CS: ${{ steps.s_cs.outcome }}
+          R_WM: ${{ steps.s_wm.outcome }}
+        run: |
+          set -e
+          # Build an ordered list: label | outcome | log_file
+          # The log_file is blank for steps without an associated log.
+          cat > /tmp/report-rows.tsv <<EOF
+          Setup: runner diagnostics	${R_RUNNER}
+          Setup: checkout	${R_CHECKOUT}
+          Setup: node	${R_NODE_SETUP}
+          Setup: shellcheck install	${R_SC_INSTALL}
+          Setup: git config	${R_GITCONFIG}
+          Static: node syntax	${R_SYNTAX}
+          Static: shellcheck	${R_SHELLCHECK}
+          Static: meta-wiring	${R_META}
+          Unit: v6-purity	${R_PURITY}	/tmp/v6-purity.log
+          Unit: gate-keeper	${R_GK}	/tmp/gate-keeper.log
+          Unit: gate-vk07	${R_VK07}	/tmp/gate-vk07.log
+          Unit: chain-operators	${R_CHAIN}	/tmp/chain-operators.log
+          Unit: fail-closed	${R_FC}	/tmp/fail-closed.log
+          Unit: s03-relaxation	${R_S03}	/tmp/s03-relaxation.log
+          Unit: review-gate	${R_RG}	/tmp/review-gate.log
+          Unit: engine-record	${R_ER}	/tmp/engine-record.log
+          Unit: sprint-manager	${R_SM}	/tmp/sprint-manager.log
+          E2E: full-pipeline	${R_FP}	/tmp/full-pipeline.log
+          E2E: install-flow	${R_IF}	/tmp/install-flow.log
+          E2E: auto-mode	${R_AM}	/tmp/auto-mode.log
+          E2E: change-surface	${R_CS}	/tmp/change-surface.log
+          E2E: worktree-manager	${R_WM}	/tmp/worktree-manager.log
+          EOF
+
+          PASS=0
+          FAIL=0
+          TOTAL=0
+          while IFS=$'\t' read -r label outcome logfile; do
+            [ -z "$label" ] && continue
+            TOTAL=$((TOTAL + 1))
+            case "$outcome" in
+              success)  PASS=$((PASS + 1)) ;;
+              failure)  FAIL=$((FAIL + 1)) ;;
+              skipped)  ;;
+              *)        ;;
+            esac
+          done < /tmp/report-rows.tsv
+
+          echo "PASS=$PASS"   >> "$GITHUB_OUTPUT"
+          echo "FAIL=$FAIL"   >> "$GITHUB_OUTPUT"
+          echo "TOTAL=$TOTAL" >> "$GITHUB_OUTPUT"
+
+          # ── GITHUB_STEP_SUMMARY (visible in Actions run UI) ──
+          {
+            echo "# ⛵ Vela V6 Test Report"
+            echo ""
+            if [ "$FAIL" -eq 0 ]; then
+              echo "**✅ $PASS / $TOTAL steps passed**"
+            else
+              echo "**❌ $PASS / $TOTAL passed, $FAIL failed**"
+            fi
+            echo ""
+            echo "| Step | Result |"
+            echo "|---|---|"
+            while IFS=$'\t' read -r label outcome logfile; do
+              [ -z "$label" ] && continue
+              case "$outcome" in
+                success)  emoji="✅" ;;
+                failure)  emoji="❌" ;;
+                skipped)  emoji="⏭️" ;;
+                *)        emoji="❓" ;;
+              esac
+              echo "| ${label} | ${emoji} ${outcome} |"
+            done < /tmp/report-rows.tsv
+            echo ""
+            echo "Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "Commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # ── PR comment body (written to /tmp/pr-body.md) ──
+          {
+            echo "<!-- vela-ci-report -->"
+            echo "## ⛵ Vela V6 Test Report"
+            echo ""
+            if [ "$FAIL" -eq 0 ]; then
+              echo "**✅ $PASS / $TOTAL steps passed** — run [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) on \`${{ github.sha }}\`"
+            else
+              echo "**❌ $PASS / $TOTAL passed, $FAIL failed** — run [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) on \`${{ github.sha }}\`"
+            fi
+            echo ""
+            echo "<details><summary>Per-step outcomes</summary>"
+            echo ""
+            echo "| Step | Result |"
+            echo "|---|---|"
+            while IFS=$'\t' read -r label outcome logfile; do
+              [ -z "$label" ] && continue
+              case "$outcome" in
+                success)  emoji="✅" ;;
+                failure)  emoji="❌" ;;
+                skipped)  emoji="⏭️" ;;
+                *)        emoji="❓" ;;
+              esac
+              echo "| ${label} | ${emoji} ${outcome} |"
+            done < /tmp/report-rows.tsv
+            echo ""
+            echo "</details>"
+            echo ""
+            # Include tails of failing logs
+            if [ "$FAIL" -gt 0 ]; then
+              echo "### Failing step logs"
+              echo ""
+              while IFS=$'\t' read -r label outcome logfile; do
+                [ -z "$label" ] && continue
+                [ "$outcome" != "failure" ] && continue
+                [ -z "$logfile" ] && continue
+                [ ! -f "$logfile" ] && continue
+                echo "<details><summary>${label} — last 120 lines</summary>"
+                echo ""
+                echo '```'
+                tail -120 "$logfile"
+                echo '```'
+                echo ""
+                echo "</details>"
+                echo ""
+              done < /tmp/report-rows.tsv
+            fi
+          } > /tmp/pr-body.md
+
+      - name: Post or update sticky PR comment
+        id: s_sticky
         if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUTCOMES: |
-            runner=${{ steps.s_runner.outcome }}
-            checkout=${{ steps.s_checkout.outcome }}
-            postcheckout=${{ steps.s_postcheckout.outcome }}
-            node_setup=${{ steps.s_node_setup.outcome }}
-            node=${{ steps.s_node.outcome }}
-            gitconfig=${{ steps.s_gitconfig.outcome }}
-            syntax=${{ steps.s_syntax.outcome }}
-            purity=${{ steps.s_purity.outcome }}
-            gate_keeper=${{ steps.s_gk.outcome }}
-            vk07=${{ steps.s_vk07.outcome }}
-            chain=${{ steps.s_chain.outcome }}
-            fail_closed=${{ steps.s_fc.outcome }}
-            s03=${{ steps.s_s03.outcome }}
-            review_gate=${{ steps.s_rg.outcome }}
-            engine_record=${{ steps.s_er.outcome }}
-            sprint_manager=${{ steps.s_sm.outcome }}
-            full_pipeline=${{ steps.s_fp.outcome }}
-            install_flow=${{ steps.s_if.outcome }}
-            auto_mode=${{ steps.s_am.outcome }}
-            change_surface=${{ steps.s_cs.outcome }}
-            worktree=${{ steps.s_wm.outcome }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          PR="${{ github.event.pull_request.number }}"
-          REPO="${{ github.repository }}"
-          RUN="${{ github.run_id }}"
-          {
-            printf "## CI step outcomes (run %s)\n\n\`\`\`\n%s\n\`\`\`\n\n" "$RUN" "$OUTCOMES"
-            if [ -f /tmp/auto-mode.log ] && [ "${{ steps.s_am.outcome }}" = "failure" ]; then
-              printf "### auto_mode — last 60 lines\n\n\`\`\`\n"
-              tail -60 /tmp/auto-mode.log
-              printf "\n\`\`\`\n\n"
-            fi
-            if [ -f /tmp/change-surface.log ] && [ "${{ steps.s_cs.outcome }}" = "failure" ]; then
-              printf "### change_surface — last 80 lines\n\n\`\`\`\n"
-              tail -80 /tmp/change-surface.log
-              printf "\n\`\`\`\n\n"
-            fi
-            if [ -f /tmp/full-pipeline.log ] && [ "${{ steps.s_fp.outcome }}" = "failure" ]; then
-              printf "### full_pipeline — last 100 lines\n\n\`\`\`\n"
-              tail -100 /tmp/full-pipeline.log
-              printf "\n\`\`\`\n\n"
-            fi
-            if [ -f /tmp/install-flow.log ] && [ "${{ steps.s_if.outcome }}" = "failure" ]; then
-              printf "### install_flow — last 100 lines\n\n\`\`\`\n"
-              tail -100 /tmp/install-flow.log
-              printf "\n\`\`\`\n\n"
-            fi
-          } > /tmp/comment-body.md
-          gh pr comment "$PR" --repo "$REPO" --body-file /tmp/comment-body.md
+          set -e
+          # Sticky comment: look for an existing bot comment that contains
+          # our marker "<!-- vela-ci-report -->" and update it; otherwise
+          # create a new one. This keeps the PR history clean — one CI
+          # comment per PR, always reflecting the most recent run.
+          MARKER="<!-- vela-ci-report -->"
+          EXISTING_ID=$(gh api \
+            "repos/$REPO/issues/$PR/comments" \
+            --paginate \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" \
+            | head -n 1)
 
+          if [ -n "$EXISTING_ID" ]; then
+            echo "Updating existing sticky comment $EXISTING_ID"
+            gh api \
+              --method PATCH \
+              "repos/$REPO/issues/comments/$EXISTING_ID" \
+              -F body=@/tmp/pr-body.md >/dev/null
+          else
+            echo "Creating new sticky comment"
+            gh pr comment "$PR" --repo "$REPO" --body-file /tmp/pr-body.md
+          fi
+
+      - name: Upload test logs as artifact
+        id: s_artifact
+        if: always() && (steps.s_report.outputs.FAIL != '0')
+        uses: actions/upload-artifact@v4
+        with:
+          name: vela-ci-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/*.log
+            /tmp/report-rows.tsv
+            /tmp/pr-body.md
+          retention-days: 14
+          if-no-files-found: warn
+
+      # ───────────────────────────────────────────────────────────
+      # 4. Final gate — fail the job if any required step failed.
+      #    Every previous step has continue-on-error: true for
+      #    diagnostic visibility; this step re-enforces the real
+      #    pass/fail policy.
+      # ───────────────────────────────────────────────────────────
       - name: Fail job if any required step failed
         if: always()
+        env:
+          FAIL_COUNT: ${{ steps.s_report.outputs.FAIL }}
+          PASS_COUNT: ${{ steps.s_report.outputs.PASS }}
+          TOTAL_COUNT: ${{ steps.s_report.outputs.TOTAL }}
         run: |
-          FAIL=0
-          for s in \
-            "${{ steps.s_runner.outcome }}" \
-            "${{ steps.s_checkout.outcome }}" \
-            "${{ steps.s_node_setup.outcome }}" \
-            "${{ steps.s_syntax.outcome }}" \
-            "${{ steps.s_purity.outcome }}" \
-            "${{ steps.s_gk.outcome }}" \
-            "${{ steps.s_vk07.outcome }}" \
-            "${{ steps.s_chain.outcome }}" \
-            "${{ steps.s_fc.outcome }}" \
-            "${{ steps.s_s03.outcome }}" \
-            "${{ steps.s_rg.outcome }}" \
-            "${{ steps.s_er.outcome }}" \
-            "${{ steps.s_sm.outcome }}" \
-            "${{ steps.s_fp.outcome }}" \
-            "${{ steps.s_if.outcome }}" \
-            "${{ steps.s_am.outcome }}" \
-            "${{ steps.s_cs.outcome }}" \
-            "${{ steps.s_wm.outcome }}" ; do
-            if [ "$s" != "success" ] && [ "$s" != "skipped" ]; then
-              FAIL=1
-            fi
-          done
-          exit $FAIL
+          if [ "$FAIL_COUNT" = "0" ] && [ -n "$FAIL_COUNT" ]; then
+            echo "✅ all $PASS_COUNT/$TOTAL_COUNT required steps passed"
+            exit 0
+          fi
+          echo "❌ $FAIL_COUNT step(s) failed, $PASS_COUNT/$TOTAL_COUNT passed"
+          exit 1

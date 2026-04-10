@@ -204,7 +204,11 @@ echo "📋 Scenario A — Fresh install from clean project"
 
 setup_home_and_project
 
-INSTALL_OUT=$(install_js 2>&1 || true)
+# Discard the output — the scenario's assertions look at files and
+# settings.json, not the install.js stdout. Kept as `|| true` so an
+# unexpected non-zero exit doesn't abort the sandbox before we can
+# inspect it.
+install_js > /dev/null 2>&1 || true
 
 # All 4 active hooks staged in .vela/hooks/
 for hook in "${ACTIVE_HOOKS[@]}"; do
