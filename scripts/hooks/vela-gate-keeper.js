@@ -61,19 +61,6 @@ function parseJsonSafe(str) {
 }
 
 /**
- * Read Vela config from cwd/.vela/config.json. Returns {} on error.
- */
-function readConfig(cwd) {
-  try {
-    const configPath = path.join(cwd, ".vela", "config.json");
-    const raw = fs.readFileSync(configPath, "utf8");
-    return parseJsonSafe(raw) || {};
-  } catch {
-    return {};
-  }
-}
-
-/**
  * Find the active pipeline state. Returns null if none found.
  * Searches .vela/artifacts/{YYYYMMDD}T{HHmmss}-{slug}/pipeline-state.json
  */
@@ -168,16 +155,13 @@ async function main() {
     ? input.tool_input
     : {};
 
-  // Read config
-  const config = readConfig(cwd);
-
-  // If sandbox is not enabled → pass through (allow)
-  if (config.sandbox == null || config.sandbox.enabled !== true) {
-    process.exit(0);
+  // Hooks are globally registered — only activate when a Vela pipeline is active
+  const pipelineState = findActivePipeline(cwd);
+  if (!pipelineState) {
+    process.exit(0); // No active Vela pipeline — allow all tools
   }
 
-  // Find active pipeline state and mode
-  const pipelineState = findActivePipeline(cwd);
+  // Find pipeline definition and current mode
   const pipelineDef = readPipelineDefinition(cwd);
   const mode = getCurrentMode(pipelineState, pipelineDef);
 

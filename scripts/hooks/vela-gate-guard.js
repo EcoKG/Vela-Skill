@@ -60,18 +60,6 @@ function parseJsonSafe(str) {
   }
 }
 
-/**
- * Read Vela config from cwd/.vela/config.json. Returns {} on error.
- */
-function readConfig(cwd) {
-  try {
-    const configPath = path.join(cwd, ".vela", "config.json");
-    const raw = fs.readFileSync(configPath, "utf8");
-    return parseJsonSafe(raw) || {};
-  } catch {
-    return {};
-  }
-}
 
 /**
  * Find the active pipeline state.
@@ -189,16 +177,11 @@ async function main() {
     ? input.tool_input
     : {};
 
-  // Read config
-  const config = readConfig(cwd);
-
-  // If gate_guard is not enabled → pass through (allow)
-  if (!config.gate_guard || config.gate_guard.enabled !== true) {
-    process.exit(0);
-  }
-
-  // Find active pipeline
+  // Hooks are globally registered — only activate when a Vela pipeline is active
   const pipelineResult = findActivePipeline(cwd);
+  if (!pipelineResult) {
+    process.exit(0); // No active Vela pipeline — allow all tools
+  }
 
   // ─── VG-03: Corrupt signals file blocks git commit ───
   if (toolName === "Bash") {

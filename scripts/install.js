@@ -21,9 +21,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 const PROJECT_ROOT = findProjectRoot(process.cwd());
 const SETTINGS_PATH = path.join(PROJECT_ROOT, ".claude", "settings.local.json");
+const GLOBAL_SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
+const GLOBAL_VELA_HOOKS_DIR = path.join(os.homedir(), ".vela", "hooks");
 
 /**
  * Walk up from cwd to find the project root (where .vela/ lives).
@@ -540,71 +543,20 @@ function install() {
     ],
   };
 
-  // ─── Register project-local hooks ───
-  const hooksVelaDir = path.join(PROJECT_ROOT, ".vela", "hooks");
-
-  settings.hooks = settings.hooks || {};
-
-  /**
-   * Register a hook if not already registered.
-   * Idempotency: checks if command already contains velaId string.
-   */
-  function registerHook(event, velaId, command, timeout) {
-    settings.hooks[event] = settings.hooks[event] || [];
-    const already = settings.hooks[event].some((entry) => {
-      if (entry && entry.hooks && Array.isArray(entry.hooks)) {
-        return entry.hooks.some((h) => h && h.command && h.command.includes(velaId));
-      }
-      return entry && entry.command && entry.command.includes(velaId);
-    });
-    if (!already) {
-      settings.hooks[event].push({
-        hooks: [{ type: "command", command, timeout }],
-      });
-    }
-  }
-
-  // PreToolUse — gate-keeper (mode enforcement, VK-01~08)
-  registerHook("PreToolUse", "vela-gate-keeper",
-    `node ${path.join(hooksVelaDir, "vela-gate-keeper.js")}`, 10);
-
-  // PreToolUse — gate-guard (pipeline guards, VG-03~15)
-  registerHook("PreToolUse", "vela-gate-guard",
-    `node ${path.join(hooksVelaDir, "vela-gate-guard.js")}`, 10);
-
-  // Stop — block premature stop in auto-mode + session snapshot
-  registerHook("Stop", "vela-stop",
-    `node ${path.join(hooksVelaDir, "vela-stop.js")}`, 10);
-
-  // V6.1: SessionStart, PreCompact, PostCompact, PostToolUse failure/analytics hooks removed.
-  // Circuit breaking is now handled by vela-engine.js cmdRecord() (writes circuit-open.json
-  // on 5 consecutive fail/reject verdicts). PM reads pipeline state explicitly at session start.
-
-  // Migration: remove invalid _velaId keys from hook entries
-  for (const event of Object.keys(settings.hooks || {})) {
-    settings.hooks[event] = (settings.hooks[event] || []).map((entry) => {
-      if (entry && "_velaId" in entry) {
-        const { _velaId, ...rest } = entry;
-        return rest;
-      }
-      return entry;
-    });
-  }
-  // Migration: remove ToolError — not a valid Claude Code hook event type
-  if (settings.hooks && settings.hooks.ToolError) {
-    delete settings.hooks.ToolError;
-  }
-  // Migration: remove slim-out hooks (V6.1 hook reduction — failure, analytics, session-start, compact)
-  const REMOVED_HOOK_IDS = ["vela-session-start", "vela-compact", "vela-failure", "vela-analytics"];
-  for (const event of Object.keys(settings.hooks || {})) {
-    settings.hooks[event] = (settings.hooks[event] || []).filter((entry) => {
-      const str = JSON.stringify(entry);
-      return !REMOVED_HOOK_IDS.some((id) => str.includes(id));
-    });
-    if (settings.hooks[event].length === 0) delete settings.hooks[event];
+  // ─── V6.2: Hooks are now GLOBAL (registered in ~/.claude/settings.json) ───
+  // settings.local.json manages permissions + agent + statusLine only.
+  // Migration: remove any per-project hook entries from settings.local.json.
+  if (settings.hooks) {
+    delete settings.hooks;
   }
 
   writeSettings(settings);
+
+  // ─── Register global hooks ───
+  // Copies hook scripts to ~/.vela/hooks/ and registers them in ~/.claude/settings.json.
+  // Hooks self-activate only when an active Vela pipeline is found (process.cwd()).
+  const hooksVelaDir = path.join(PROJECT_ROOT, ".vela", "hooks");
+  registerGlobalHooks(hooksVelaDir);
 
   // Create state directory for session tracking (project-local)
   const stateDir = path.join(PROJECT_ROOT, ".vela", "state");
@@ -1384,12 +1336,71 @@ function readSettings() {
   }
 }
 
-function writeSettings(settings) {
-  const dir = path.dirname(SETTINGS_PATH);
+function writeSettings(settings, targetPath) {
+  const p = targetPath || SETTINGS_PATH;
+  const dir = path.dirname(p);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
   // Direct write (atomic rename fails on some WSL+Windows filesystems)
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+  fs.writeFileSync(p, JSON.stringify(settings, null, 2));
+}
+
+/**
+ * Register global hooks in ~/.claude/settings.json.
+ * Copies gate-keeper, gate-guard, stop hook scripts to ~/.vela/hooks/
+ * so they are available globally across all projects.
+ * Hooks self-activate only when an active Vela pipeline exists in cwd.
+ */
+function registerGlobalHooks(hooksSourceDir) {
+  // Deploy hook scripts to ~/.vela/hooks/
+  try {
+    fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
+    fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
+
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js"];
+    for (const file of hookFiles) {
+      const src = path.join(hooksSourceDir, file);
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, path.join(GLOBAL_VELA_HOOKS_DIR, file));
+      }
+    }
+    const sharedSrc = path.join(hooksSourceDir, "shared", "constants.js");
+    if (fs.existsSync(sharedSrc)) {
+      fs.copyFileSync(sharedSrc, path.join(GLOBAL_VELA_HOOKS_DIR, "shared", "constants.js"));
+    }
+  } catch { /* silent — hooks may already be deployed */ }
+
+  // Read existing global settings
+  let globalSettings = {};
+  try {
+    if (fs.existsSync(GLOBAL_SETTINGS_PATH)) {
+      globalSettings = JSON.parse(fs.readFileSync(GLOBAL_SETTINGS_PATH, "utf8")) || {};
+    }
+  } catch { globalSettings = {}; }
+
+  globalSettings.hooks = globalSettings.hooks || {};
+
+  // Idempotent hook registration
+  function addGlobalHook(event, id, command, timeout) {
+    globalSettings.hooks[event] = globalSettings.hooks[event] || [];
+    const already = globalSettings.hooks[event].some(
+      (e) => JSON.stringify(e).includes(id)
+    );
+    if (!already) {
+      globalSettings.hooks[event].push({
+        hooks: [{ type: "command", command, timeout }],
+      });
+    }
+  }
+
+  addGlobalHook("PreToolUse", "vela-gate-keeper",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-keeper.js")}`, 10);
+  addGlobalHook("PreToolUse", "vela-gate-guard",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
+  addGlobalHook("Stop", "vela-gate-stop",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
+
+  writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
 }

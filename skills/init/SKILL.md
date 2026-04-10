@@ -26,14 +26,16 @@ description: "⛵ Vela 환경 구축 — 프로젝트에 Vela 샌드박스 엔�
 
    > ⚠ **주의:** `skills/` 디렉토리는 복사하지 않는다.
 
-3. **훅 등록 및 에이전트 배포**
+3. **글로벌 훅 등록 및 에이전트 배포**
    ```bash
    node .vela/install.js
    node .vela/install.js verify
    ```
    install.js가 자동으로:
-   - `.claude/settings.local.json`에 훅 + permission(deny/allow) 등록
-   - `.claude/agents/` 에 PM + 역할별 에이전트 파일 배포 (vela.md, vela-researcher.md 등)
+   - `~/.vela/hooks/`에 훅 스크립트 배포 (gate-keeper, gate-guard, stop)
+   - `~/.claude/settings.json`에 전역 훅 등록 (모든 프로젝트에서 active pipeline 감지 시 자동 활성화)
+   - `.claude/settings.local.json`에 permissions, agent, statusLine 설정 (훅 미포함)
+   - `.claude/agents/`에 PM + 역할별 에이전트 파일 배포 (vela.md, vela-researcher.md 등)
    - `"agent": "vela"` 설정
    - `CLAUDE.md` 생성
    - ⛵ statusLine 등록
