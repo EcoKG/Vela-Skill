@@ -252,7 +252,6 @@ node .vela/cli/vela-engine.js record pass           # 단계 성공 기록
 node .vela/cli/vela-engine.js record reject         # 단계 실패 기록
 node .vela/cli/vela-engine.js branch                # 브랜치 생성 (branch 단계)
 node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commit 단계)
-node .vela/cli/vela-engine.js sub-transition        # execute sub-phase 전진
 node .vela/cli/vela-engine.js cancel                # 파이프라인 취소
 ```
 
@@ -317,11 +316,8 @@ refactor (Refactor) → 구조 정리, 아키텍처 정렬
 ```
 
 ```bash
-# sub-phase 확인
+# sub-phase 확인 (state에 sub_phase 필드로 노출됨)
 node .vela/cli/vela-engine.js state
-
-# sub-phase 전진
-node .vela/cli/vela-engine.js sub-transition
 ```
 
 ### 3단계 검증 — Agent 도구 기반 (V6)
@@ -535,13 +531,10 @@ PM (vela.md agent)
   ├── Agent(vela-diff-summary) → diff-summary.md
   └── Agent(vela-learning)   → learning.md
 
-Hooks (Claude Code PreToolUse/PostToolUse/SessionStart/Stop):
-  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)
-  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)
-  ├── vela-session-start.js (파이프라인 상태 주입)
-  ├── vela-stop.js          (auto 모드 중 중단 방지)
-  ├── vela-failure.js       (연속 실패 circuit breaker)
-  └── vela-analytics.js    (도구 사용 비용 추적)
+Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
+  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]
+  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)     [PreToolUse]
+  └── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
 ```
 
 ### 보안 규칙 (훅 기반)

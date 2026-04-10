@@ -201,10 +201,10 @@ PM (vela.md agent)
   ├── Agent(vela-diff-summary)  → diff-summary.md
   └── Agent(vela-learning)      → learning.md
 
-Hooks (Claude Code PreToolUse/PostToolUse/SessionStart/Stop):
-  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)
-  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)
-  └── vela-session-start.js, vela-stop.js, vela-failure.js, vela-analytics.js
+Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
+  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]
+  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)     [PreToolUse]
+  └── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
 ```
 
 ### 핵심 설계 결정
@@ -478,7 +478,6 @@ vela-engine init "설명" --scale large --auto   # Auto 모드
 vela-engine state
 vela-engine transition
 vela-engine record pass|fail
-vela-engine sub-transition
 vela-engine branch [--mode auto|prompt|none]
 vela-engine commit [--message TEXT]
 vela-engine cancel

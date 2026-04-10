@@ -76,7 +76,7 @@ if (!backend) {
 }
 
 // ─── Programmatic API — appendPaths() ───
-// Called by vela-analytics.js PostToolUse hook to collect file paths.
+// Called by role agents (researcher, executor, etc.) to collect file paths.
 // Appends to pending-paths.jsonl without touching the DB directly —
 // cmdIngest() flushes to SQLite on next CLI invocation.
 
