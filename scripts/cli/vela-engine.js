@@ -104,7 +104,7 @@ function cmdInit() {
   if (!pipelineDef) {
     return output({
       ok: false,
-      error: "Pipeline definition not found. Run vela-init first.",
+      error: "Pipeline definition not found. Run /vela:start to initialize the environment.",
     });
   }
 
