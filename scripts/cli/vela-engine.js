@@ -34,6 +34,7 @@ const VELA_DIR = path.join(CWD, ".vela");
 const ARTIFACTS_DIR = path.join(VELA_DIR, "artifacts");
 const TEMPLATES_DIR = path.join(VELA_DIR, "templates");
 const PROTECTED_BRANCHES = ["main", "master", "develop"];
+const CIRCUIT_BREAKER_THRESHOLD = 5;
 
 // ─── Command Router ───
 const args = process.argv.slice(2);
@@ -307,6 +308,14 @@ function cmdTransition() {
     });
   }
 
+  // Reset circuit state for the step we're leaving
+  const prevFailKey = `_step_failures_${state.current_step}`;
+  delete state[prevFailKey];
+  try {
+    const circuitPath = path.join(CWD, ".vela", "state", "circuit-open.json");
+    if (fs.existsSync(circuitPath)) fs.unlinkSync(circuitPath);
+  } catch { /* silent */ }
+
   // Advance to next step
   const nextStep = steps[currentIdx + 1];
   state.current_step = nextStep.id;
@@ -402,6 +411,30 @@ function cmdRecord() {
     } else if (verdictLower === "pass" || verdictLower === "approve") {
       state.auto_reject_count = 0;
     }
+  }
+
+  // Circuit breaker: track consecutive fail/reject verdicts on this step
+  // Written to circuit-open.json which VG-15 gate-guard reads to block further execution.
+  const failKey = `_step_failures_${state.current_step}`;
+  if (verdictLower === "fail" || verdictLower === "reject") {
+    state[failKey] = (state[failKey] || 0) + 1;
+    if (state[failKey] >= CIRCUIT_BREAKER_THRESHOLD) {
+      try {
+        const stateDir = path.join(CWD, ".vela", "state");
+        fs.mkdirSync(stateDir, { recursive: true });
+        writeJSON(path.join(stateDir, "circuit-open.json"), {
+          step: state.current_step,
+          count: state[failKey],
+          openAt: new Date().toISOString(),
+        });
+      } catch { /* silent */ }
+    }
+  } else if (verdictLower === "pass") {
+    state[failKey] = 0;
+    try {
+      const circuitPath = path.join(CWD, ".vela", "state", "circuit-open.json");
+      if (fs.existsSync(circuitPath)) fs.unlinkSync(circuitPath);
+    } catch { /* silent */ }
   }
 
   state.updated_at = new Date().toISOString();

@@ -572,30 +572,13 @@ function install() {
   registerHook("PreToolUse", "vela-gate-guard",
     `node ${path.join(hooksVelaDir, "vela-gate-guard.js")}`, 10);
 
-  // SessionStart — inject pipeline context at session start
-  registerHook("SessionStart", "vela-session-start",
-    `node ${path.join(hooksVelaDir, "vela-session-start.js")}`, 15);
-
-  // ToolError is not a valid Claude Code hook event.
-  // vela-failure.js is registered as PostToolUse and detects errors via tool_response.
-  registerHook("PostToolUse", "vela-failure",
-    `node ${path.join(hooksVelaDir, "vela-failure.js")}`, 5);
-
   // Stop — block premature stop in auto-mode + session snapshot
   registerHook("Stop", "vela-stop",
     `node ${path.join(hooksVelaDir, "vela-stop.js")}`, 10);
 
-  // PreCompact — save pipeline context before compaction
-  registerHook("PreCompact", "vela-compact-pre",
-    `node ${path.join(hooksVelaDir, "vela-compact.js")}`, 10);
-
-  // PostCompact — restore pipeline context after compaction
-  registerHook("PostCompact", "vela-compact-post",
-    `node ${path.join(hooksVelaDir, "vela-compact.js")}`, 10);
-
-  // PostToolUse — analytics (always observe, never block)
-  registerHook("PostToolUse", "vela-analytics",
-    `node ${path.join(hooksVelaDir, "vela-analytics.js")}`, 5);
+  // V6.1: SessionStart, PreCompact, PostCompact, PostToolUse failure/analytics hooks removed.
+  // Circuit breaking is now handled by vela-engine.js cmdRecord() (writes circuit-open.json
+  // on 5 consecutive fail/reject verdicts). PM reads pipeline state explicitly at session start.
 
   // Migration: remove invalid _velaId keys from hook entries
   for (const event of Object.keys(settings.hooks || {})) {
@@ -610,6 +593,15 @@ function install() {
   // Migration: remove ToolError — not a valid Claude Code hook event type
   if (settings.hooks && settings.hooks.ToolError) {
     delete settings.hooks.ToolError;
+  }
+  // Migration: remove slim-out hooks (V6.1 hook reduction — failure, analytics, session-start, compact)
+  const REMOVED_HOOK_IDS = ["vela-session-start", "vela-compact", "vela-failure", "vela-analytics"];
+  for (const event of Object.keys(settings.hooks || {})) {
+    settings.hooks[event] = (settings.hooks[event] || []).filter((entry) => {
+      const str = JSON.stringify(entry);
+      return !REMOVED_HOOK_IDS.some((id) => str.includes(id));
+    });
+    if (settings.hooks[event].length === 0) delete settings.hooks[event];
   }
 
   writeSettings(settings);

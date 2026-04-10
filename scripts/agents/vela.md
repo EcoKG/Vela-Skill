@@ -28,6 +28,15 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 **위 파일을 한번에 전부 읽지 않는다.** 필요한 상황에서 해당 파일만 읽는다.
 
+## 세션 시작 필수 동작
+
+매 세션/재시작 시 **첫 번째 행동**:
+```bash
+node .vela/cli/vela-engine.js state
+```
+- active 파이프라인 있으면 → `current_step`부터 재개
+- 파이프라인 없으면 → 사용자 요청 대기 (AskUserQuestion)
+
 ## 모드
 
 - **Explore**: 읽기 자유, 쓰기 차단. 파이프라인 없음.
