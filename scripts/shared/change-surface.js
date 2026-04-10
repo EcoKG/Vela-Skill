@@ -80,6 +80,11 @@ function extractTokensFromLine(line, filePath) {
   for (const ex of TOKEN_EXTRACTORS) {
     if (ex.name === "file_path") continue;
     if (ex.fileTypes && !ex.fileTypes.includes(ext)) continue;
+    // `excludeFileTypes` is the opposite of `fileTypes`: run on everything
+    // except the listed extensions. Used to scope the universal identifier
+    // extractor out of structured/data/docs files where every English word
+    // would otherwise become a false-positive identifier candidate.
+    if (ex.excludeFileTypes && ex.excludeFileTypes.includes(ext)) continue;
     for (const token of ex.extract(line)) {
       results.push({ token, type: ex.name });
     }
@@ -210,10 +215,18 @@ const TOKEN_EXTRACTORS = [
 
   // 9. Universal identifier extractor (language-agnostic)
   //    Extracts all identifier-shaped words (3+ chars) from any file.
-  //    No fileTypes filter — works on every programming language.
-  //    Language keywords are excluded to reduce false positives.
+  //    Runs on source-code files of any language. Structured-data files
+  //    (JSON/YAML/TOML/env) and documentation (Markdown) are excluded —
+  //    in those formats identifier-shaped words are natural language or
+  //    config keys, not symbol references. Running the extractor on them
+  //    produces false positives like matching "log" inside a pipeline.json
+  //    description against console.log in src/app.js.
+  //    Config keys are already covered by the dedicated "config_key"
+  //    extractor; markdown structural anchors by "doc_heading"/
+  //    "tree_item"/"markdown_link".
   {
     name: "identifier",
+    excludeFileTypes: [".json", ".yaml", ".yml", ".toml", ".env", ".md", ".mdx"],
     extract(line) {
       const identRe = /\b([a-zA-Z_]\w{2,})\b/g;
       const tokens = [];
