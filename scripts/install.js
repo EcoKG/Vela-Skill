@@ -1431,6 +1431,45 @@ function registerGlobalHooks(hooksSourceDir) {
 
   globalSettings.hooks = globalSettings.hooks || {};
 
+  // ── Heal existing duplicates from the pre-fix Stop-hook bug ──
+  // Before the idempotency fix (PR #8), every install() re-pushed the Stop
+  // hooks because the dedup key "vela-gate-stop" never matched the command
+  // string "vela-stop.js". Users who installed multiple times accumulated
+  // 2, 4, 6, 8, ... duplicate Stop hook entries. This pass removes those
+  // duplicates by keeping only the first entry whose stringified form
+  // contains a given vela hook filename.
+  function dedupVelaHooks(event) {
+    const list = globalSettings.hooks[event];
+    if (!Array.isArray(list) || list.length === 0) return 0;
+    const VELA_HOOK_FILES = [
+      "vela-gate-keeper.js",
+      "vela-gate-guard.js",
+      "vela-stop.js",
+      "vela-review-gate.js",
+    ];
+    const seen = new Set();
+    const kept = [];
+    let removed = 0;
+    for (const entry of list) {
+      const stringified = JSON.stringify(entry);
+      // Find which vela hook (if any) this entry registers. A well-formed
+      // entry matches exactly one hook filename.
+      const matchedHook = VELA_HOOK_FILES.find((f) => stringified.includes(f));
+      if (matchedHook) {
+        if (seen.has(matchedHook)) {
+          removed++;
+          continue; // duplicate — drop it
+        }
+        seen.add(matchedHook);
+      }
+      kept.push(entry);
+    }
+    globalSettings.hooks[event] = kept;
+    return removed;
+  }
+  dedupVelaHooks("PreToolUse");
+  dedupVelaHooks("Stop");
+
   // Idempotent hook registration. `id` must be a substring of the
   // stringified hook entry (we match against the hook filename). Previously
   // the Stop hook was registered with id "vela-gate-stop" while the command

@@ -350,6 +350,37 @@ assert_eq "D: PreToolUse count unchanged after 2x install" \
 assert_eq "D: Stop count unchanged after 2x install" \
   "$PRE_STOP_COUNT" "$POST_STOP_COUNT"
 
+# D2: Heal pre-existing duplicates (regression from the old idempotency bug)
+# Plant 3 extra duplicate Stop hook entries directly into settings.json
+# (mimicking what a user who installed multiple times under the buggy
+# version would see) and assert the next install() call dedups them
+# back to exactly 2.
+HOME="$FAKE_HOME" node -e "
+  const fs = require('fs');
+  const path = require('path');
+  const p = path.join(process.env.HOME, '.claude', 'settings.json');
+  const s = JSON.parse(fs.readFileSync(p, 'utf8'));
+  s.hooks = s.hooks || {};
+  s.hooks.Stop = s.hooks.Stop || [];
+  const stopCmd = 'node ' + path.join(process.env.HOME, '.vela', 'hooks', 'vela-stop.js');
+  const rgCmd   = 'node ' + path.join(process.env.HOME, '.vela', 'hooks', 'vela-review-gate.js');
+  // 3 extra stop + 2 extra review-gate duplicates = 5 extras
+  for (let i = 0; i < 3; i++) {
+    s.hooks.Stop.push({ hooks: [{ type: 'command', command: stopCmd, timeout: 10 }] });
+  }
+  for (let i = 0; i < 2; i++) {
+    s.hooks.Stop.push({ hooks: [{ type: 'command', command: rgCmd, timeout: 10 }] });
+  }
+  fs.writeFileSync(p, JSON.stringify(s, null, 2));
+"
+PRE_HEAL_STOP=$(count_global_hooks Stop)
+assert_eq "D2: planted Stop hook count (2 + 3 + 2 = 7)" "7" "$PRE_HEAL_STOP"
+
+install_js > /dev/null 2>&1 || true
+
+POST_HEAL_STOP=$(count_global_hooks Stop)
+assert_eq "D2: install() healed duplicates back to 2" "2" "$POST_HEAL_STOP"
+
 teardown
 
 # ─────────────────────────────────────────────────────────────

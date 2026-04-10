@@ -60,7 +60,16 @@ PIPE
 .vela/write-log.jsonl
 *.vela-tmp
 GI
-  (cd "$PROJECT" && git init -q && git add -A && git commit -q -m "init")
+  # Disable commit signing — inherited global commit.gpgsign=true with a
+  # broken signing hook would silently fail `git commit`, leaving the test
+  # repo dirty and the engine's init step blocking on "Working tree dirty".
+  (cd "$PROJECT" \
+    && git init -q \
+    && git config user.email "test@vela.local" \
+    && git config user.name "Vela Auto Test" \
+    && git config commit.gpgsign false \
+    && git add -A \
+    && git commit -q -m "init")
 }
 
 teardown_sandbox() {

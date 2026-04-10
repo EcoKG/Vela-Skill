@@ -36,6 +36,11 @@ mktestrepo() {
   git -C "$d" init -q
   git -C "$d" config user.email "test@test.com"
   git -C "$d" config user.name "Test"
+  # Disable commit signing — inherited global commit.gpgsign=true with a
+  # broken signing hook would silently fail every `git commit` call,
+  # leaving the test repo with no HEAD and failing every assert_pass/fail
+  # that relies on diffing against HEAD~1.
+  git -C "$d" config commit.gpgsign false
   echo "$d"
 }
 
@@ -303,6 +308,44 @@ git -C "$R" add -A && git -C "$R" commit -qm "init"
 rm "$R/lib/helper.js"
 git -C "$R" add -A && git -C "$R" commit -qm "delete helper"
 assert_exit "CLI exit 1 on broken ref" 1 "$R"
+
+# ── 17. JSON/Markdown content does NOT leak into identifier set ──
+# Regression guard: the universal `identifier` extractor used to run on
+# .json/.yaml/.md files, so a deleted JSON file containing a natural
+# word like "log" would be matched against `console.log` in a source
+# file as a broken identifier reference. The fix adds excludeFileTypes
+# to the identifier extractor — this test plants the exact failure mode
+# and asserts it now passes.
+echo ""
+echo "── Test 17: JSON/Markdown content does not leak into identifiers ──"
+R=$(mktestrepo)
+mkdir -p "$R/src"
+# Source file with a common method call that would match a JSON word
+printf 'const x = { save: () => null };\nx.save();\nconsole.log("ok");\n' > "$R/src/app.js"
+# JSON file containing English words that happen to match source identifiers
+cat > "$R/config.json" <<'JSON'
+{
+  "description": "The pipeline writes a save log and prints status.",
+  "settings": {
+    "logLevel": "info",
+    "saveInterval": 60
+  }
+}
+JSON
+# Markdown file with the same pattern
+cat > "$R/README.md" <<'MD'
+# Project
+
+The runner will save the state and log progress.
+The console can be watched for status messages.
+MD
+git -C "$R" add -A && git -C "$R" commit -qm "baseline with json + md"
+# Delete both structured files — this previously caused change-surface
+# to extract "save"/"log"/"console" from them as identifiers and flag
+# src/app.js as having broken references.
+rm "$R/config.json" "$R/README.md"
+git -C "$R" add -A && git -C "$R" commit -qm "drop config.json and README.md"
+assert_pass "JSON/Markdown deletion does not trigger false-positive identifier matches" "$R"
 
 # ── Summary ───────────────────────────────────────────────────
 echo ""

@@ -42,6 +42,12 @@ make_repo() {
   git -C "$tmp" init -b main >/dev/null 2>&1
   git -C "$tmp" config user.email "test@test.com"
   git -C "$tmp" config user.name "Test"
+  # Disable commit signing for the test repo — inherited global
+  # commit.gpgsign=true with a broken signing hook would silently fail
+  # the initial commit, leaving the repo with no HEAD and breaking
+  # every subsequent `git worktree add -b <name>` call with
+  # "No possible source branch, inferring '--orphan'".
+  git -C "$tmp" config commit.gpgsign false
   echo "init" > "$tmp/README.md"
   git -C "$tmp" add -A >/dev/null 2>&1
   git -C "$tmp" commit -m "init" >/dev/null 2>&1
