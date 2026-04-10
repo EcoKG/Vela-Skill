@@ -132,6 +132,13 @@ jobs:
         continue-on-error: true
         run: bash scripts/tests/test-sprint-manager.sh
 
+      - name: Full pipeline scenario (E2E)
+        id: s_fp
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-full-pipeline.sh 2>&1 | tee /tmp/full-pipeline.log
+          exit ${PIPESTATUS[0]}
+
       - name: Auto mode
         id: s_am
         continue-on-error: true
@@ -177,6 +184,7 @@ jobs:
             review_gate=${{ steps.s_rg.outcome }}
             engine_record=${{ steps.s_er.outcome }}
             sprint_manager=${{ steps.s_sm.outcome }}
+            full_pipeline=${{ steps.s_fp.outcome }}
             auto_mode=${{ steps.s_am.outcome }}
             change_surface=${{ steps.s_cs.outcome }}
             worktree=${{ steps.s_wm.outcome }}
@@ -194,6 +202,11 @@ jobs:
             if [ -f /tmp/change-surface.log ] && [ "${{ steps.s_cs.outcome }}" = "failure" ]; then
               printf "### change_surface — last 80 lines\n\n\`\`\`\n"
               tail -80 /tmp/change-surface.log
+              printf "\n\`\`\`\n\n"
+            fi
+            if [ -f /tmp/full-pipeline.log ] && [ "${{ steps.s_fp.outcome }}" = "failure" ]; then
+              printf "### full_pipeline — last 100 lines\n\n\`\`\`\n"
+              tail -100 /tmp/full-pipeline.log
               printf "\n\`\`\`\n\n"
             fi
           } > /tmp/comment-body.md
@@ -217,6 +230,7 @@ jobs:
             "${{ steps.s_rg.outcome }}" \
             "${{ steps.s_er.outcome }}" \
             "${{ steps.s_sm.outcome }}" \
+            "${{ steps.s_fp.outcome }}" \
             "${{ steps.s_am.outcome }}" \
             "${{ steps.s_cs.outcome }}" ; do
             if [ "$s" != "success" ] && [ "$s" != "skipped" ]; then
