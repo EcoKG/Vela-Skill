@@ -576,9 +576,8 @@ function install() {
   registerHook("SessionStart", "vela-session-start",
     `node ${path.join(hooksVelaDir, "vela-session-start.js")}`, 15);
 
-  // ToolError — failure counter + circuit breaker
-  registerHook("ToolError", "vela-failure",
-    `node ${path.join(hooksVelaDir, "vela-failure.js")}`, 5);
+  // NOTE: ToolError is not a valid Claude Code hook event — vela-failure.js
+  // is invoked via PostToolUse instead (tool errors appear in PostToolUse results).
 
   // Stop — block premature stop in auto-mode + session snapshot
   registerHook("Stop", "vela-stop",
@@ -596,7 +595,7 @@ function install() {
   registerHook("PostToolUse", "vela-analytics",
     `node ${path.join(hooksVelaDir, "vela-analytics.js")}`, 5);
 
-  // Remove invalid _velaId keys from existing hook entries (migration cleanup)
+  // Migration: remove invalid _velaId keys from hook entries
   for (const event of Object.keys(settings.hooks || {})) {
     settings.hooks[event] = (settings.hooks[event] || []).map((entry) => {
       if (entry && "_velaId" in entry) {
@@ -605,6 +604,10 @@ function install() {
       }
       return entry;
     });
+  }
+  // Migration: remove ToolError — not a valid Claude Code hook event type
+  if (settings.hooks && settings.hooks.ToolError) {
+    delete settings.hooks.ToolError;
   }
 
   writeSettings(settings);
