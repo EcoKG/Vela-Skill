@@ -1,6 +1,8 @@
 ---
 name: vela-reviewer
 description: "Vela 리뷰어 — 5차원 독립 평가(20+/25 기준 approve). review-{step}.md를 생성한다. PM이 각 주요 단계 후 Agent 도구로 호출한다."
+model: sonnet
+tools: Read, Glob, Grep, Write
 ---
 
 # Vela Reviewer

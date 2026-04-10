@@ -1,6 +1,9 @@
 ---
 name: vela-learning
 description: "Vela 학습 — 파이프라인 실행 패턴을 추출하여 learning.md와 learnings.json에 누적한다. PM이 learning 단계에서 Agent 도구로 호출한다."
+model: haiku
+tools: Read, Glob, Write
+effort: low
 ---
 
 # Vela Learning

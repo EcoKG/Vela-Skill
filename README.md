@@ -287,11 +287,14 @@ Playwright HTML→PDF로 생성. 타이틀 페이지, severity별 색상 코딩(
 
 ### 모델 선택 전략
 
-| 작업 유형 | 모델 | 역할 |
-|----------|------|------|
-| 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
-| 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer |
-| 설계/디버깅/분석 | **Opus** | Researcher, Planner |
+품질 크리티컬 단계는 Sonnet, 기계적 검사는 Haiku로 **각 에이전트 frontmatter에 고정**한다.
+공식 기본값 `inherit`에 의존하면 부모 세션의 모델(Opus 등)이 상속되어 비용 예측이 불가능해지기 때문이다.
+
+| 작업 유형 | 모델 | 역할 | 근거 |
+|----------|------|------|------|
+| 설계/구현/리뷰/검증 | **Sonnet** | Researcher, Planner, Executor, Reviewer, Verifier, Sprint-planner | 공식 *"Sonnet handles most coding tasks well"* |
+| 기계적 검사 (non-fatal) | **Haiku** (`effort: low`) | Plan-checker, Diff-summary, Learning | 공식 *"For simple subagent tasks, specify `model: haiku`"* |
+| 분석 보고서 | (사용자 선택) | Analyzer | `/vela:analyze` 커맨드에서 `--model` 로 지정 |
 
 ### 에이전트 소환 패턴 (V6)
 
@@ -302,11 +305,13 @@ V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 |------|--------------|------|
 | 프로젝트 분석 | `vela-researcher` | sonnet |
 | 구현 계획 | `vela-planner` | sonnet |
+| plan 구조 검증 | `vela-plan-checker` | haiku |
 | 코드 구현 | `vela-executor` | sonnet |
 | 품질 리뷰 | `vela-reviewer` | sonnet |
 | 테스트 검증 | `vela-verifier` | sonnet |
-| diff 분석 | `vela-diff-summary` | sonnet |
-| 학습 추출 | `vela-learning` | sonnet |
+| diff 분석 | `vela-diff-summary` | haiku |
+| 학습 추출 | `vela-learning` | haiku |
+| 스프린트 분해 | `vela-sprint-planner` | sonnet |
 
 ### 승인 메커니즘 — 파일 기반
 
@@ -559,6 +564,7 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v4.0 | M023 | SDK 오케스트레이터 Research 실패 복구 + 관찰 가능성 강화 — rw-artifact mode + artifactDir-scoped Write guard, project_mode 주입(bootstrap/targeted/exploratory), cost 보존 + denied-tools.json artifact + Turns used 로그, sdk-failure-recovery.md, pipeline-consistency invariant 테스트 |
 | v4.1 | M024 | maxTurns 상한 제거 — SDK 에이전트 자율 턴 소비, turn-config.js 삭제, 6개 SDK 모듈에서 maxTurns 코드 21곳 제거 |
 | v6.0 | M025 | **SDK 완전 제거 — 네이티브 Agent 도구 기반 재구성** — @anthropic-ai/claude-agent-sdk 의존성 제거. vela-pipeline.js/vela-sprint.js/sdk-*.js 삭제. PM(vela.md)이 Agent(subagent_type=...) 직접 오케스트레이션. 10개 역할 에이전트 파일 생성 (vela-researcher/planner/plan-checker/executor/reviewer/verifier/diff-summary/learning/sprint-planner/analyzer). VK-09 제거. install.js가 11개 에이전트를 .claude/agents/에 배포. |
+| v6.0.1 | M026 | **품질-중립 성능·비용 최적화** — 10개 에이전트 frontmatter에 `model:`/`tools:`/`effort:` 명시(Sonnet 품질 크리티컬 + Haiku 기계 검사), review-gate 기본 `validation_rounds: 3 → 1` & `steps: ["execute"]`만 재검증, 에이전트별 도구 정의 로드 축소. 모든 품질 게이트(5차원 20/25, CRITICAL 검출, plan 섹션 검증, ref_integrity, TDD 3단계) 무손상. 기존 사용자 config는 `skipOnUpgrade`로 보호. |
 
 ---
 

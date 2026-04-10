@@ -1,6 +1,8 @@
 ---
 name: vela-verifier
 description: "Vela 검증자 — 테스트 실행 + 린트/타입 체크 후 verification.md를 생성한다. PM이 verify 단계에서 Agent 도구로 호출한다."
+model: sonnet
+tools: Read, Glob, Grep, Bash, Write
 ---
 
 # Vela Verifier

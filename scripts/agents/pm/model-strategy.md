@@ -4,16 +4,16 @@ V6에서는 PM이 각 단계를 Agent 도구로 직접 실행한다. 모델 선�
 
 ## 단계별 실행 경로
 
-| 단계 | 역할 에이전트 | 권장 모델 | 특징 |
-|------|-------------|----------|------|
+| 단계 | 역할 에이전트 | 모델 | 특징 |
+|------|-------------|------|------|
 | research | `vela-researcher` | Sonnet | 아키텍처/보안/품질 3관점 분석 |
 | plan | `vela-planner` | Sonnet | 설계, Architecture/ClassSpec/TestStrategy 필수 |
-| plan-check | `vela-plan-checker` | Haiku | plan.md 구조 검증 (PASS/FAIL) |
+| plan-check | `vela-plan-checker` | Haiku (`effort: low`) | plan.md 구조 검증 (PASS/FAIL) |
 | execute | `vela-executor` | Sonnet | TDD 3단계 구현 |
 | verify | `vela-verifier` | Sonnet | 테스트/린트/타입 체크 |
 | review | `vela-reviewer` | Sonnet | 5차원 채점 (점수 ≥ 20/25 → 승인) |
-| diff-summary | `vela-diff-summary` | Sonnet | 전체 diff 통합 검토 |
-| learning | `vela-learning` | Haiku | 파이프라인 학습 축적 |
+| diff-summary | `vela-diff-summary` | Haiku (`effort: low`) | 전체 diff 통합 검토 (non-fatal) |
+| learning | `vela-learning` | Haiku (`effort: low`) | 파이프라인 학습 축적 (non-fatal) |
 | sprint-plan | `vela-sprint-planner` | Sonnet | 대규모 요청 슬라이스 분해 |
 
 ## PM 오케스트레이션 패턴
@@ -27,7 +27,7 @@ Agent(
 )
 ```
 
-모델을 직접 지정할 필요는 없다. 각 역할 에이전트가 자신의 작업에 적합한 도구와 접근 방식을 자체적으로 결정한다.
+**모델은 각 에이전트의 frontmatter(`model:`)에 고정한다.** 생략하면 공식 기본값 `inherit`가 적용되어 부모 세션의 모델(예: Opus)을 그대로 쓰므로 비용 예측이 불가능하다. 품질 크리티컬 단계(researcher/planner/executor/reviewer/verifier)는 Sonnet, 기계적 검사(plan-checker/diff-summary/learning)는 Haiku로 고정한다. Haiku 단계는 `effort: low`로 확장 사고(extended thinking)를 꺼서 추가 비용을 배제한다.
 
 ## 스케일별 단계 구성
 

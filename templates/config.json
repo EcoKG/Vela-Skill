@@ -10,8 +10,8 @@
   },
   "review_gate": {
     "enabled": true,
-    "validation_rounds": 3,
-    "steps": ["research", "execute", "plan"]
+    "validation_rounds": 1,
+    "steps": ["execute"]
   },
   "changeSurface": {
     "enabled": true,
