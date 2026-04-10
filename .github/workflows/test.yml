@@ -12,25 +12,52 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Runner diagnostics
+        run: |
+          echo "=== runner ==="
+          uname -a
+          echo "=== bash ==="
+          bash --version | head -1
+          echo "=== pwd ==="
+          pwd
+          ls -la
+          echo "=== env ==="
+          env | grep -i 'github\|runner' | head -20
+
       - uses: actions/checkout@v4
+
+      - name: Post-checkout diagnostics
+        run: |
+          echo "=== git ==="
+          git --version
+          git log -1 --oneline
+          echo "=== repo layout ==="
+          ls -la
+          ls scripts/tests/ || echo "(no tests dir)"
+          ls scripts/hooks/ || echo "(no hooks dir)"
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Node diagnostics
+        run: |
+          node --version
+          which node
 
       - name: Configure git (tests that create commits need an identity)
         run: |
           git config --global user.email "ci@vela-skill.local"
           git config --global user.name "Vela CI"
           git config --global commit.gpgsign false
-          git config --global init.defaultBranch main
 
-      - name: Syntax check — install.js & hooks
+      - name: Syntax check (install.js + hooks)
         run: |
           node --check scripts/install.js
           node --check scripts/cli/vela-engine.js
           node --check scripts/cli/vela-analyze.js
           for hook in scripts/hooks/*.js; do
+            echo "checking $hook"
             node --check "$hook"
           done
 
