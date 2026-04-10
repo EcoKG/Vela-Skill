@@ -1400,7 +1400,7 @@ function registerGlobalHooks(hooksSourceDir) {
   addGlobalHook("Stop", "vela-gate-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
   addGlobalHook("Stop", "vela-review-gate",
-    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 15);
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 10);
 
   writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
 }
