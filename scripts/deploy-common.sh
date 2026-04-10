@@ -2,8 +2,10 @@
 # ⛵ Vela Engine — Shared deploy functions
 # Sourced by install.sh and update.sh to avoid duplication.
 
-# Guard against double-sourcing
-[ -n "$_VELA_DEPLOY_COMMON_LOADED" ] && return 0
+# Guard against double-sourcing. The `:-` default prevents an unbound-variable
+# error when the parent shell has `set -u` active (e.g. a strict-mode test
+# harness sourcing this file).
+[ -n "${_VELA_DEPLOY_COMMON_LOADED:-}" ] && return 0
 _VELA_DEPLOY_COMMON_LOADED=1
 
 # ─── Shared function: sync local .vela/ project from source ───
