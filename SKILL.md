@@ -544,6 +544,8 @@ Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
 |----|------|------|
 | `vela-gate-keeper.js` | 모드별 Bash/Write/Edit 차단 | VK-01~08 |
 | `vela-gate-guard.js` | 단계 순서 강제, PM 직접 수정 차단 | VG-03~15 |
+| `vela-stop.js` | auto 모드 중 Stop 차단 | (Stop hook — 단일 규칙) |
+| `vela-review-gate.js` | APPROVE 후 N회 재검증 강제 | review_gate.validation_rounds |
 
 ---
 

@@ -2,21 +2,17 @@
 # ──────────────────────────────────────────────────────────────
 # test-s03-relaxation.sh — S03 파이프라인 완화 + 게이트 버그 수정 테스트
 #
-# Covers all T01+T02 changes:
+# Covers remaining T01+T02 changes after V6.2 cleanup:
 #   1. VG-12 standard pipeline write blocking (gate-guard)
 #   2. (removed)
 #   3. CODE_EXTENSIONS no longer includes config extensions
 #   4. vela-cost.js flat format artifact search
-#   5. vela-compact.js PreCompact vs PostCompact distinction
-#   6. vela-failure.js step transition reset
-#   7. vela-stop.js crash-safe block decision
+#   5. vela-stop.js crash-safe block decision
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GATE_GUARD="$SCRIPT_DIR/../hooks/vela-gate-guard.js"
-HOOK_COMPACT="$SCRIPT_DIR/../hooks/vela-compact.js"
-HOOK_FAILURE="$SCRIPT_DIR/../hooks/vela-failure.js"
 HOOK_STOP="$SCRIPT_DIR/../hooks/vela-stop.js"
 VELA_COST="$SCRIPT_DIR/../cli/vela-cost.js"
 CONSTANTS="$SCRIPT_DIR/../hooks/shared/constants.js"
@@ -248,148 +244,10 @@ else
 fi
 
 # ═══════════════════════════════════════════════════
-# 5. vela-compact.js PreCompact vs PostCompact
+# 5. vela-stop.js crash-safe block decision
 # ═══════════════════════════════════════════════════
 echo ""
-echo "── 5. vela-compact.js event type distinction ──"
-
-teardown_sandbox
-setup_sandbox
-create_pipeline "standard" "execute" "active"
-
-# 5a. PreCompact → should save state, produce no stdout
-PRECOMPACT_INPUT=$(cat <<EOF
-{
-  "hook_event_name": "PreCompact",
-  "cwd": "$PROJECT"
-}
-EOF
-)
-
-assert_stdout_empty "PreCompact produces no stdout" \
-  "$HOOK_COMPACT" "$PRECOMPACT_INPUT"
-
-# Verify compact-context.json was created
-TOTAL=$((TOTAL + 1))
-if [ -f "$PROJECT/.vela/state/compact-context.json" ]; then
-  echo "  ✅ PASS: PreCompact saved compact-context.json"
-  PASS=$((PASS + 1))
-else
-  echo "  ❌ FAIL: PreCompact did not save compact-context.json"
-  FAIL=$((FAIL + 1))
-fi
-
-# 5b. PostCompact → should produce additionalContext in stdout
-POSTCOMPACT_INPUT=$(cat <<EOF
-{
-  "hook_event_name": "PostCompact",
-  "cwd": "$PROJECT"
-}
-EOF
-)
-
-assert_stdout_contains "PostCompact produces additionalContext" \
-  "additionalContext" "$HOOK_COMPACT" "$POSTCOMPACT_INPUT"
-
-# ═══════════════════════════════════════════════════
-# 6. vela-failure.js step transition reset
-# ═══════════════════════════════════════════════════
-echo ""
-echo "── 6. vela-failure.js step transition counter reset ──"
-
-teardown_sandbox
-setup_sandbox
-create_pipeline "standard" "execute" "active"
-
-# 6a. Increment counter twice in 'execute' step
-FAILURE_EXECUTE=$(cat <<EOF
-{
-  "tool_name": "Bash",
-  "error": "command failed",
-  "cwd": "$PROJECT"
-}
-EOF
-)
-
-echo "$FAILURE_EXECUTE" | node "$HOOK_FAILURE" 2>/dev/null || true
-echo "$FAILURE_EXECUTE" | node "$HOOK_FAILURE" 2>/dev/null || true
-
-# Verify counter is 2 in execute step
-TOTAL=$((TOTAL + 1))
-COUNTER_VAL=$(node -e "
-  const c = require('$PROJECT/.vela/state/failure-counter.json');
-  process.stdout.write(String(c.count));
-" 2>/dev/null) || true
-
-if [ "$COUNTER_VAL" = "2" ]; then
-  echo "  ✅ PASS: failure counter is 2 after two failures in execute step"
-  PASS=$((PASS + 1))
-else
-  echo "  ❌ FAIL: expected counter=2, got=$COUNTER_VAL"
-  FAIL=$((FAIL + 1))
-fi
-
-# 6b. Change pipeline step to 'commit', send failure → counter should reset to 1
-# Update the pipeline state to change current_step
-DATE_DIR=$(ls "$PROJECT/.vela/artifacts/" | head -1)
-cat > "$PROJECT/.vela/artifacts/$DATE_DIR/pipeline-state.json" <<'EOF'
-{
-  "status": "active",
-  "pipeline_type": "standard",
-  "current_step": "commit",
-  "request": "test task",
-  "completed_steps": ["execute"],
-  "total_steps": 4,
-  "created_at": "2026-01-01T00:00:00Z",
-  "updated_at": "2026-01-01T00:30:00Z"
-}
-EOF
-
-FAILURE_COMMIT=$(cat <<EOF
-{
-  "tool_name": "Bash",
-  "error": "commit failed",
-  "cwd": "$PROJECT"
-}
-EOF
-)
-
-echo "$FAILURE_COMMIT" | node "$HOOK_FAILURE" 2>/dev/null || true
-
-TOTAL=$((TOTAL + 1))
-COUNTER_VAL2=$(node -e "
-  const c = require('$PROJECT/.vela/state/failure-counter.json');
-  process.stdout.write(String(c.count));
-" 2>/dev/null) || true
-
-if [ "$COUNTER_VAL2" = "1" ]; then
-  echo "  ✅ PASS: failure counter reset to 1 on step transition (execute→commit)"
-  PASS=$((PASS + 1))
-else
-  echo "  ❌ FAIL: expected counter=1 after step transition, got=$COUNTER_VAL2"
-  FAIL=$((FAIL + 1))
-fi
-
-# Verify step field is 'commit'
-TOTAL=$((TOTAL + 1))
-COUNTER_STEP=$(node -e "
-  const c = require('$PROJECT/.vela/state/failure-counter.json');
-  process.stdout.write(c.step || '');
-" 2>/dev/null) || true
-
-if [ "$COUNTER_STEP" = "commit" ]; then
-  echo "  ✅ PASS: failure counter step field updated to 'commit'"
-  PASS=$((PASS + 1))
-else
-  echo "  ❌ FAIL: expected step='commit', got='$COUNTER_STEP'"
-  FAIL=$((FAIL + 1))
-fi
-
-# ═══════════════════════════════════════════════════
-# 7. vela-stop.js crash-safe block decision
-# ═══════════════════════════════════════════════════
-echo ""
-echo "── 7. vela-stop.js crash safety ──"
+echo "── 5. vela-stop.js crash safety ──"
 
 # Send input with an invalid cwd to trigger an error in findActivePipeline or readConfig
 # The crash handler should catch it and output a block decision
