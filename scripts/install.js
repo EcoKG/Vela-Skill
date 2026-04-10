@@ -1253,13 +1253,12 @@ function validate() {
   }
 
   // 9. Global pollution cleanup — remove legacy vela files from ~/.claude/
-  // Valid entries: vela/ (main skill), vela-start/ vela-auto/ vela-analyze/ vela-git-clean/ vela-update/ (sub-skills)
-  // Invalid (legacy): vela-init/ (removed in V6.2), commands/vela/ (v1/v2 slash commands)
+  // Valid entries: vela/ (main skill), vela-start/ vela-analyze/ vela-git-clean/ vela-update/ (sub-skills)
+  // Invalid (legacy): vela-init/ vela-auto/ (removed in V6.2), commands/vela/ (v1/v2 slash commands)
   const HOME = process.env.HOME || process.env.USERPROFILE;
   const VALID_SUB_SKILLS = new Set([
     "vela",
     "vela-start",
-    "vela-auto",
     "vela-analyze",
     "vela-git-clean",
     "vela-update",
@@ -1358,7 +1357,7 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js"];
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1400,6 +1399,8 @@ function registerGlobalHooks(hooksSourceDir) {
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
   addGlobalHook("Stop", "vela-gate-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
+  addGlobalHook("Stop", "vela-review-gate",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 10);
 
   writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
 }

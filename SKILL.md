@@ -1,6 +1,6 @@
 ---
 name: vela
-description: "⛵ Vela 샌드박스 엔진. /vela:init 으로 환경 구축, /vela:start 로 파이프라인 시작, /vela:auto 로 무인 자동 실행, /vela:analyze 로 분석 보고서, /vela:git-clean 으로 git 정리, /vela:update 로 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, start, init, auto, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
+description: "⛵ Vela 샌드박스 엔진. /vela:start 로 파이프라인 시작, /vela:analyze 로 분석 보고서, /vela:git-clean 으로 git 정리, /vela:update 로 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, start, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
 ---
 
 # ⛵ Vela Engine v4.1 — Sandbox Development System (Enhanced Harness)
@@ -10,14 +10,7 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 ## /vela 호출 시
 
 `$ARGUMENTS`를 확인한다:
-- `$ARGUMENTS`가 `init` → `/vela:init` 절차 실행
 - `$ARGUMENTS`가 `start` 또는 `start <작업설명>` → `/vela:start` 절차 실행
-- `$ARGUMENTS`가 `auto` (인자 없음) → 활성 파이프라인이 있으면 auto 모드 토글:
-  ```bash
-  node .vela/cli/vela-engine.js auto
-  ```
-  활성 파이프라인이 없으면 `/vela:auto` 절차 실행 (새 파이프라인 시작)
-- `$ARGUMENTS`가 `auto <작업설명>` → `/vela:auto` 절차 실행
 - `$ARGUMENTS`가 `status` → 현재 파이프라인 상태를 보여준다:
   ```bash
   node .vela/cli/vela-engine.js state
@@ -44,10 +37,6 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
       {
         "label": "파이프라인 시작 (Recommended)",
         "description": "작업을 시작합니다. Vela 환경이 없으면 자동으로 구축합니다."
-      },
-      {
-        "label": "환경 구축만",
-        "description": "이 프로젝트에 Vela 환경(.vela/)을 설치합니다. 파이프라인은 시작하지 않습니다."
       }
     ],
     "multiSelect": false
@@ -56,21 +45,20 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 ```
 
 - "파이프라인 시작" → `/vela:start` 절차
-- "환경 구축만" → `/vela:init` 절차
 
 ---
 
 ## /vela:start — 파이프라인 바로 시작
 
 이 커맨드가 호출되면 Vela 파이프라인을 즉시 시작한다.
-init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프라인을 시작한다.
+`.vela/`가 없으면 자동으로 환경을 구축한 후 파이프라인을 시작한다.
 
 ### 절차
 
-1. **Vela 설치 확인 (자동 init)**
+1. **Vela 설치 확인 (자동 구축)**
    `.vela/config.json`이 존재하는지 확인한다.
    - 있으면 → 바로 2단계로
-   - 없으면 → `/vela:init` 절차를 먼저 수행한 후 2단계로 진행
+   - 없으면 → `.vela/` 환경을 자동 구축 (`curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash`) 후 2단계로 진행
 
 2. **작업 내용 수집 + 프롬프트 최적화**
    `$ARGUMENTS`가 있으면 그것을 원본 요청으로 사용한다.
@@ -109,43 +97,6 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한 후 파이프
 
 ---
 
-## /vela:auto — 자동 진행 파이프라인 (토글)
-
-`/vela auto` (또는 `/vela:auto`)는 두 가지 동작을 한다:
-
-### 1. 활성 파이프라인이 있을 때 → Auto 모드 토글
-
-이미 파이프라인이 진행 중이면 auto 모드를 켜거나 끈다:
-```bash
-node .vela/cli/vela-engine.js auto
-```
-- Auto ON → OFF: 수동 모드로 전환. 각 단계를 직접 진행해야 한다.
-- Auto OFF → ON: 자동 모드로 전환. reject 카운터가 초기화된다.
-
-### 2. 활성 파이프라인이 없을 때 → Auto 모드로 새 파이프라인 시작
-
-`/vela:start`와 동일하되 auto 플래그로 시작한다:
-
-1~3단계는 `/vela:start`와 동일.
-
-4. **파이프라인 초기화 (auto 플래그)**
-   ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large> --auto
-   ```
-
-5. **자동 진행**
-   PM이 각 단계를 Agent 도구로 실행하되, 사용자 확인 없이 자동으로 다음 단계로 전이한다.
-   - 일반 단계: 에이전트 완료 → 즉시 transition 호출
-   - checkpoint 단계: plan-check 통과 확인 → record pass → transition 호출
-
-### Auto 모드 중단 조건
-
-- `record reject`가 **2회 연속** 발생하면 auto 모드가 자동 비활성화된다.
-- Orchestrator가 `⚠ AUTO SUSPENDED` directive를 주입하여 PM에게 알린다.
-- 이후 사용자가 수동으로 개입하여 문제를 해결해야 한다.
-
----
-
 ## /vela:sprint — 멀티 슬라이스 스프린트
 
 `/vela sprint` (또는 `/vela:sprint`)은 대규모 작업을 여러 슬라이스로 분해하여 순차 실행하는 스프린트 오케스트레이션이다.
@@ -165,81 +116,6 @@ node .vela/cli/vela-engine.js auto
 | 여러 독립 기능, 복합 요청 | `/vela:sprint` — 멀티 슬라이스 스프린트 |
 
 PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 제안한다.
-
----
-
-## /vela:init — 환경 구축
-
-이 커맨드가 호출되면 현재 프로젝트에 Vela 환경을 구축한다.
-
-### 초기화 절차
-
-1. **디렉토리 구조 생성**
-   프로젝트 루트에 `.vela/` 디렉토리를 생성한다:
-   ```
-   .vela/
-   ├── config.json              ← Vela 설정
-   ├── shared/                  ← 공유 유틸리티
-   │   ├── sprint-manager.js    ← 스프린트 상태 관리 (CRUD, FSM, 큐)
-   │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
-   │   ├── change-surface.js    ← 참조 무결성 검증 (diff 기반)
-   │   ├── project-env.js       ← 프로젝트 환경 감지
-   │   └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
-   ├── cli/                     ← 커스텀 CLI 도구
-   │   ├── vela-analyze.js      ← 분석 보고서 CLI (deps/run/full/report)
-   │   ├── vela-cost.js         ← 파이프라인 비용/메트릭
-   │   ├── vela-engine.js       ← 파이프라인 상태 머신 엔진 (핵심)
-   │   └── vela-report.js       ← 파이프라인 리포트/대시보드
-   ├── agents/                  ← 역할별 에이전트 정의
-   │   ├── vela.md              ← PM 에이전트
-   │   ├── vela-researcher.md   ← 리서처 (3관점 분석)
-   │   ├── vela-planner.md      ← 플래너 (plan.md 작성)
-   │   ├── vela-executor.md     ← 실행자 (TDD 구현)
-   │   ├── vela-reviewer.md     ← 리뷰어 (5차원 평가)
-   │   ├── vela-plan-checker.md ← plan 구조 검증
-   │   ├── vela-verifier.md     ← 테스트/린트 실행
-   │   ├── vela-diff-summary.md ← diff 5차원 검토
-   │   ├── vela-learning.md     ← 학습 패턴 추출
-   │   ├── vela-sprint-planner.md ← 스프린트 슬라이스 분해
-   │   └── vela-analyzer.md     ← 코드 분석 보고
-   ├── cache/                   ← TreeNode SQLite 캐시
-   │   └── treenode.js
-   ├── templates/
-   │   └── pipeline.json        ← 파이프라인 정의
-   ├── sprints/                  ← 스프린트 상태 파일
-   └── artifacts/               ← 파이프라인 실행 산출물
-   ```
-
-2. **스크립트 배포**
-   이 스킬의 `scripts/` 디렉토리에 있는 파일들을 `.vela/`로 복사한다:
-   - `scripts/shared/*` → `.vela/shared/`
-   - `scripts/cli/*` → `.vela/cli/`
-   - `scripts/cache/*` → `.vela/cache/`
-   - `scripts/agents/*` → `.vela/agents/`
-   - `scripts/install.js` → `.vela/install.js`
-   - `templates/*` → `.vela/templates/`
-
-4. **권한 규칙 등록**
-   `.vela/install.js`를 실행하여 프로젝트-로컬 `.claude/settings.local.json`에 권한 규칙(deny/allow)을 등록한다:
-   ```bash
-   node .vela/install.js
-   ```
-
-5. **설치 검증**
-   ```bash
-   node .vela/install.js verify
-   ```
-
-6. **초기화 확인**
-   사용자에게 설치 결과를 보고한다.
-
-### 없는 도구 생성 프로토콜
-
-파이프라인 실행 중 필요한 CLI 도구가 없을 경우:
-1. 사용자에게 "이 도구가 필요합니다. 만들어도 될까요?" 질문
-2. 사용자가 승인하면 언어 선택 질문 (Node.js vs Python, 속도 기준 추천)
-3. 도구 생성 후 `.vela/cli/`에 배치
-4. 사용법을 사용자에게 안내
 
 ---
 
@@ -376,7 +252,6 @@ node .vela/cli/vela-engine.js record pass           # 단계 성공 기록
 node .vela/cli/vela-engine.js record reject         # 단계 실패 기록
 node .vela/cli/vela-engine.js branch                # 브랜치 생성 (branch 단계)
 node .vela/cli/vela-engine.js commit                # 변경사항 커밋 (commit 단계)
-node .vela/cli/vela-engine.js sub-transition        # execute sub-phase 전진
 node .vela/cli/vela-engine.js cancel                # 파이프라인 취소
 ```
 
@@ -441,11 +316,8 @@ refactor (Refactor) → 구조 정리, 아키텍처 정렬
 ```
 
 ```bash
-# sub-phase 확인
+# sub-phase 확인 (state에 sub_phase 필드로 노출됨)
 node .vela/cli/vela-engine.js state
-
-# sub-phase 전진
-node .vela/cli/vela-engine.js sub-transition
 ```
 
 ### 3단계 검증 — Agent 도구 기반 (V6)
@@ -659,13 +531,11 @@ PM (vela.md agent)
   ├── Agent(vela-diff-summary) → diff-summary.md
   └── Agent(vela-learning)   → learning.md
 
-Hooks (Claude Code PreToolUse/PostToolUse/SessionStart/Stop):
-  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)
-  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)
-  ├── vela-session-start.js (파이프라인 상태 주입)
-  ├── vela-stop.js          (auto 모드 중 중단 방지)
-  ├── vela-failure.js       (연속 실패 circuit breaker)
-  └── vela-analytics.js    (도구 사용 비용 추적)
+Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
+  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]
+  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)     [PreToolUse]
+  ├── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
+  └── vela-review-gate.js  (APPROVE 후 N회 재검증 강제)   [Stop]
 ```
 
 ### 보안 규칙 (훅 기반)

@@ -3,21 +3,16 @@
 ## vela-engine (파이프라인 엔진)
 
 ```bash
-node .vela/cli/vela-engine.js init "설명"
+node .vela/cli/vela-engine.js init "설명" [--type TYPE] [--scale SIZE] [--auto]
 node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js transition
-node .vela/cli/vela-engine.js record pass|fail
-node .vela/cli/vela-engine.js sub-transition
+node .vela/cli/vela-engine.js record pass|fail|reject
 node .vela/cli/vela-engine.js branch [--mode auto|prompt|none]
 node .vela/cli/vela-engine.js commit [--message TEXT]
 node .vela/cli/vela-engine.js cancel
 node .vela/cli/vela-engine.js history
-node .vela/cli/vela-engine.js auto                                # Auto 모드 토글 (ON↔OFF)
-node .vela/cli/vela-engine.js review                             # V6 stub — use Agent(vela-reviewer) directly
-node .vela/cli/vela-engine.js plan-check                         # V6 stub — use Agent(vela-plan-checker) directly
-node .vela/cli/vela-engine.js research                           # V6 stub — use Agent(vela-researcher) directly
-node .vela/cli/vela-engine.js execute                            # V6 stub — use Agent(vela-executor) directly
-node .vela/cli/vela-engine.js validate                           # V6 stub — use Agent(vela-verifier) directly
+node .vela/cli/vela-engine.js clean-scan
+node .vela/cli/vela-engine.js clean-exec
 ```
 
 ## V6 파이프라인 실행
@@ -48,7 +43,6 @@ PM → Agent(vela-sprint-planner) → sprint-{timestamp}.json
 ```bash
 node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (npm audit/outdated, 무료)
 node .vela/cli/vela-analyze.js report --input <file> [--output <file>]  # JSON → PDF 변환
-node .vela/cli/vela-analyze.js run --perspectives <list>  # V6 stub — use Agent(vela-analyzer) directly
 node .vela/cli/vela-analyze.js full --items <list> [--output <file>]  # 통합 분석 → PDF (deps는 CLI, 나머지는 Agent)
 
 # perspectives: security, bugs, performance, code-quality, architecture
@@ -89,3 +83,28 @@ node .vela/cli/vela-cost.js        # 파이프라인 비용 리포트
 node .vela/cli/vela-report.js                    # JSON 리포트
 node .vela/cli/vela-report.js --html report.html # HTML 대시보드
 ```
+
+## 글로벌 훅 (Stop / PreToolUse)
+
+설치 시 `~/.claude/settings.json`에 자동 등록. 모든 프로젝트에 적용되며, 활성 Vela 파이프라인이 없는 프로젝트에서는 즉시 통과.
+
+| 훅 | 이벤트 | 역할 |
+|----|--------|------|
+| `vela-gate-keeper.js` | PreToolUse | VK-01~08: 모드별 도구 제한 |
+| `vela-gate-guard.js` | PreToolUse | VG-03~15: 단계 순서 강제, 서킷 브레이커 |
+| `vela-stop.js` | Stop | Auto 모드 파이프라인 중 조기 종료 차단 |
+| `vela-review-gate.js` | Stop | APPROVE 후 N회 재검증 강제 (기본 3회) |
+
+### review_gate 설정 (.vela/config.json)
+
+```json
+"review_gate": {
+  "enabled": true,
+  "validation_rounds": 3,
+  "steps": ["research", "execute", "plan"]
+}
+```
+
+- `validation_rounds`: APPROVE 후 추가 검증 횟수 (기본 3)
+- `steps`: 재검증 적용 단계 목록
+- Gate 상태: `.vela/state/review-gate-{step}.json` (transition 시 자동 삭제)

@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 이 명령은 다음을 수행한다:
 - 글로벌 스킬 업데이트 (`~/.claude/skills/vela/`)
-- 서브스킬 플랫 설치 (`~/.claude/skills/vela-init/`, `vela-start/`, `vela-auto/`, `vela-analyze/`, `vela-git-clean/`, `vela-update/`)
+- 서브스킬 플랫 설치 (`~/.claude/skills/vela-start/`, `vela-analyze/`, `vela-git-clean/`, `vela-update/`)
 - 글로벌 npm 의존성 업데이트 (playwright, sql.js, better-sqlite3)
 - Playwright Chromium 바이너리 설치
 - **현재 워크스페이스의 `.vela/` 디렉토리를 글로벌 스킬 기준으로 재동기화**
@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash
 ```
 
-글로벌 스킬만 업데이트한다. `.vela/`를 만들어야 한다면 `/vela:init`을 먼저 실행한다.
+글로벌 스킬만 업데이트한다. `.vela/`가 필요하면 `/vela:start`를 실행하면 자동 구축된다.
 
 ### Step 3: 결과 확인 및 안내
 
@@ -58,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
    /vela:update 를 실행해서 로컬 .vela/ 도 최신화해야 합니다.
 
    현재 워크스페이스는 자동으로 업데이트되었습니다 (Case A) /
-   현재 워크스페이스에는 .vela/ 가 없습니다. 필요하면 /vela:init 을 실행하세요 (Case B).
+   현재 워크스페이스에는 .vela/ 가 없습니다. 필요하면 /vela:start 를 실행하세요 (Case B).
 ```
 
 ## 업데이트되는 파일

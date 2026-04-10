@@ -56,9 +56,9 @@ fi
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
-  # Install as independent top-level skills so /vela:init etc. appear in autocomplete
+  # Install as independent top-level skills so /vela:start etc. appear in autocomplete
   SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in init start git-clean auto analyze update; do
+  for sub in start git-clean analyze update; do
     if [ -d "$TMP/skills/$sub" ]; then
       mkdir -p "$SKILLS_ROOT/vela-$sub"
       cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"

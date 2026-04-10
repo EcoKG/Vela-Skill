@@ -33,7 +33,7 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
 ```
 
-설치 후 `/vela:init`으로 프로젝트 환경을 구축한다.
+설치 후 `/vela:start`로 파이프라인을 시작한다 (환경이 없으면 자동 구축).
 
 ### 2. 프로젝트에서 사용
 
@@ -201,10 +201,11 @@ PM (vela.md agent)
   ├── Agent(vela-diff-summary)  → diff-summary.md
   └── Agent(vela-learning)      → learning.md
 
-Hooks (Claude Code PreToolUse/PostToolUse/SessionStart/Stop):
-  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)
-  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)
-  └── vela-session-start.js, vela-stop.js, vela-failure.js, vela-analytics.js
+Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
+  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]
+  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)     [PreToolUse]
+  ├── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
+  └── vela-review-gate.js  (APPROVE 후 N회 재검증 강제)   [Stop]
 ```
 
 ### 핵심 설계 결정
@@ -440,7 +441,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   ├── cli/                   ← vela-engine, vela-cost, vela-report, vela-analyze
   │   ├── agents/                ← vela.md (PM) + 10개 역할 에이전트 (vela-researcher.md 등)
   │   │                             pm/ (pipeline-flow.md, model-strategy.md 등 서브트리)
-  │   ├── hooks/                 ← 6개 훅 (gate-keeper, gate-guard, session-start, stop, failure, analytics)
+  │   ├── hooks/                 ← 3개 훅 (gate-keeper, gate-guard, stop) — ~/.vela/hooks/에 글로벌 배포
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
   │   ├── tests/                 ← 게이트/훅 단위 테스트
@@ -449,7 +450,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   ├── templates/                 ← pipeline.json, config.json, presets.json
   └── references/                ← interactive-ui.md, gates-and-guards.md, cli-reference.md
 
-your-project/                    ← /vela init 실행 후
+your-project/                    ← /vela:start 실행 후 자동 구축
   ├── .vela/                     ← 프로젝트별 설치 (cli, shared, agents, templates 복사)
   ├── .claude/
   │   ├── settings.local.json    ← permission deny/allow + agent + spinner + statusLine
@@ -478,7 +479,6 @@ vela-engine init "설명" --scale large --auto   # Auto 모드
 vela-engine state
 vela-engine transition
 vela-engine record pass|fail
-vela-engine sub-transition
 vela-engine branch [--mode auto|prompt|none]
 vela-engine commit [--message TEXT]
 vela-engine cancel

@@ -15,7 +15,7 @@ sync_local_project() {
   mkdir -p .vela/shared
   cp "$SRC/scripts/shared/"*.js .vela/shared/ 2>/dev/null
 
-  # Hooks (project-local — gate-keeper, gate-guard, failure, compact, stop, analytics)
+  # Hooks (project-local — gate-keeper, gate-guard, failure, compact, stop, analytics, review-gate)
   mkdir -p .vela/hooks
   mkdir -p .vela/hooks/shared
   cp "$SRC/scripts/hooks/vela-gate-keeper.js" .vela/hooks/ 2>/dev/null
@@ -24,6 +24,7 @@ sync_local_project() {
   cp "$SRC/scripts/hooks/vela-compact.js" .vela/hooks/ 2>/dev/null
   cp "$SRC/scripts/hooks/vela-stop.js" .vela/hooks/ 2>/dev/null
   cp "$SRC/scripts/hooks/vela-analytics.js" .vela/hooks/ 2>/dev/null
+  cp "$SRC/scripts/hooks/vela-review-gate.js" .vela/hooks/ 2>/dev/null
   cp "$SRC/scripts/hooks/shared/constants.js" .vela/hooks/shared/ 2>/dev/null
 
   # CLI

@@ -263,7 +263,7 @@ async function main() {
     lines.push("");
     lines.push("[SYSTEM INSTRUCTION FOR CLAUDE]");
     lines.push(`활성 파이프라인이 감지되었습니다 (단계: ${pipelineResult.state.current_step}).`);
-    lines.push("작업을 계속하려면 /vela:auto 를 실행하거나 PM이 vela-engine.js state로 현재 단계를 확인하세요.");
+    lines.push("작업을 계속하려면 PM이 vela-engine.js state로 현재 단계를 확인하세요.");
     lines.push("또는 /vela:start 로 새 파이프라인을 시작하세요.");
     lines.push("[END SYSTEM INSTRUCTION]");
   }
