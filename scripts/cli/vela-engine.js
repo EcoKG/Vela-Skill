@@ -118,6 +118,15 @@ function cmdInit() {
   const pipelineType = scalesMap[scaleName] || scaleName || "standard";
 
   const steps = resolveSteps(pipelineDef, pipelineType);
+  if (!steps || steps.length === 0) {
+    return output({
+      ok: false,
+      error: `Pipeline type "${pipelineType}" is not defined in pipeline.json (or has no steps).`,
+      pipeline_type: pipelineType,
+      scale: scaleName,
+      hint: "Add a scales map to pipeline.json that routes this scale to an existing pipeline, or pass --scale <known-pipeline> explicitly.",
+    });
+  }
   const firstStep = steps[0];
 
   // Git state snapshot
@@ -1338,8 +1347,25 @@ function output(data) {
   process.stdout.write(JSON.stringify(data, null, 2));
 }
 
+// Return the Nth positional argument after the command, skipping flags.
+// Previously this was `args[index + 1]` which returned "--scale" for
+// `init --scale large "task"`, causing slugify("--scale") for the request.
+// Known boolean flags are inlined to avoid a TDZ reference (this function
+// runs at top-level load time via the command dispatch on line ~64).
 function getArg(index) {
-  return args[index + 1] || null; // +1 because args[0] is the command
+  const booleanFlags = new Set(["--auto", "--force", "--json"]);
+  const positionals = [];
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (typeof a === "string" && a.startsWith("--")) {
+      if (!booleanFlags.has(a)) {
+        i++; // consume the flag's value
+      }
+      continue;
+    }
+    positionals.push(a);
+  }
+  return positionals[index] || null;
 }
 
 function getFlag(flag) {

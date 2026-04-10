@@ -640,11 +640,14 @@ Phase 10: 신규 테스트 작성 (V10) — 별도 태스크
 
 ---
 
-## 미결 항목 (TODO)
+## 완료된 후속 작업 (2026-04-10 기준)
 
-| 항목 | 위치 | 내용 |
+| 항목 | 위치 | 상태 |
 |------|------|------|
-| deploy-common.sh 업데이트 | `scripts/deploy-common.sh` | `vela-review-gate.js` 복사 라인 추가 |
-| test-review-gate.sh 작성 | `scripts/tests/` | V2-4 케이스 자동화 |
-| test-engine-record.sh 작성 | `scripts/tests/` | V3-3 케이스 자동화 |
-| evals.json 업데이트 | `evals/evals.json` | review-gate 동작 eval 추가 |
+| deploy-common.sh에 vela-review-gate.js 복사 라인 추가 | `scripts/deploy-common.sh` | ✅ 완료 (c66e732 / 3c7671e) |
+| test-review-gate.sh 작성 (V2-4 케이스 자동화) | `scripts/tests/test-review-gate.sh` | ✅ 완료 (17/17 PASS) |
+| test-engine-record.sh 작성 (V3-3 케이스 자동화) | `scripts/tests/test-engine-record.sh` | ✅ 완료 (20/20 PASS) |
+| evals.json에 review-gate eval 추가 | `evals/evals.json` (id=3) | ✅ 완료 |
+| install.js FILE_MANIFEST에 vela-review-gate.js 추가 | `scripts/install.js` | ✅ 완료 (3c7671e) |
+| V4.1 잔재 훅 제거 (vela-failure/compact/analytics) | `scripts/hooks/` | ✅ 완료 (3c7671e) |
+| test-v6-purity.sh 확장 (evals/ 스캔 + team-dispatch 등 패턴) | `scripts/tests/test-v6-purity.sh` | ✅ 완료 |

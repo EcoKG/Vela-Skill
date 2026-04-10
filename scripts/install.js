@@ -213,14 +213,11 @@ const FILE_MANIFEST = [
     src: "scripts/guidelines/testing-strategy.md",
     dst: "guidelines/testing-strategy.md",
   },
-  // Hooks (project-local — registered in settings.local.json)
+  // Hooks (staging for registerGlobalHooks — copied to ~/.vela/hooks/ at install time)
   { src: "scripts/hooks/vela-gate-keeper.js", dst: "hooks/vela-gate-keeper.js" },
-  { src: "scripts/hooks/vela-gate-guard.js", dst: "hooks/vela-gate-guard.js" },
-  { src: "scripts/hooks/vela-session-start.js", dst: "hooks/vela-session-start.js" },
-  { src: "scripts/hooks/vela-failure.js", dst: "hooks/vela-failure.js" },
-  { src: "scripts/hooks/vela-compact.js", dst: "hooks/vela-compact.js" },
-  { src: "scripts/hooks/vela-stop.js", dst: "hooks/vela-stop.js" },
-  { src: "scripts/hooks/vela-analytics.js", dst: "hooks/vela-analytics.js" },
+  { src: "scripts/hooks/vela-gate-guard.js",  dst: "hooks/vela-gate-guard.js"  },
+  { src: "scripts/hooks/vela-stop.js",        dst: "hooks/vela-stop.js"        },
+  { src: "scripts/hooks/vela-review-gate.js", dst: "hooks/vela-review-gate.js" },
   { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
 
@@ -1347,9 +1344,9 @@ function writeSettings(settings, targetPath) {
 
 /**
  * Register global hooks in ~/.claude/settings.json.
- * Copies gate-keeper, gate-guard, stop hook scripts to ~/.vela/hooks/
- * so they are available globally across all projects.
- * Hooks self-activate only when an active Vela pipeline exists in cwd.
+ * Copies the four active V6.2 hook scripts (gate-keeper, gate-guard, stop,
+ * review-gate) to ~/.vela/hooks/ so they are available globally across all
+ * projects. Hooks self-activate only when an active Vela pipeline exists in cwd.
  */
 function registerGlobalHooks(hooksSourceDir) {
   // Deploy hook scripts to ~/.vela/hooks/

@@ -65,7 +65,7 @@
       "id": 2,
       "name": "full-pipeline",
       "prompt": "src/utils/helper.js 파일의 formatDate 함수를 리팩토링해줘. ISO 8601 형식을 지원하도록 수정해야 해.",
-      "expected_output": "전체 파이프라인 흐름을 따름: init → research → plan → execute(팀 메커니즘) → verify → finalize",
+      "expected_output": "V6 standard 파이프라인(12단계)을 순서대로 실행: init → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize. PM이 각 단계마다 Agent(subagent_type=...)로 역할 에이전트를 소환하고 vela-engine.js로 상태 전이.",
       "files": [
         {
           "path": "src/utils/helper.js",
@@ -74,22 +74,66 @@
       ],
       "assertions": [
         {
-          "name": "pipeline-followed",
-          "description": "파이프라인 단계를 순서대로 따랐는가 (init → research/plan → execute → verify)",
+          "name": "engine-state-transitions",
+          "description": "vela-engine.js의 init/state/record/transition을 사용해 파이프라인 상태를 전이시켰는가",
           "type": "behavior_check",
-          "check": "engine init, transition, team-dispatch 등 엔진 명령어 사용"
+          "check": "vela-engine.js init, vela-engine.js record pass, vela-engine.js transition 순차 호출"
         },
         {
-          "name": "team-mechanism-used",
-          "description": "Execute 단계에서 Executor + Reviewer + PM 승인 메커니즘을 사용했는가",
+          "name": "agent-orchestration",
+          "description": "PM이 Agent 도구로 역할 에이전트(researcher/planner/executor/reviewer/verifier)를 단계별로 소환했는가",
           "type": "output_contains",
-          "check": "team-dispatch|executor|reviewer|approval"
+          "check": "Agent.*vela-(researcher|planner|plan-checker|executor|reviewer|verifier|diff-summary|learning)"
+        },
+        {
+          "name": "artifacts-created",
+          "description": "각 단계의 아티팩트(research.md, plan.md, review-{step}.md 등)가 .vela/artifacts/{ts}-{slug}/에 생성되었는가",
+          "type": "behavior_check",
+          "check": "research.md, plan.md, review-research.md, review-plan.md, review-execute.md 중 최소 3개 생성"
         },
         {
           "name": "code-modified-correctly",
           "description": "formatDate가 ISO 8601을 지원하도록 수정되었는가",
           "type": "behavior_check",
           "check": "toISOString 또는 ISO 형식 패딩 적용"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "review-gate-enforcement",
+      "prompt": "src/auth/login.js에 간단한 비밀번호 검증 함수를 추가해줘.",
+      "expected_output": "research 단계에서 reviewer가 APPROVE를 반환해도 vela-review-gate.js Stop 훅이 기본 3회 재검증을 강제함. PM은 vela-reviewer를 총 3회(또는 config의 validation_rounds 만큼) 연속 호출해야 transition 가능.",
+      "files": [
+        {
+          "path": "src/auth/login.js",
+          "content": "module.exports = { login: (user, pass) => null };"
+        }
+      ],
+      "assertions": [
+        {
+          "name": "review-gate-activated",
+          "description": "research 또는 execute 단계 APPROVE 후 review-gate가 Stop 훅에서 재검증 요구 블록을 출력했는가",
+          "type": "output_contains",
+          "check": "VELA REVIEW GATE|재검증 [0-9]/[0-9]"
+        },
+        {
+          "name": "review-gate-state-file",
+          "description": ".vela/state/review-gate-{step}.json 상태 파일이 생성되고 count가 증가했는가",
+          "type": "file_exists",
+          "check": ".vela/state/review-gate-research.json 또는 review-gate-execute.json"
+        },
+        {
+          "name": "multiple-reviewer-invocations",
+          "description": "PM이 동일 단계에 대해 vela-reviewer를 여러 번(>=2) 소환했는가",
+          "type": "output_contains",
+          "check": "Agent.*vela-reviewer.*Agent.*vela-reviewer"
+        },
+        {
+          "name": "gate-reset-on-transition",
+          "description": "transition 성공 후 review-gate-{step}.json이 삭제되었는가",
+          "type": "behavior_check",
+          "check": "transition 이후 해당 단계의 review-gate 상태 파일 부재"
         }
       ]
     }

@@ -441,7 +441,7 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   │   ├── cli/                   ← vela-engine, vela-cost, vela-report, vela-analyze
   │   ├── agents/                ← vela.md (PM) + 10개 역할 에이전트 (vela-researcher.md 등)
   │   │                             pm/ (pipeline-flow.md, model-strategy.md 등 서브트리)
-  │   ├── hooks/                 ← 3개 훅 (gate-keeper, gate-guard, stop) — ~/.vela/hooks/에 글로벌 배포
+  │   ├── hooks/                 ← 4개 훅 (gate-keeper, gate-guard, stop, review-gate) — ~/.vela/hooks/에 글로벌 배포
   │   ├── cache/                 ← TreeNode SQLite
   │   ├── guidelines/            ← coding-standards, error-handling, testing-strategy
   │   ├── tests/                 ← 게이트/훅 단위 테스트

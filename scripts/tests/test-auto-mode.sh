@@ -27,9 +27,16 @@ setup_sandbox() {
   mkdir -p "$PROJECT/.vela/artifacts"
   mkdir -p "$PROJECT/.vela/templates"
 
-  # pipeline.json — standard pipeline with checkpoint step
+  # pipeline.json — standard pipeline with checkpoint step.
+  # scales map routes every autoDetectScale() output to "standard" so the
+  # test doesn't care about request word count.
   cat > "$PROJECT/.vela/templates/pipeline.json" <<'PIPE'
 {
+  "scales": {
+    "small": "standard",
+    "medium": "standard",
+    "large": "standard"
+  },
   "pipelines": {
     "standard": {
       "steps": [
