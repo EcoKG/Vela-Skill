@@ -24,6 +24,7 @@ SEARCH_DIRS=(
   "$ROOT/scripts/hooks"
   "$ROOT/scripts/shared"
   "$ROOT/scripts/cli"
+  "$ROOT/evals"
 )
 
 # V4.1 금지 패턴 (정규식)
@@ -40,10 +41,16 @@ declare -A PATTERNS=(
   ["vela-pipeline run"]="vela-pipeline\.js.*run"
   ["vela-wave.js ref"]="vela-wave\.js"
   ["vela-sprint.js ref"]="vela-sprint\.js"
+  ["team-dispatch cmd"]="team-dispatch"
+  ["sub-transition cmd"]="sub-transition"
+  ["wave-execute cmd"]="wave-execute"
+  ["cmdAuto"]="cmdAuto"
+  ["cmdDispatch"]="cmdDispatch"
+  ["cmdSubTransition"]="cmdSubTransition"
 )
 
 # 허용 예외 패턴 (이 문자열이 같은 줄에 있으면 무시)
-ALLOW_PATTERNS="제거되었다\|V6에서 제거\|REMOVED\|삭제\|removed\|was removed\|V4\.1이었음\|V4\.1에서\|V4\.1 concept\|제거됨\|더 이상\|not used\|no longer\|이 파일은.*제거\|사용하지 않는다\|불가\|사용 안\|쓰지 않는다\|존재하지 않는다\|V4\.1 ARCHIVED\|test-v6-purity\|| v[0-9]\.[0-9]"
+ALLOW_PATTERNS="제거되었다\|V6에서 제거\|REMOVED\|삭제\|removed\|was removed\|V4\.1이었음\|V4\.1에서\|V4\.1 concept\|제거됨\|더 이상\|not used\|no longer\|이 파일은.*제거\|사용하지 않는다\|불가\|사용 안\|쓰지 않는다\|존재하지 않는다\|V4\.1 ARCHIVED\|test-v6-purity\|validation-plan\.md\|| v[0-9]\.[0-9]"
 
 echo "=== Vela V6 순수성 검사 ==="
 echo "검사 대상: ${#SEARCH_DIRS[@]}개 경로"
@@ -53,7 +60,7 @@ for label in "${!PATTERNS[@]}"; do
   pattern="${PATTERNS[$label]}"
 
   # 대상 파일에서 패턴 검색, 예외 줄 제외
-  matches=$(grep -rn --include="*.md" --include="*.js" --include="*.sh" \
+  matches=$(grep -rn --include="*.md" --include="*.js" --include="*.sh" --include="*.json" \
     -E "$pattern" \
     "${SEARCH_DIRS[@]}" 2>/dev/null \
     | grep -v "$ALLOW_PATTERNS" \
