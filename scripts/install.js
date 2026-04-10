@@ -776,14 +776,68 @@ function uninstall() {
 
   writeSettings(settings);
 
+  // ── Also remove Vela hooks from the GLOBAL ~/.claude/settings.json ──
+  // registerGlobalHooks writes there during install, so uninstall must
+  // mirror that cleanup. Previously uninstall only touched the project
+  // settings.local.json, leaving the 4 global hooks firing on every
+  // Claude Code session in every project after a user "uninstalled".
+  let removedGlobalHooks = 0;
+  try {
+    if (fs.existsSync(GLOBAL_SETTINGS_PATH)) {
+      const globalSettings = JSON.parse(
+        fs.readFileSync(GLOBAL_SETTINGS_PATH, "utf-8"),
+      );
+      if (globalSettings.hooks) {
+        for (const event of Object.keys(globalSettings.hooks)) {
+          const before = globalSettings.hooks[event].length;
+          globalSettings.hooks[event] = globalSettings.hooks[event].filter(
+            (entry) => {
+              if (entry && entry._velaId && entry._velaId.startsWith(HOOK_PREFIX))
+                return false;
+              if (entry && entry.hooks && Array.isArray(entry.hooks)) {
+                return !entry.hooks.some(
+                  (h) =>
+                    h &&
+                    h.command &&
+                    (h.command.includes(HOOK_PREFIX) ||
+                      h.command.includes(GLOBAL_VELA_HOOKS_DIR)),
+                );
+              }
+              if (
+                entry &&
+                entry.command &&
+                (entry.command.includes(HOOK_PREFIX) ||
+                  entry.command.includes(GLOBAL_VELA_HOOKS_DIR))
+              ) {
+                return false;
+              }
+              return true;
+            },
+          );
+          removedGlobalHooks += before - globalSettings.hooks[event].length;
+          if (globalSettings.hooks[event].length === 0) {
+            delete globalSettings.hooks[event];
+          }
+        }
+        if (Object.keys(globalSettings.hooks).length === 0) {
+          delete globalSettings.hooks;
+        }
+      }
+      writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
+    }
+  } catch (e) {
+    // Non-fatal — uninstall should still report success for the local part.
+  }
+
   console.log(
     JSON.stringify(
       {
         ok: true,
         command: "uninstall",
         removed_hooks: removedHooks,
+        removed_global_hooks: removedGlobalHooks,
         removed_permissions: removedPerms,
-        message: `Removed ${removedHooks} hooks + ${removedPerms} permission rules.`,
+        message: `Removed ${removedHooks} local + ${removedGlobalHooks} global hooks + ${removedPerms} permission rules.`,
       },
       null,
       2,
@@ -1377,7 +1431,12 @@ function registerGlobalHooks(hooksSourceDir) {
 
   globalSettings.hooks = globalSettings.hooks || {};
 
-  // Idempotent hook registration
+  // Idempotent hook registration. `id` must be a substring of the
+  // stringified hook entry (we match against the hook filename). Previously
+  // the Stop hook was registered with id "vela-gate-stop" while the command
+  // referenced "vela-stop.js" — the includes() check never matched so every
+  // install re-pushed the Stop hooks, growing ~/.claude/settings.json on
+  // every run.
   function addGlobalHook(event, id, command, timeout) {
     globalSettings.hooks[event] = globalSettings.hooks[event] || [];
     const already = globalSettings.hooks[event].some(
@@ -1390,11 +1449,13 @@ function registerGlobalHooks(hooksSourceDir) {
     }
   }
 
+  // IDs match the hook filename basename (without .js) so the stringified
+  // command always contains the id.
   addGlobalHook("PreToolUse", "vela-gate-keeper",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-keeper.js")}`, 10);
   addGlobalHook("PreToolUse", "vela-gate-guard",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
-  addGlobalHook("Stop", "vela-gate-stop",
+  addGlobalHook("Stop", "vela-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
   addGlobalHook("Stop", "vela-review-gate",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 10);

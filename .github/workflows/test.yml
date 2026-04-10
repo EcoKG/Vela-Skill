@@ -139,6 +139,13 @@ jobs:
           bash scripts/tests/test-full-pipeline.sh 2>&1 | tee /tmp/full-pipeline.log
           exit ${PIPESTATUS[0]}
 
+      - name: Install flow (E2E deploy/upgrade/uninstall)
+        id: s_if
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-install-flow.sh 2>&1 | tee /tmp/install-flow.log
+          exit ${PIPESTATUS[0]}
+
       - name: Auto mode
         id: s_am
         continue-on-error: true
@@ -185,6 +192,7 @@ jobs:
             engine_record=${{ steps.s_er.outcome }}
             sprint_manager=${{ steps.s_sm.outcome }}
             full_pipeline=${{ steps.s_fp.outcome }}
+            install_flow=${{ steps.s_if.outcome }}
             auto_mode=${{ steps.s_am.outcome }}
             change_surface=${{ steps.s_cs.outcome }}
             worktree=${{ steps.s_wm.outcome }}
@@ -209,6 +217,11 @@ jobs:
               tail -100 /tmp/full-pipeline.log
               printf "\n\`\`\`\n\n"
             fi
+            if [ -f /tmp/install-flow.log ] && [ "${{ steps.s_if.outcome }}" = "failure" ]; then
+              printf "### install_flow — last 100 lines\n\n\`\`\`\n"
+              tail -100 /tmp/install-flow.log
+              printf "\n\`\`\`\n\n"
+            fi
           } > /tmp/comment-body.md
           gh pr comment "$PR" --repo "$REPO" --body-file /tmp/comment-body.md
 
@@ -231,6 +244,7 @@ jobs:
             "${{ steps.s_er.outcome }}" \
             "${{ steps.s_sm.outcome }}" \
             "${{ steps.s_fp.outcome }}" \
+            "${{ steps.s_if.outcome }}" \
             "${{ steps.s_am.outcome }}" \
             "${{ steps.s_cs.outcome }}" ; do
             if [ "$s" != "success" ] && [ "$s" != "skipped" ]; then
