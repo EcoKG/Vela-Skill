@@ -3,21 +3,16 @@
 ## vela-engine (파이프라인 엔진)
 
 ```bash
-node .vela/cli/vela-engine.js init "설명"
+node .vela/cli/vela-engine.js init "설명" [--type TYPE] [--scale SIZE] [--auto]
 node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js transition
-node .vela/cli/vela-engine.js record pass|fail
-node .vela/cli/vela-engine.js sub-transition
+node .vela/cli/vela-engine.js record pass|fail|reject
 node .vela/cli/vela-engine.js branch [--mode auto|prompt|none]
 node .vela/cli/vela-engine.js commit [--message TEXT]
 node .vela/cli/vela-engine.js cancel
 node .vela/cli/vela-engine.js history
-node .vela/cli/vela-engine.js auto                                # Auto 모드 토글 (ON↔OFF)
-node .vela/cli/vela-engine.js review                             # V6 stub — use Agent(vela-reviewer) directly
-node .vela/cli/vela-engine.js plan-check                         # V6 stub — use Agent(vela-plan-checker) directly
-node .vela/cli/vela-engine.js research                           # V6 stub — use Agent(vela-researcher) directly
-node .vela/cli/vela-engine.js execute                            # V6 stub — use Agent(vela-executor) directly
-node .vela/cli/vela-engine.js validate                           # V6 stub — use Agent(vela-verifier) directly
+node .vela/cli/vela-engine.js clean-scan
+node .vela/cli/vela-engine.js clean-exec
 ```
 
 ## V6 파이프라인 실행
@@ -48,7 +43,6 @@ PM → Agent(vela-sprint-planner) → sprint-{timestamp}.json
 ```bash
 node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (npm audit/outdated, 무료)
 node .vela/cli/vela-analyze.js report --input <file> [--output <file>]  # JSON → PDF 변환
-node .vela/cli/vela-analyze.js run --perspectives <list>  # V6 stub — use Agent(vela-analyzer) directly
 node .vela/cli/vela-analyze.js full --items <list> [--output <file>]  # 통합 분석 → PDF (deps는 CLI, 나머지는 Agent)
 
 # perspectives: security, bugs, performance, code-quality, architecture

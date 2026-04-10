@@ -6,18 +6,16 @@
  * All state transitions happen through this CLI, never by direct file edits.
  *
  * Commands:
- *   init <request> [--type TYPE]  — Start a new pipeline
- *   state                                          — Show current pipeline state
- *   transition                                     — Advance to the next step
- *   dispatch [--role ROLE]                         — Get agent specification
- *   record <verdict> [--summary TEXT]              — Record step result
- *   sub-transition                                 — Advance TDD sub-phase
- *   branch [--mode auto|prompt|none]               — Create feature branch
- *   commit [--message TEXT]                        — Commit changes
- *   cancel                                         — Cancel active pipeline
- *   review                                         — V6 stub (use Agent vela-reviewer)
- *   wave-execute                                   — V6 stub (use Agent vela-executor)
- *   validate                                       — V6 stub (use Agent vela-verifier)
+ *   init <request> [--type TYPE] [--scale SIZE] [--auto]  — Start a new pipeline
+ *   state                         — Show current pipeline state
+ *   transition                    — Advance to the next step (with circuit-breaker reset)
+ *   record <verdict>              — Record step result (pass|fail|reject); circuit-breaker on fail
+ *   branch [--mode auto|prompt|none]  — Create feature branch
+ *   commit [--message TEXT]       — Commit changes
+ *   cancel                        — Cancel active pipeline
+ *   history                       — Show pipeline history
+ *   clean-scan                    — Scan git workspace (dry-run)
+ *   clean-exec                    — Execute git workspace cleanup
  *
  * V6: PM orchestrates via Agent(subagent_type=...) directly.
  * Approval tracked via file artifacts (approval-{step}.json).

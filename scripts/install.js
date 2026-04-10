@@ -1253,13 +1253,12 @@ function validate() {
   }
 
   // 9. Global pollution cleanup — remove legacy vela files from ~/.claude/
-  // Valid entries: vela/ (main skill), vela-start/ vela-auto/ vela-analyze/ vela-git-clean/ vela-update/ (sub-skills)
-  // Invalid (legacy): vela-init/ (removed in V6.2), commands/vela/ (v1/v2 slash commands)
+  // Valid entries: vela/ (main skill), vela-start/ vela-analyze/ vela-git-clean/ vela-update/ (sub-skills)
+  // Invalid (legacy): vela-init/ vela-auto/ (removed in V6.2), commands/vela/ (v1/v2 slash commands)
   const HOME = process.env.HOME || process.env.USERPROFILE;
   const VALID_SUB_SKILLS = new Set([
     "vela",
     "vela-start",
-    "vela-auto",
     "vela-analyze",
     "vela-git-clean",
     "vela-update",
