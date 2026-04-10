@@ -199,7 +199,11 @@ async function main() {
     }
 
     if (mode === "write") {
-      // Bash entirely blocked in write mode
+      // Vela CLI commands are always allowed — PM needs them for state transitions
+      if (/node\s+.*\.vela\/cli\/vela-[a-z-]+\.js/.test(cmd)) {
+        process.exit(0);
+      }
+      // All other Bash blocked in write mode (VK-02)
       process.exit(2);
     }
 

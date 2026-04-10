@@ -105,7 +105,7 @@ const SECRET_PATTERNS = [
 // Bash commands that are safe in read-only mode
 // Includes: basic read utilities, version checks, git read-only, and standard build/test/lint runners
 const SAFE_BASH_READ =
-  /^\s*(ls|cat|head|tail|find|grep|rg|wc|file|stat|tree|pwd|echo|which|node\s+.*--version|python3?\s+--version|git\s+(status|log|diff|branch|show|blame|remote|ls-files|ls-tree|rev-parse|describe|tag|config\s+--get)|(npm|yarn|pnpm)\s+(run\s+)?(test|build|lint|check|typecheck)|npx\s+(jest|vitest|eslint|prettier|tsc)|cargo\s+(test|build|check|clippy|fmt)|go\s+(test|build|vet)|pytest|python3?\s+-m\s+(pytest|unittest)|tsc|make|dotnet\s+(test|build))\b/;
+  /^\s*(ls|cat|head|tail|find|grep|rg|wc|file|stat|tree|pwd|echo|which|node\s+.*--version|node\s+.*\.vela\/cli\/vela-[a-z-]+\.js|python3?\s+--version|git\s+(status|log|diff|branch|show|blame|remote|ls-files|ls-tree|rev-parse|describe|tag|config\s+--get)|(npm|yarn|pnpm)\s+(run\s+)?(test|build|lint|check|typecheck)|npx\s+(jest|vitest|eslint|prettier|tsc)|cargo\s+(test|build|check|clippy|fmt)|go\s+(test|build|vet)|pytest|python3?\s+-m\s+(pytest|unittest)|tsc|make|dotnet\s+(test|build))\b/;
 
 // Bash commands that write files
 const BASH_WRITE_PATTERNS = [
