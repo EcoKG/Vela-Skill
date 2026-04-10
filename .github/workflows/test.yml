@@ -10,10 +10,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Runner diagnostics
+        id: s_runner
+        continue-on-error: true
         run: |
+          set +e
           echo "=== runner ==="
           uname -a
           echo "=== bash ==="
@@ -23,36 +29,56 @@ jobs:
           ls -la
           echo "=== env ==="
           env | grep -i 'github\|runner' | head -20
+          echo "STEP_OK"
 
-      - uses: actions/checkout@v4
+      - name: Checkout
+        id: s_checkout
+        continue-on-error: true
+        uses: actions/checkout@v4
 
       - name: Post-checkout diagnostics
+        id: s_postcheckout
+        continue-on-error: true
         run: |
+          set +e
           echo "=== git ==="
           git --version
-          git log -1 --oneline
+          git log -1 --oneline 2>&1 || echo "(git log failed)"
           echo "=== repo layout ==="
-          ls -la
-          ls scripts/tests/ || echo "(no tests dir)"
-          ls scripts/hooks/ || echo "(no hooks dir)"
+          ls -la || echo "(ls failed)"
+          ls scripts/tests/ 2>&1 || echo "(no tests dir)"
+          ls scripts/hooks/ 2>&1 || echo "(no hooks dir)"
+          echo "STEP_OK"
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        id: s_node_setup
+        continue-on-error: true
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Node diagnostics
+        id: s_node
+        continue-on-error: true
         run: |
-          node --version
-          which node
+          set +e
+          node --version 2>&1 || echo "(node missing)"
+          which node 2>&1 || echo "(node not in PATH)"
+          echo "STEP_OK"
 
-      - name: Configure git (tests that create commits need an identity)
+      - name: Configure git
+        id: s_gitconfig
+        continue-on-error: true
         run: |
           git config --global user.email "ci@vela-skill.local"
           git config --global user.name "Vela CI"
           git config --global commit.gpgsign false
 
-      - name: Syntax check (install.js + hooks)
+      - name: Syntax check
+        id: s_syntax
+        continue-on-error: true
         run: |
+          set -e
           node --check scripts/install.js
           node --check scripts/cli/vela-engine.js
           node --check scripts/cli/vela-analyze.js
@@ -61,41 +87,119 @@ jobs:
             node --check "$hook"
           done
 
-      - name: V6 purity (V4.1 residue detector)
+      - name: V6 purity
+        id: s_purity
+        continue-on-error: true
         run: bash scripts/tests/test-v6-purity.sh
 
-      - name: Gate Keeper (VK-01~08)
+      - name: Gate Keeper
+        id: s_gk
+        continue-on-error: true
         run: bash scripts/tests/test-gate-keeper.sh
 
-      - name: Gate VK-07 (PM speed-read)
+      - name: Gate VK-07
+        id: s_vk07
+        continue-on-error: true
         run: bash scripts/tests/test-gate-vk07.sh
 
-      - name: Chain operators (VK-08)
+      - name: Chain operators
+        id: s_chain
+        continue-on-error: true
         run: bash scripts/tests/test-chain-operators.sh
 
-      - name: Fail-closed hook behavior
+      - name: Fail-closed
+        id: s_fc
+        continue-on-error: true
         run: bash scripts/tests/test-fail-closed.sh
 
-      - name: S03 relaxation (VG-13 + cost + stop)
+      - name: S03 relaxation
+        id: s_s03
+        continue-on-error: true
         run: bash scripts/tests/test-s03-relaxation.sh
 
-      - name: Review Gate (vela-review-gate.js — V2-4)
+      - name: Review Gate
+        id: s_rg
+        continue-on-error: true
         run: bash scripts/tests/test-review-gate.sh
 
-      - name: Engine record (circuit breaker + auto + revisions)
+      - name: Engine record
+        id: s_er
+        continue-on-error: true
         run: bash scripts/tests/test-engine-record.sh
 
       - name: Sprint manager
+        id: s_sm
+        continue-on-error: true
         run: bash scripts/tests/test-sprint-manager.sh
 
       - name: Auto mode
+        id: s_am
+        continue-on-error: true
         run: bash scripts/tests/test-auto-mode.sh
 
-      - name: Change surface (reference integrity)
+      - name: Change surface
+        id: s_cs
+        continue-on-error: true
         run: bash scripts/tests/test-change-surface.sh
 
-      # Known-flaky: 2 of 10 cases fail on main (worktree collision + non-vela listing).
-      # Tracked separately. Allowed to fail so it doesn't block unrelated PRs.
       - name: Worktree manager (known-flaky, non-blocking)
+        id: s_wm
         continue-on-error: true
         run: bash scripts/tests/test-worktree-manager.sh
+
+      - name: Post per-step outcome summary as PR comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTCOMES: |
+            runner=${{ steps.s_runner.outcome }}
+            checkout=${{ steps.s_checkout.outcome }}
+            postcheckout=${{ steps.s_postcheckout.outcome }}
+            node_setup=${{ steps.s_node_setup.outcome }}
+            node=${{ steps.s_node.outcome }}
+            gitconfig=${{ steps.s_gitconfig.outcome }}
+            syntax=${{ steps.s_syntax.outcome }}
+            purity=${{ steps.s_purity.outcome }}
+            gate_keeper=${{ steps.s_gk.outcome }}
+            vk07=${{ steps.s_vk07.outcome }}
+            chain=${{ steps.s_chain.outcome }}
+            fail_closed=${{ steps.s_fc.outcome }}
+            s03=${{ steps.s_s03.outcome }}
+            review_gate=${{ steps.s_rg.outcome }}
+            engine_record=${{ steps.s_er.outcome }}
+            sprint_manager=${{ steps.s_sm.outcome }}
+            auto_mode=${{ steps.s_am.outcome }}
+            change_surface=${{ steps.s_cs.outcome }}
+            worktree=${{ steps.s_wm.outcome }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          RUN="${{ github.run_id }}"
+          BODY=$(printf "## CI step outcomes (run %s)\n\n\`\`\`\n%s\n\`\`\`\n" "$RUN" "$OUTCOMES")
+          gh pr comment "$PR" --repo "$REPO" --body "$BODY"
+
+      - name: Fail job if any required step failed
+        if: always()
+        run: |
+          FAIL=0
+          for s in \
+            "${{ steps.s_runner.outcome }}" \
+            "${{ steps.s_checkout.outcome }}" \
+            "${{ steps.s_node_setup.outcome }}" \
+            "${{ steps.s_syntax.outcome }}" \
+            "${{ steps.s_purity.outcome }}" \
+            "${{ steps.s_gk.outcome }}" \
+            "${{ steps.s_vk07.outcome }}" \
+            "${{ steps.s_chain.outcome }}" \
+            "${{ steps.s_fc.outcome }}" \
+            "${{ steps.s_s03.outcome }}" \
+            "${{ steps.s_rg.outcome }}" \
+            "${{ steps.s_er.outcome }}" \
+            "${{ steps.s_sm.outcome }}" \
+            "${{ steps.s_am.outcome }}" \
+            "${{ steps.s_cs.outcome }}" ; do
+            if [ "$s" != "success" ] && [ "$s" != "skipped" ]; then
+              FAIL=1
+            fi
+          done
+          exit $FAIL
