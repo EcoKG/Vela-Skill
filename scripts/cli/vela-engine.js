@@ -118,6 +118,15 @@ function cmdInit() {
   const pipelineType = scalesMap[scaleName] || scaleName || "standard";
 
   const steps = resolveSteps(pipelineDef, pipelineType);
+  if (!steps || steps.length === 0) {
+    return output({
+      ok: false,
+      error: `Pipeline type "${pipelineType}" is not defined in pipeline.json (or has no steps).`,
+      pipeline_type: pipelineType,
+      scale: scaleName,
+      hint: "Add a scales map to pipeline.json that routes this scale to an existing pipeline, or pass --scale <known-pipeline> explicitly.",
+    });
+  }
   const firstStep = steps[0];
 
   // Git state snapshot
