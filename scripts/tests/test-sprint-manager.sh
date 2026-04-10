@@ -23,7 +23,6 @@ TOTAL=0
 
 # ─── Setup temp sprint directory ───
 
-ORIG_SPRINTS_DIR=""
 TMP_DIR=$(mktemp -d)
 TMP_SPRINTS="$TMP_DIR/.vela/sprints"
 mkdir -p "$TMP_SPRINTS"
