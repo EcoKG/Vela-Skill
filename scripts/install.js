@@ -547,12 +547,11 @@ function install() {
 
   /**
    * Register a hook if not already registered.
-   * Uses _velaId as idempotency key so re-running install is safe.
+   * Idempotency: checks if command already contains velaId string.
    */
   function registerHook(event, velaId, command, timeout) {
     settings.hooks[event] = settings.hooks[event] || [];
     const already = settings.hooks[event].some((entry) => {
-      if (entry._velaId === velaId) return true;
       if (entry && entry.hooks && Array.isArray(entry.hooks)) {
         return entry.hooks.some((h) => h && h.command && h.command.includes(velaId));
       }
@@ -560,7 +559,6 @@ function install() {
     });
     if (!already) {
       settings.hooks[event].push({
-        _velaId: velaId,
         hooks: [{ type: "command", command, timeout }],
       });
     }
@@ -597,6 +595,17 @@ function install() {
   // PostToolUse — analytics (always observe, never block)
   registerHook("PostToolUse", "vela-analytics",
     `node ${path.join(hooksVelaDir, "vela-analytics.js")}`, 5);
+
+  // Remove invalid _velaId keys from existing hook entries (migration cleanup)
+  for (const event of Object.keys(settings.hooks || {})) {
+    settings.hooks[event] = (settings.hooks[event] || []).map((entry) => {
+      if (entry && "_velaId" in entry) {
+        const { _velaId, ...rest } = entry;
+        return rest;
+      }
+      return entry;
+    });
+  }
 
   writeSettings(settings);
 
