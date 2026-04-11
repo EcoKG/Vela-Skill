@@ -489,7 +489,7 @@ done <<< "$MANIFEST_SRCS"
 echo ""
 echo "📋 Category L: deploy-common.sh deploys every scripts/shared/*.js"
 
-SHARED_FILES=$(find "$REPO_ROOT/scripts/shared" -maxdepth 1 -name "*.js" -type f 2>/dev/null | xargs -n1 basename 2>/dev/null)
+SHARED_FILES=$(find "$REPO_ROOT/scripts/shared" -maxdepth 1 -name "*.js" -type f -exec basename {} \; 2>/dev/null)
 
 # Check if the deploy script uses a glob
 if grep -Eq "scripts/shared/[\"']?\*\.js" "$DEPLOY_COMMON" 2>/dev/null; then
