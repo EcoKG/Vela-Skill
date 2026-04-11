@@ -124,9 +124,15 @@ jobs:
           #   SC2016  — single quotes for node -e heredocs
           #   SC1091  — not following sourced files (deploy-common.sh)
           #   SC2155  — declare+assign on same line is readable for short locals
+          #   SC2164  — `cd "$x"` without `|| exit`. v7.1 added many such
+          #             calls inside `( cd … ; cmd )` subshells where a
+          #             failed cd is already constrained by the subshell,
+          #             and inside test sandboxes where a missing $PROJECT
+          #             path is itself a test failure that surfaces in the
+          #             assertion rather than silently running in cwd.
           shellcheck \
             --severity=warning \
-            --exclude=SC2086,SC2016,SC1091,SC2155 \
+            --exclude=SC2086,SC2016,SC1091,SC2155,SC2164 \
             scripts/tests/*.sh \
             scripts/deploy-common.sh \
             install.sh \
