@@ -91,6 +91,8 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
   { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
   { src: "scripts/shared/change-surface.js", dst: "shared/change-surface.js" },
+  // v6.1 Universal Locate (used by vela-engine locate command)
+  { src: "scripts/shared/locate.js", dst: "shared/locate.js" },
   // Environment detection (used by session-start hook)
   { src: "scripts/shared/project-env.js", dst: "shared/project-env.js" },
   // CLI tools (V6 — no SDK orchestrators)
