@@ -254,7 +254,11 @@ function _rgSearchImpl(token, options) {
   const excludePaths = options.excludePaths || DEFAULT_EXCLUDE_PATHS;
   const maxCount = options.maxCount || 50;
   const wordFlag = options.wordBoundary !== false ? "--word-regexp" : "";
-  const excludeArgs = excludePaths.map((p) => `--glob '!${p}'`).join(" ");
+  // For each exclude path, emit BOTH the exact match and the subtree match
+  // so files and directories are both handled uniformly.
+  const excludeArgs = excludePaths
+    .flatMap((p) => [`--glob '!${p}'`, `--glob '!${p}/**'`])
+    .join(" ");
 
   // Escape regex metacharacters when word-boundary mode (which uses regex)
   const escapedToken =
@@ -295,8 +299,11 @@ function _gitGrepSearchImpl(token, options) {
   const maxCount = options.maxCount || 50;
 
   // git grep pathspec exclusion: ":(exclude)pattern"
+  // Emit both exact + subtree forms so single files and directories both
+  // get excluded (e.g. "scripts/tests/test-locate.sh" is a file; the "/**"
+  // form alone would never match).
   const excludeArgs = excludePaths
-    .map((p) => `':(exclude)${p}/**'`)
+    .flatMap((p) => [`':(exclude)${p}'`, `':(exclude)${p}/**'`])
     .join(" ");
 
   // git grep flags:

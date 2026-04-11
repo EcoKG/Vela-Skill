@@ -50,11 +50,15 @@ assert_contains() {
 
 # Run locate() and emit a single line: confidence|count|first_file
 # Stable JSON parsing avoids quoting nightmares in bash.
+# We exclude this test file itself from the grep scope so fixture identifiers
+# (like `cmdBranch` mentioned in assertions below) don't self-match.
 run_locate() {
   local request="$1"
   (cd "$REPO_ROOT" && node -e "
-    const { locate } = require('$LOCATE');
-    const r = locate(process.argv[1]);
+    const { locate, DEFAULT_EXCLUDE_PATHS } = require('$LOCATE');
+    const r = locate(process.argv[1], {
+      excludePaths: [...DEFAULT_EXCLUDE_PATHS, 'scripts/tests/test-locate.sh'],
+    });
     const first = r.primary[0] ? r.primary[0].file : '';
     process.stdout.write(r.confidence + '|' + r.primary.length + '|' + first);
   " -- "$request" 2>/dev/null)
@@ -129,7 +133,7 @@ assert_contains "quoted identifier captured" "snapshotGitState/quoted" "$TOKENS"
 echo ""
 echo "📋 Phase 3: locate() against live Vela-Skill repo"
 
-RESULT=$(run_locate "vela-engine.js의 cmdInit 함수에 검증 추가")
+RESULT=$(run_locate "vela-engine.js의 cmdBranch 함수에 검증 추가")
 assert_eq "T1 confidence=high" "high" "$(echo "$RESULT" | cut -d'|' -f1)"
 assert_eq "T1 primary count=1" "1" "$(echo "$RESULT" | cut -d'|' -f2)"
 assert_eq "T1 first file=vela-engine.js" "scripts/cli/vela-engine.js" "$(echo "$RESULT" | cut -d'|' -f3)"

@@ -47,6 +47,7 @@ const commands = {
   commit: cmdCommit,
   cancel: cmdCancel,
   history: cmdHistory,
+  locate: cmdLocate,
   "clean-scan": cmdCleanScan,
   "clean-exec": cmdCleanExec,
 };
@@ -635,6 +636,125 @@ function cmdCommit() {
   });
 }
 
+/**
+ * cmdLocate — Mechanical Locate (v6.1)
+ *
+ * Runs scripts/shared/locate.js against the active pipeline's request and
+ * writes {artifactDir}/targets.json. LLM-free: deterministic grep + git
+ * ls-files. Used by every scale's locate step (small/medium/large/ralph/hotfix)
+ * to give downstream agents a precise file:line target list.
+ *
+ * Flags:
+ *   --request "..."   Override the request (defaults to active pipeline's request)
+ *   --json            Print the full targets.json to stdout (default: summary)
+ *
+ * Exit gates that depend on this:
+ *   - targets_json_exists  (added in checkExitGate)
+ */
+function cmdLocate() {
+  // Resolve target dir + request
+  const requestOverride = getFlag("--request");
+  const state = findActiveState();
+  let artifactDir;
+  let request;
+
+  if (requestOverride) {
+    request = requestOverride;
+    // When called outside an active pipeline, write to a temp inspection dir
+    artifactDir =
+      (state && state._artifactDir) || path.join(VELA_DIR, "locate-preview");
+    if (!fs.existsSync(artifactDir)) {
+      fs.mkdirSync(artifactDir, { recursive: true });
+    }
+  } else {
+    if (!state) {
+      return output({
+        ok: false,
+        error:
+          "No active pipeline. Pass --request \"...\" to locate without a pipeline.",
+      });
+    }
+    request = state.request;
+    artifactDir = state._artifactDir;
+  }
+
+  // Lazy-load locate module — keeps engine startup fast for other commands
+  let locateMod;
+  try {
+    // Project-local copy first (post-install layout: .vela/shared/locate.js),
+    // fall back to source layout for tests and dev runs.
+    const candidates = [
+      path.join(CWD, ".vela", "shared", "locate.js"),
+      path.join(__dirname, "..", "shared", "locate.js"),
+    ];
+    let resolved = null;
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        resolved = c;
+        break;
+      }
+    }
+    if (!resolved) {
+      return output({
+        ok: false,
+        error:
+          "locate.js not found. Run `node scripts/install.js` to deploy shared modules.",
+      });
+    }
+    locateMod = require(resolved);
+  } catch (e) {
+    return output({ ok: false, error: `Failed to load locate.js: ${e.message}` });
+  }
+
+  // Run locate
+  let result;
+  try {
+    result = locateMod.locate(request, { cwd: CWD });
+  } catch (e) {
+    return output({ ok: false, error: `locate() failed: ${e.message}` });
+  }
+
+  // Write targets.json
+  const targetsPath = path.join(artifactDir, "targets.json");
+  try {
+    writeJSON(targetsPath, result);
+  } catch (e) {
+    return output({
+      ok: false,
+      error: `Failed to write targets.json: ${e.message}`,
+      targets_path: targetsPath,
+    });
+  }
+
+  // Output summary (or full JSON if --json)
+  if (hasFlag("--json")) {
+    return output({
+      ok: true,
+      command: "locate",
+      targets_path: targetsPath,
+      ...result,
+    });
+  }
+
+  output({
+    ok: true,
+    command: "locate",
+    targets_path: targetsPath,
+    confidence: result.confidence,
+    primary_count: result.primary.length,
+    primary: result.primary.slice(0, 10).map((p) => ({
+      file: p.file,
+      symbol: p.symbol,
+      lines: p.lines,
+      match_source: p.match_source,
+    })),
+    tests_count: result.tests.length,
+    blast_radius_count: result.blast_radius.length,
+    warnings: result.warnings,
+    backend: locateMod.searchBackend(),
+  });
+}
+
 function cmdCancel() {
   const state = findActiveState();
   if (!state) {
@@ -1101,6 +1221,15 @@ function checkExitGate(stepDef, state) {
         if (
           !artifactDir ||
           !fs.existsSync(path.join(artifactDir, "research.md"))
+        )
+          missing.push(gate);
+        break;
+      case "targets_json_exists":
+        // v6.1 universal locate gate — every pipeline scale's `locate` step
+        // produces this artifact via `vela-engine locate`
+        if (
+          !artifactDir ||
+          !fs.existsSync(path.join(artifactDir, "targets.json"))
         )
           missing.push(gate);
         break;
