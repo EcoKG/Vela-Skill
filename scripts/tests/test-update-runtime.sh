@@ -213,7 +213,7 @@ assert_eq \
 echo ""
 echo "📋 Phase 3: re-running update.sh is idempotent"
 
-UPDATE_OUT2=$(HOME="$TMP_HOME" bash "$REPO_ROOT/update.sh" 2>&1)
+HOME="$TMP_HOME" bash "$REPO_ROOT/update.sh" >/dev/null 2>&1
 ACTUAL_COUNT2=$(find "$SKILLS_ROOT" -maxdepth 1 -type d -name 'vela-*' 2>/dev/null | wc -l)
 assert_eq \
   "second run: vela-* count unchanged" \
@@ -230,7 +230,7 @@ echo "📋 Phase 4: stale cleanup removes orphaned vela-*"
 mkdir -p "$SKILLS_ROOT/vela-deadskill"
 echo "stale" > "$SKILLS_ROOT/vela-deadskill/SKILL.md"
 
-UPDATE_OUT3=$(HOME="$TMP_HOME" bash "$REPO_ROOT/update.sh" 2>&1)
+HOME="$TMP_HOME" bash "$REPO_ROOT/update.sh" >/dev/null 2>&1
 
 if [ ! -d "$SKILLS_ROOT/vela-deadskill" ]; then
   assert_eq "vela-deadskill removed by stale cleanup" "ok" "ok"
