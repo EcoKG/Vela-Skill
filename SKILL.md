@@ -3,7 +3,7 @@ name: vela
 description: "⛵ Vela 샌드박스 엔진. /vela:start 로 파이프라인 시작, /vela:analyze 로 분석 보고서, /vela:git-clean 으로 git 정리, /vela:update 로 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, start, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
 ---
 
-# ⛵ Vela Engine v4.1 — Sandbox Development System (Enhanced Harness)
+# ⛵ Vela Engine v6.0 — Sandbox Development System (Enhanced Harness)
 
 Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 
@@ -443,24 +443,30 @@ node .vela/cli/vela-engine.js commit --message "custom message"
 
 ## 에이전트 모델 선택
 
+**모델은 각 에이전트의 frontmatter(`model:`)에 고정한다.** 생략 시 공식 기본값 `inherit`가 적용되어 부모 세션 모델(Opus 등)을 그대로 쓰므로 비용 예측이 불가능하다. 품질 크리티컬 경로는 Sonnet, 기계적·non-fatal 단계는 Haiku + `effort: low`.
+
 | 작업 유형 | 모델 | 역할 |
 |----------|------|------|
-| 파일 탐색/검색 | **Haiku** | 탐색 전용 subagent |
-| 코드 구현/리뷰 | **Sonnet** | Executor, Reviewer, Conflict Manager |
-| 설계/디버깅/분석 | **Opus** | Researcher, Planner |
+| 설계·구현·리뷰·검증 | **Sonnet** | Researcher, Planner, Executor, Reviewer, Verifier, Sprint-planner |
+| 기계적 검사 (non-fatal) | **Haiku** (`effort: low`) | Plan-checker, Diff-summary, Learning |
+| 분석 보고서 | 사용자 선택 | `/vela:analyze --model {haiku\|sonnet\|opus}` |
 
 ## 에이전트 소환 패턴 (V6)
 
 PM은 `Agent(subagent_type="vela-{role}")` 단일 호출로 역할 에이전트를 소환한다.
 V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 
-| 작업 | subagent_type | model 파라미터 |
-|------|--------------|---------------|
-| 프로젝트 분석 | `vela-researcher` | `"sonnet"` |
-| 구현 계획 | `vela-planner` | `"sonnet"` |
-| 코드 구현 | `vela-executor` | `"sonnet"` |
-| 품질 리뷰 | `vela-reviewer` | `"sonnet"` |
-| 테스트 검증 | `vela-verifier` | `"sonnet"` |
+| 작업 | subagent_type | 고정 모델 |
+|------|--------------|----------|
+| 프로젝트 분석 | `vela-researcher` | `sonnet` |
+| 구현 계획 | `vela-planner` | `sonnet` |
+| plan 구조 검증 | `vela-plan-checker` | `haiku` |
+| 코드 구현 | `vela-executor` | `sonnet` |
+| 품질 리뷰 | `vela-reviewer` | `sonnet` |
+| 테스트 검증 | `vela-verifier` | `sonnet` |
+| diff 요약 | `vela-diff-summary` | `haiku` |
+| 학습 추출 | `vela-learning` | `haiku` |
+| 스프린트 분해 | `vela-sprint-planner` | `sonnet` |
 
 ### 에이전트 소환 예시
 

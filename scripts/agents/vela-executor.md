@@ -1,6 +1,8 @@
 ---
 name: vela-executor
 description: "Vela 실행자 — TDD 방식(test-write→implement→refactor)으로 plan.md를 구현한다. PM이 execute 단계에서 Agent 도구로 호출한다."
+model: sonnet
+tools: Read, Glob, Grep, Write, Edit, NotebookEdit, Bash
 ---
 
 # Vela Executor

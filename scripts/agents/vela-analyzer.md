@@ -1,6 +1,7 @@
 ---
 name: vela-analyzer
 description: "Vela 분석기 — /vela:analyze용 코드 품질/보안/버그/성능/아키텍처 분석. PM이 analyze 커맨드에서 Agent 도구로 호출한다."
+tools: Read, Glob, Grep, Bash, Write
 ---
 
 # Vela Analyzer

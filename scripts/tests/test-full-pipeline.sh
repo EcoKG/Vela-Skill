@@ -66,6 +66,22 @@ setup_sandbox() {
   # reads the same config.
   cp "$CONFIG_JSON" "$PROJECT/.vela/config.json"
 
+  # This test specifically verifies the 3-round review-gate cycle across
+  # research/plan/execute. Force those values regardless of whatever the
+  # shipped template default is — the template default is a product
+  # decision, but the scenario asserts the mechanism works when rounds=3.
+  node -e "
+    const fs = require('fs');
+    for (const p of ['$PROJECT/.vela/config.json', '$PROJECT/.vela/templates/config.json']) {
+      const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+      cfg.review_gate = cfg.review_gate || {};
+      cfg.review_gate.enabled = true;
+      cfg.review_gate.validation_rounds = 3;
+      cfg.review_gate.steps = ['research', 'execute', 'plan'];
+      fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+    }
+  "
+
   # Realistic source file we're going to refactor
   cat > "$PROJECT/src/utils/helper.js" <<'JS'
 function formatDate(date) {

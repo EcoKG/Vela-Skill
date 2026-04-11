@@ -36,8 +36,14 @@ const fs = require("fs");
 const path = require("path");
 
 // ─── Defaults ────────────────────────────────────────────────
-const DEFAULT_ROUNDS = 3;
-const DEFAULT_STEPS = ["research", "execute", "plan"];
+// Conservative defaults: one confirming re-validation on the execute step only.
+// Execute is the single step where executor→reviewer drift actually occurs
+// (generated code vs. quality judgment), so one extra review is worth the cost.
+// Research/plan re-validation yields diminishing returns — the primary review
+// already enforces CRITICAL detection and 20/25 scoring. Users who want stricter
+// verification can set review_gate.validation_rounds + steps in .vela/config.json.
+const DEFAULT_ROUNDS = 1;
+const DEFAULT_STEPS = ["execute"];
 
 // ─── Helpers ─────────────────────────────────────────────────
 

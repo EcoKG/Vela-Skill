@@ -1,6 +1,9 @@
 ---
 name: vela-diff-summary
 description: "Vela diff 요약 — verify 통과 후 전체 diff를 5차원으로 통합 검토하여 diff-summary.md를 생성한다. PM이 diff-summary 단계에서 Agent 도구로 호출한다."
+model: haiku
+tools: Read, Glob, Grep, Bash, Write
+effort: low
 ---
 
 # Vela Diff Summary

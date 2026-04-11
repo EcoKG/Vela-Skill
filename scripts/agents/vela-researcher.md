@@ -1,6 +1,8 @@
 ---
 name: vela-researcher
 description: "Vela 리서처 — 코드베이스 3관점(아키텍처/보안/품질) 분석 후 research.md를 생성한다. PM이 research 단계에서 Agent 도구로 호출한다."
+model: sonnet
+tools: Read, Glob, Grep, WebSearch, WebFetch, Write
 ---
 
 # Vela Researcher

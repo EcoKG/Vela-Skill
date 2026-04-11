@@ -1,6 +1,8 @@
 ---
 name: vela-sprint-planner
 description: "Vela 스프린트 플래너 — 대규모 요청을 의존성 그래프 기반 슬라이스로 분해하여 sprint-plan.json을 생성한다. PM이 /vela:sprint에서 Agent 도구로 호출한다."
+model: sonnet
+tools: Read, Glob, Grep, Write
 ---
 
 # Vela Sprint Planner

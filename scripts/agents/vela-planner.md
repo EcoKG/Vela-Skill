@@ -1,6 +1,8 @@
 ---
 name: vela-planner
 description: "Vela 플래너 — research.md를 기반으로 plan.md를 작성한다. Architecture/ClassSpec/TestStrategy 섹션 필수. PM이 plan 단계에서 Agent 도구로 호출한다."
+model: sonnet
+tools: Read, Glob, Grep, Write
 ---
 
 # Vela Planner

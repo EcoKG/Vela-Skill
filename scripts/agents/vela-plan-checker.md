@@ -1,6 +1,9 @@
 ---
 name: vela-plan-checker
 description: "Vela plan 검증기 — plan.md의 필수 섹션(Architecture/ClassSpec/TestStrategy) 존재 여부와 최소 길이를 검증한다. PM이 plan-check 단계에서 Agent 도구로 호출한다."
+model: haiku
+tools: Read, Glob, Write
+effort: low
 ---
 
 # Vela Plan Checker
