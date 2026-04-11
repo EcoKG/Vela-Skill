@@ -4,7 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # Trigger on PRs targeting main OR any claude/** branch.
+    # Stacking PRs (PR-onto-PR) need the second form — without it the
+    # CI only runs when a PR is rebased onto main, which defeats the
+    # whole point of review-before-merge for stacked changes.
+    branches:
+      - main
+      - 'claude/**'
   workflow_dispatch:
     inputs:
       debug:
