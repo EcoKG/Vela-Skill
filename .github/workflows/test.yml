@@ -277,6 +277,13 @@ jobs:
           bash scripts/tests/test-surgical-pipeline.sh 2>&1 | tee /tmp/surgical-pipeline.log
           exit ${PIPESTATUS[0]}
 
+      - name: PM coverage static check (v7.0.1)
+        id: s_pmc
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-pm-coverage.sh 2>&1 | tee /tmp/pm-coverage.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -310,6 +317,7 @@ jobs:
           R_LOC: ${{ steps.s_loc.outcome }}
           R_LOCB: ${{ steps.s_locb.outcome }}
           R_SUR: ${{ steps.s_sur.outcome }}
+          R_PMC: ${{ steps.s_pmc.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -340,6 +348,7 @@ jobs:
           Unit: locate (v6.1)	${R_LOC}	/tmp/locate.log
           Bench: locate accuracy (v6.1, non-blocking)	${R_LOCB}	/tmp/locate-bench.log
           E2E: surgical pipeline (v7.0 skeleton)	${R_SUR}	/tmp/surgical-pipeline.log
+          Static: PM coverage (v7.0.1)	${R_PMC}	/tmp/pm-coverage.log
           EOF
 
           PASS=0

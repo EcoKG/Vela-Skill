@@ -26,15 +26,18 @@ node .vela/cli/vela-engine.js state
 
 ## 파이프라인 티어 — 작업 규모별
 
-모든 scale은 `locate` 단계를 공통으로 갖는다 (v6.1 Universal Locate — LLM 0, 결정론적).
+모든 파이프라인은 `locate` 단계를 공통으로 갖는다 (v6.1 Universal Locate — LLM 0, 결정론적).
 
-| 요청 규모 | scale | pipeline_type | 단계 흐름 |
-|-----------|-------|---------------|-----------|
-| ≤ 10 단어 | small | trivial | init → **locate** → execute → commit → finalize |
-| 11~30 단어 | medium | quick | init → **locate** → plan → execute → verify → commit → finalize |
-| > 30 단어 | large | standard | init → **locate** → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize |
-| --scale ralph | ralph | ralph | init → **locate** → execute ↔ verify (최대 10회) → commit → finalize |
-| --scale hotfix | hotfix | hotfix | init → **locate** → execute → commit |
+| 슬래시 명령 | pipeline_type | 단계 흐름 |
+|---|---|---|
+| `/vela:fix` **(v7.0 기본 추천)** | surgical | init → **locate** → research(targeted) → **spec** → **patch** → verify → commit → finalize |
+| `/vela:small` | trivial | init → **locate** → execute → commit → finalize |
+| `/vela:medium` | quick | init → **locate** → plan → execute → verify → commit → finalize |
+| `/vela:large` | standard | init → **locate** → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize |
+| `/vela:ralph` | ralph | init → **locate** → execute ↔ verify (최대 10회) → commit → finalize |
+| `/vela:hotfix` | hotfix | init → **locate** → execute → commit |
+
+**v7.0 surgical (`/vela:fix`)이 일상 작업의 기본 추천**이다. research(targeted)로 좁은 범위 분석 후 spec 단계에서 결정론적 patch 명세를 작성하고, patch 단계에서 정확히 그 명세만 적용한다. verifier가 out-of-scope 위반을 catch하므로 scope creep이 구조적으로 차단된다.
 
 ---
 
@@ -128,10 +131,52 @@ Agent(subagent_type="vela-executor", prompt={
 → max_revisions(5) 소진 시 AskUserQuestion
 ```
 
+### spec (v7.0 surgical 파이프라인 전용)
+
+```
+Agent(subagent_type="vela-planner", prompt={
+  request, artifactDir,
+  mode: "spec",                                ← plan 모드 대신 spec 분기
+  targetsPath: "{artifactDir}/targets.json",   ← 필수 (primary 파일이 spec 범위)
+  researchPath: "{artifactDir}/research.md"    ← 필수 (caller/pattern/risk 컨텍스트)
+})
+→ Agent(subagent_type="vela-reviewer", prompt={step:"spec", artifactDir, targetPath:"patch-spec.md"})
+→ APPROVE: record pass → transition
+→ REJECT: review-spec.md의 CRITICAL을 planner(mode:spec)에 재주입 → 재시도 (max_revisions=3)
+```
+
+특이사항:
+- `patch-spec.md`는 **`## Before`, `## After`, `## Explicitly out of scope` 세 섹션 필수** (engine의 `patch_spec_complete` exit gate가 검증)
+- targets confidence가 `low`이면 spec은 의미 없음 — PM이 `/vela:large` exploratory로 에스컬레이션 제안
+- planner가 `mode: spec`으로 호출되면 기존 plan.md 대신 patch-spec.md를 작성한다 (두 파일 동시 작성 금지)
+
+### patch (v7.0 surgical 파이프라인 전용)
+
+```
+Agent(subagent_type="vela-executor", prompt={
+  request, artifactDir,
+  targetsPath: "{artifactDir}/targets.json",   ← primary[]만 수정 허용
+  specPath: "{artifactDir}/patch-spec.md",     ← plan.md 대신 spec을 권위 source로 사용
+  [reviewFeedback]
+})
+→ Agent(subagent_type="vela-reviewer", prompt={step:"patch", artifactDir})
+→ APPROVE: record pass → transition
+→ REJECT: review-patch.md의 이슈를 reviewFeedback으로 주입 → executor 재호출 (max_revisions=5)
+```
+
+특이사항:
+- executor는 `specPath`가 주입되면 patch-spec.md의 `Before/After` 섹션에 명시된 변경만 수행한다
+- `Explicitly out of scope`에 있는 파일은 *읽기*는 가능하지만 *쓰기*는 금지
+- `targets.primary[]` 외 파일 수정 시 verifier의 Phase 4.5 out-of-scope 검사에서 FAIL
+- `implementation_complete` exit gate는 `approval-patch.json`을 동적으로 해석 (engine v7.0 generalization)
+
 ### verify
 
 ```
-Agent(subagent_type="vela-verifier", prompt={artifactDir, projectEnv})
+Agent(subagent_type="vela-verifier", prompt={artifactDir, projectEnv,
+  targetsPath: "{artifactDir}/targets.json",     ← v6.1
+  specPath: "{artifactDir}/patch-spec.md"        ← v7.0 surgical 전용, 그 외 생략
+})
 → verification.md 읽어 PASS/FAIL 확인
 → PASS: record pass → transition
 → FAIL: 실패 내용을 executor에게 주입 → execute 재시도 (ralph 모드: 최대 10회)

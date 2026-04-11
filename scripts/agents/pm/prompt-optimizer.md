@@ -93,9 +93,9 @@ Reflection 출력 후 `.vela/references/interactive-ui.md`의 **"프롬프트 �
 
 ---
 
-## 5단계: Scale Mismatch Guard (v6.1) — 반드시 실행
+## 5단계: Scale Mismatch Guard (v6.1+ / v7.0 확장) — 반드시 실행
 
-사용자가 선택한 scale(`/vela:small`, `/vela:medium`, `/vela:large`, `/vela:ralph`, `/vela:hotfix`)과 실제 작업 무게가 명백히 어긋나면, **제안만** 띄워 사용자에게 변경 기회를 준다. 자동 변경은 절대 금지 — 사용자 의도 존중이 최우선이다.
+사용자가 선택한 scale(`/vela:fix`, `/vela:small`, `/vela:medium`, `/vela:large`, `/vela:ralph`, `/vela:hotfix`)과 실제 작업 무게가 명백히 어긋나면, **제안만** 띄워 사용자에게 변경 기회를 준다. 자동 변경은 절대 금지 — 사용자 의도 존중이 최우선이다.
 
 ### 설계 원칙
 
@@ -105,6 +105,9 @@ Reflection 출력 후 `.vela/references/interactive-ui.md`의 **"프롬프트 �
 4. **약한 신호 무시** — 노이즈 방지.
 5. **ralph/hotfix는 점검 대상 제외** — 의도가 매우 specific한 경우라 제안 없이 사용자 선택 존중.
 6. **`.vela/config.json`의 `scale_guard.enabled: false`로 옵트아웃 가능** — 설정이 꺼져 있으면 이 단계를 스킵한다.
+7. **(v7.0) fix ↔ large 변환** — `/vela:fix`는 targets가 명확한 일상 작업에 최적. 다음 두 경우에만 large 제안:
+   - upgrade 키워드가 매우 강하게 감지됨 (bootstrap / 신규 모듈 / 시스템 전체 재설계)
+   - locate confidence가 low로 예측됨 (모호한 프롬프트, 좌표 없음)
 
 ### Heuristic 신호 리스트
 
@@ -140,11 +143,14 @@ Reflection 출력 후 `.vela/references/interactive-ui.md`의 **"프롬프트 �
 
 | 사용자 선택 | downgrade ≥2 | upgrade ≥2 | 신호 부족 |
 |---|---|---|---|
-| `/vela:small` | — | medium 또는 large 제안 | 그대로 |
-| `/vela:medium` | small 제안 | large 제안 | 그대로 |
-| `/vela:large` | small 또는 medium 제안 | — | 그대로 |
+| `/vela:small` | — | medium 또는 fix 제안 | 그대로 |
+| `/vela:medium` | small 제안 | fix 또는 large 제안 | 그대로 |
+| `/vela:fix` (v7.0) | small 제안 | large 제안 (bootstrap/refactor/모호할 때) | 그대로 |
+| `/vela:large` | small 또는 fix 제안 (대부분의 명확한 작업에서) | — | 그대로 |
 | `/vela:ralph` | (점검 제외) | (점검 제외) | 그대로 |
 | `/vela:hotfix` | (점검 제외) | (점검 제외) | 그대로 |
+
+**v7.0 이후 `/vela:fix`가 일상 작업의 기본 추천이다.** 사용자가 `/vela:large`를 호출했는데 작업이 명확한 target을 가지고 있다면 `fix`로 제안 (research exploratory → targeted 전환으로 ~80% 비용 절감).
 
 ### AskUserQuestion — Scale 점검 제안
 

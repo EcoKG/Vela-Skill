@@ -68,3 +68,33 @@ Guard(VG-14): 시크릿 패턴 감지 → BLOCKED
   ↓
 PM: 차단 감지 → .vela/agents/pm/block-recovery.md 참조 → 올바른 복구 경로 실행
 ```
+
+---
+
+## 엔진 Exit Gate — transition 차단
+
+`vela-engine.js`의 `checkExitGate()`가 단계 전이 시점에 검증하는 산출물 gate. 실패하면 `transition`이 차단되고 `missing` 리스트가 반환된다. Gate Keeper/Gate Guard와 달리 **산출물 기반 정적 검증**이다.
+
+| Gate 이름 | 검증 내용 | 사용 단계 |
+|---|---|---|
+| `artifact_dir_created` | `{artifactDir}/`가 생성되었는가 | init |
+| `git_clean` | working tree가 clean인가 (init 시점) | init |
+| `research_md_exists` | `research.md`가 생성되었는가 | research |
+| `plan_md_exists` | `plan.md`가 생성되었는가 | plan |
+| `plan_architecture_complete` | plan.md에 `## Architecture / ## Class Specification / ## Test Strategy` 섹션 각 200 bytes 이상 | plan (standard/quick) |
+| `plan_check_pass` | `plan-check.md` 생성 | plan-check (standard) |
+| `user_approved` | checkpoint 단계에서 사용자 record 완료 | checkpoint |
+| `branch_created` | git branch 생성 기록 | branch |
+| `implementation_complete` | **동적 해석** — `approval-{current_step}.json`에 `decision: approve` (v7.0 일반화: execute/patch 공용) | execute, patch |
+| `review_exists` | `review-{current_step}.md`가 존재하는가 | execute, patch, spec |
+| `approval_exists` | `approval-{current_step}.json`에 `decision: approve` | research, plan, spec |
+| `verification_md_exists` | `verification.md`가 생성되었는가 | verify |
+| `ref_integrity` | `change-surface.js` 참조 무결성 분석 → broken ref 0 | execute, patch, verify |
+| **`targets_json_exists`** (v6.1) | `targets.json`이 생성되었는가 | locate (모든 scale 공통) |
+| **`patch_spec_complete`** (v7.0) | `patch-spec.md`에 `## Before`, `## After`, `## Explicitly out of scope` 3개 섹션 모두 존재 | spec (surgical) |
+| `changes_committed` | commit 단계에서 commit hash 기록 | commit |
+| `diff_summary_exists` | `diff-summary.md` 생성 | diff-summary (standard) |
+| `learning_md_exists` | `learning.md` 생성 | learning (standard) |
+| `report_md_exists` | `report.md` 생성 | finalize |
+
+이 gate들은 GUARD 코드가 없다 — PM 오케스트레이션 위반이 아니라 파이프라인 *완성도*를 검증하는 mechanism이다. 누락 시 `transition`이 에러를 반환하고 PM이 해당 산출물을 재작성하도록 안내한다.

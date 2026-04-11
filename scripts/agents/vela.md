@@ -168,14 +168,56 @@ Agent(subagent_type="vela-executor", prompt="
 → max_revisions 소진 시 AskUserQuestion
 ```
 
+**[spec 단계]** (v7.0 surgical pipeline 전용, `/vela:fix` 호출 시)
+```
+Agent(subagent_type="vela-planner", prompt="
+  request: {request}
+  artifactDir: {artifactDir}
+  mode: spec                                  ← plan 모드 대신 spec 모드 분기
+  targetsPath: {artifactDir}/targets.json     ← 필수 — primary[] 파일이 spec 범위
+  researchPath: {artifactDir}/research.md     ← 필수 — caller/import/risk 컨텍스트
+  {artifactDir}/patch-spec.md를 작성하라.
+  필수 섹션: ## Before, ## After, ## Explicitly out of scope
+")
+→ Agent(subagent_type="vela-reviewer", prompt="
+  step: spec
+  artifactDir: {artifactDir}
+  targetPath: {artifactDir}/patch-spec.md
+  review-spec.md를 생성하라.
+")
+→ 리뷰 판정 확인 (APPROVE: 점수 20+/25 && CRITICAL 0)
+→ APPROVE: approval-spec.json 작성 → record pass → transition
+→ REJECT: review-spec.md의 CRITICAL/HIGH 이슈를 planner(mode: spec)에 재주입 → max_revisions(3)
+→ locate confidence=low이면 PM 에스컬레이션 (spec은 명확한 targets가 필요)
+```
+
+**[patch 단계]** (v7.0 surgical pipeline 전용)
+```
+Agent(subagent_type="vela-executor", prompt="
+  request: {request}
+  artifactDir: {artifactDir}
+  targetsPath: {artifactDir}/targets.json     ← primary[]만 수정 허용
+  specPath: {artifactDir}/patch-spec.md       ← 'planPath' 대신 'specPath' 전달
+  {reviewFeedback가 있으면 포함}
+")
+→ Agent(subagent_type="vela-reviewer", prompt="step: patch, ...")
+→ APPROVE: [REVIEW GATE] execute와 동일한 재검증 루프
+→ REJECT: review-patch.md의 이슈 주입 → executor 재호출 (max_revisions=5)
+→ patch 단계의 verify는 specPath를 받아 Phase 4.5 out-of-scope 위반 검사 실행
+```
+
 **[verify 단계]**
 ```
 Agent(subagent_type="vela-verifier", prompt="
   artifactDir: {artifactDir}
   projectEnv: {언어, 테스트 프레임워크}
+  targetsPath: {artifactDir}/targets.json              ← v6.1
+  specPath: {artifactDir}/patch-spec.md                ← v7.0 surgical 전용, 그 외 생략
 ")
 → PASS: record pass → transition
-→ FAIL: 실패 내용을 executor에게 주입하여 execute 재시도 (ralph 모드: 최대 10회)
+→ FAIL: 실패 내용을 executor에게 주입하여 execute/patch 재시도 (ralph 모드: 최대 10회)
+→ (v7.0 surgical) specPath가 주입되면 verifier가 Phase 4.5 out-of-scope 위반 검사 실행 —
+  범위 위반 1건 이상이면 테스트 통과해도 FAIL 판정
 ```
 
 **[diff-summary 단계]** (standard 파이프라인)
