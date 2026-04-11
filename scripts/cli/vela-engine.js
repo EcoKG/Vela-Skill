@@ -109,10 +109,23 @@ function cmdInit() {
     });
   }
 
-  // Scale resolution: --scale flag > autoDetectScale > "large" fallback
-  // scales map in pipeline.json: { small: "trivial", medium: "quick", large: "standard", ... }
+  // Scale resolution (v6.1): --scale flag required.
+  // If omitted → fall back to "medium" with a deprecation warning.
+  // autoDetectScale() is deprecated — word-count heuristics don't reflect
+  // actual work weight (e.g. "OAuth 추가" is small but <10 words, "single-
+  // line typo fix in auth.ts" is >10 words). Use explicit scale.
+  let scaleWarning = null;
   const scaleFlag = getFlag("--scale");
-  const scaleName = scaleFlag || autoDetectScale(request);
+  let scaleName;
+  if (scaleFlag) {
+    scaleName = scaleFlag;
+  } else {
+    scaleWarning =
+      "⚠️ --scale not specified. Defaulting to 'medium'. " +
+      "Use /vela:small | /vela:medium | /vela:large | /vela:ralph | /vela:hotfix " +
+      "to be explicit (autoDetectScale was deprecated in v6.1).";
+    scaleName = "medium";
+  }
   const scalesMap = pipelineDef.scales || {};
   // scalesMap lookup: known scale names (small/medium/large/ralph/hotfix) → pipeline type.
   // If scaleName is already a pipeline type (e.g. "standard"), fall through directly.
@@ -211,6 +224,7 @@ function cmdInit() {
     artifact_dir: artifactDir,
     steps: steps.map((s) => ({ id: s.id, name: s.name, mode: s.mode })),
     cleaned_cancelled: cleaned,
+    ...(scaleWarning ? { warning: scaleWarning } : {}),
     message:
       `Pipeline initialized. Scale: ${scaleName} → ${pipelineType}. Current step: ${firstStep.name} (${firstStep.mode} mode)` +
       (cleaned > 0 ? ` (cleaned ${cleaned} cancelled artifact(s))` : ""),
@@ -1440,6 +1454,19 @@ function checkExitGate(stepDef, state) {
   return { passed: missing.length === 0, missing };
 }
 
+/**
+ * @deprecated since v6.1 — scheduled for removal in v7.0.
+ *
+ * Word-count heuristic doesn't reflect actual work weight.
+ * Users should pick scale explicitly via /vela:small, /vela:medium,
+ * /vela:large, /vela:ralph, or /vela:hotfix. When --scale is omitted,
+ * cmdInit() now falls back to "medium" with a deprecation warning
+ * instead of calling this function.
+ *
+ * Left in place only to avoid breaking any external callers that
+ * require('./vela-engine') this module. Will be deleted in v7.0
+ * along with the /vela:start slash command removal.
+ */
 function autoDetectScale(request) {
   const words = request.split(/\s+/).length;
   if (words <= 10) return "small";

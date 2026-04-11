@@ -50,14 +50,20 @@ assert_contains() {
 
 # Run locate() and emit a single line: confidence|count|first_file
 # Stable JSON parsing avoids quoting nightmares in bash.
-# We exclude this test file itself from the grep scope so fixture identifiers
-# (like `cmdBranch` mentioned in assertions below) don't self-match.
+# We exclude this test file AND the bench file from the grep scope so
+# fixture identifiers (like `cmdBranch` mentioned in assertions below)
+# don't self-match. Both test files mention the same identifiers as
+# scenario prose which would inflate match counts.
 run_locate() {
   local request="$1"
   (cd "$REPO_ROOT" && node -e "
     const { locate, DEFAULT_EXCLUDE_PATHS } = require('$LOCATE');
     const r = locate(process.argv[1], {
-      excludePaths: [...DEFAULT_EXCLUDE_PATHS, 'scripts/tests/test-locate.sh'],
+      excludePaths: [
+        ...DEFAULT_EXCLUDE_PATHS,
+        'scripts/tests/test-locate.sh',
+        'scripts/tests/test-locate-bench.sh',
+      ],
     });
     const first = r.primary[0] ? r.primary[0].file : '';
     process.stdout.write(r.confidence + '|' + r.primary.length + '|' + first);
