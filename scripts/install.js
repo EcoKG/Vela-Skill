@@ -1652,15 +1652,20 @@ function registerGlobalHooks(hooksSourceDir) {
   // 2, 4, 6, 8, ... duplicate Stop hook entries. This pass removes those
   // duplicates by keeping only the first entry whose stringified form
   // contains a given vela hook filename.
+  //
+  // v7.1.3: VELA_HOOK_FILES gains vela-file-read-cache.js (previously
+  // missing, which meant any duplicate file-read-cache entries written
+  // by a broken intermediate install would not be dedup'd).
+  const VELA_HOOK_FILES = [
+    "vela-gate-keeper.js",
+    "vela-gate-guard.js",
+    "vela-stop.js",
+    "vela-review-gate.js",
+    "vela-file-read-cache.js",
+  ];
   function dedupVelaHooks(event) {
     const list = globalSettings.hooks[event];
     if (!Array.isArray(list) || list.length === 0) return 0;
-    const VELA_HOOK_FILES = [
-      "vela-gate-keeper.js",
-      "vela-gate-guard.js",
-      "vela-stop.js",
-      "vela-review-gate.js",
-    ];
     const seen = new Set();
     const kept = [];
     let removed = 0;
@@ -1684,13 +1689,81 @@ function registerGlobalHooks(hooksSourceDir) {
   dedupVelaHooks("PreToolUse");
   dedupVelaHooks("Stop");
 
+  // ── v7.1.3: self-heal for dangling Vela hook entries ──
+  //
+  // Observed in a real user session (hicoco): settings.json contained
+  // `"command": "node /home/USER/.vela/hooks/vela-file-read-cache.js"`
+  // but the file did not exist on disk. Claude Code dutifully ran the
+  // command on every PreToolUse and node errored out at
+  // internal/modules/cjs/loader:1386 with "Cannot find module". The
+  // error was non-blocking so tools still worked, but it polluted
+  // stderr on every single tool call including the deferred tool
+  // loader ToolSearch.
+  //
+  // Root cause: pre-v7.1.2 deploy-common.sh did not copy the new v7.1
+  // M10 hook into .vela/hooks/, so when install.js called
+  // registerGlobalHooks() with hooksSourceDir = .vela/hooks, the
+  // fs.copyFileSync line below silently skipped (source missing).
+  // Then addGlobalHook wrote the entry anyway because it had no
+  // source-existence guard.
+  //
+  // This pass reads every Vela hook entry, extracts the absolute path
+  // from the "node /abs/path/to/vela-*.js" command, and drops entries
+  // whose target file does not exist on disk. Combined with the
+  // addGlobalHook guard below (which refuses to write entries for
+  // non-existent files), this makes settings.json self-healing: a
+  // future reinstall always converges on "exactly the entries whose
+  // files are actually deployed".
+  function pruneDanglingVelaHooks(event) {
+    const list = globalSettings.hooks[event];
+    if (!Array.isArray(list) || list.length === 0) return 0;
+    let removed = 0;
+    const kept = [];
+    for (const entry of list) {
+      const stringified = JSON.stringify(entry);
+      // Only prune entries that reference a Vela hook filename
+      const matchedHook = VELA_HOOK_FILES.find((f) => stringified.includes(f));
+      if (!matchedHook) {
+        kept.push(entry);
+        continue;
+      }
+      // Extract the target path from "node /abs/path/to/<hook>.js"
+      const cmd = (entry.hooks && entry.hooks[0] && entry.hooks[0].command) || entry.command || "";
+      const m = /node\s+(\S+\.js)/.exec(cmd);
+      if (!m) {
+        kept.push(entry);
+        continue;
+      }
+      if (!fs.existsSync(m[1])) {
+        removed++;
+        continue; // dangling — drop
+      }
+      kept.push(entry);
+    }
+    globalSettings.hooks[event] = kept;
+    return removed;
+  }
+  pruneDanglingVelaHooks("PreToolUse");
+  pruneDanglingVelaHooks("Stop");
+
   // Idempotent hook registration. `id` must be a substring of the
   // stringified hook entry (we match against the hook filename). Previously
   // the Stop hook was registered with id "vela-gate-stop" while the command
   // referenced "vela-stop.js" — the includes() check never matched so every
   // install re-pushed the Stop hooks, growing ~/.claude/settings.json on
   // every run.
+  //
+  // v7.1.3: added source-file existence guard. If the file referenced by
+  // `command` doesn't exist on disk, don't write the entry. This is the
+  // "never register what you can't run" half of the self-heal design.
+  // Combined with pruneDanglingVelaHooks above, settings.json always
+  // converges on "exactly the files that exist".
   function addGlobalHook(event, id, command, timeout) {
+    // Extract "node /abs/path/to/file.js" and verify file exists.
+    const m = /node\s+(\S+\.js)/.exec(command);
+    if (m && !fs.existsSync(m[1])) {
+      return; // source missing — don't register, don't error
+    }
     globalSettings.hooks[event] = globalSettings.hooks[event] || [];
     const already = globalSettings.hooks[event].some(
       (e) => JSON.stringify(e).includes(id)
