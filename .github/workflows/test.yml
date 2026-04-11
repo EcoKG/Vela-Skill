@@ -291,6 +291,13 @@ jobs:
           bash scripts/tests/test-update-runtime.sh 2>&1 | tee /tmp/update-runtime.log
           exit ${PIPESTATUS[0]}
 
+      - name: Engine walk-up project root (v7.0.6)
+        id: s_ewu
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-engine-walk-up.sh 2>&1 | tee /tmp/engine-walk-up.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -326,6 +333,7 @@ jobs:
           R_SUR: ${{ steps.s_sur.outcome }}
           R_PMC: ${{ steps.s_pmc.outcome }}
           R_UPD: ${{ steps.s_upd.outcome }}
+          R_EWU: ${{ steps.s_ewu.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -358,6 +366,7 @@ jobs:
           E2E: surgical pipeline (v7.0 skeleton)	${R_SUR}	/tmp/surgical-pipeline.log
           Static: PM coverage (v7.0.1)	${R_PMC}	/tmp/pm-coverage.log
           Runtime: update.sh integration (v7.0.3)	${R_UPD}	/tmp/update-runtime.log
+          Unit: engine walk-up project root (v7.0.6)	${R_EWU}	/tmp/engine-walk-up.log
           EOF
 
           PASS=0

@@ -30,12 +30,33 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## 세션 시작 필수 동작
 
-매 세션/재시작 시 **첫 번째 행동**:
+Claude Code 세션은 프로젝트 루트가 아니라 **임의의 서브 디렉토리**에서 시작될 수 있다
+(예: `/home/user/proj/src/foo/bar/`). 이 경우 `.vela/`는 상위 어딘가에 있고,
+상대 경로 `node .vela/cli/vela-engine.js state` 는 `Cannot find module` 에러로
+즉시 실패한다 (node loader가 CWD 기준으로 파일을 찾기 때문).
+
+매 세션/재시작 시 **가장 먼저** 아래 순서를 그대로 실행한다:
+
+**1단계 — walk-up으로 프로젝트 루트 찾아 cd:**
+```bash
+# pwd에서 시작해 `.vela/`가 있는 최초의 상위 디렉토리를 찾아 그리로 이동한다.
+# 찾지 못하면 아무 것도 하지 않고 그대로 둔다 (파이프라인 없음 = Explore 모드).
+d="$(pwd)"
+while [ "$d" != "/" ] && [ ! -d "$d/.vela" ]; do d="$(dirname "$d")"; done
+[ -d "$d/.vela" ] && cd "$d"
+pwd  # 현재 위치 확인 — 이후 모든 `node .vela/cli/vela-engine.js ...` 호출은 이 디렉토리 기준으로 동작한다
+```
+
+**2단계 — 상태 조회:**
 ```bash
 node .vela/cli/vela-engine.js state
 ```
 - active 파이프라인 있으면 → `current_step`부터 재개
 - 파이프라인 없으면 → 사용자 요청 대기 (AskUserQuestion)
+- `.vela/`가 상위 어디에도 없으면 → 비-Vela 프로젝트. Explore 모드로만 동작하고 엔진 호출 안 함.
+
+**중요**: 1단계 cd 없이 바로 2단계를 실행하면 서브 디렉토리에서 session을 연 사용자는
+매번 `Cannot find module` 에러를 본다. 1단계는 생략 불가.
 
 ## 모드
 

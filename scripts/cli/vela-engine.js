@@ -27,7 +27,44 @@ const fs = require("fs");
 const path = require("path");
 const { execSync, execFileSync } = require("child_process");
 
-const CWD = process.cwd();
+/**
+ * Walk up from the current working directory to find the nearest
+ * ancestor containing a `.vela/` directory, and return that path.
+ * Returns the original cwd if no ancestor has `.vela/` — commands
+ * that actually need `.vela/` will fail loudly with a clear message
+ * when they try to read from it.
+ *
+ * v7.0.6: Prior versions hard-coded `CWD = process.cwd()`, so running
+ * the engine from any project subdirectory (e.g. `src/foo/bar/`)
+ * caused every path calculation to resolve against a non-existent
+ * `<subdir>/.vela/` tree. Combined with the PM calling the engine via
+ * the bare relative path `node .vela/cli/vela-engine.js state`, users
+ * who opened a Claude Code session inside a subdirectory hit
+ * `Cannot find module` before the engine could even run. This walk-up
+ * hardens the engine against that case when it IS reached (i.e. when
+ * the PM correctly invokes it with an absolute path or from a
+ * project-root shell).
+ */
+function findProjectRoot(startDir) {
+  let dir = path.resolve(startDir);
+  while (true) {
+    if (fs.existsSync(path.join(dir, ".vela"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return path.resolve(startDir); // reached filesystem root
+    dir = parent;
+  }
+}
+
+const CWD = findProjectRoot(process.cwd());
+// If the engine walked up from a subdirectory, make every downstream
+// shell-out (git, node -e, etc.) see the project root as its cwd too.
+try {
+  if (CWD !== process.cwd()) {
+    process.chdir(CWD);
+  }
+} catch {
+  /* chdir may fail in exotic environments — path.join(CWD, …) still works */
+}
 const VELA_DIR = path.join(CWD, ".vela");
 const ARTIFACTS_DIR = path.join(VELA_DIR, "artifacts");
 const TEMPLATES_DIR = path.join(VELA_DIR, "templates");
