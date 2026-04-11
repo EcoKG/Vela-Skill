@@ -89,7 +89,110 @@ Reflection 출력 후 `.vela/references/interactive-ui.md`의 **"프롬프트 �
 - **"원본으로 진행"** → 원본 프롬프트로 실행 방식 결정
 - **"취소"** → 절차 중단
 
-승인된 프롬프트가 `vela-engine.js init`의 request가 되고, PM이 Agent 도구로 파이프라인을 진행한다.
+승인된 프롬프트가 확정되면 **5단계 Scale Mismatch Guard**로 진행한다. 그 이후 `vela-engine.js init`을 호출하고, PM이 Agent 도구로 파이프라인을 진행한다.
+
+---
+
+## 5단계: Scale Mismatch Guard (v6.1) — 반드시 실행
+
+사용자가 선택한 scale(`/vela:small`, `/vela:medium`, `/vela:large`, `/vela:ralph`, `/vela:hotfix`)과 실제 작업 무게가 명백히 어긋나면, **제안만** 띄워 사용자에게 변경 기회를 준다. 자동 변경은 절대 금지 — 사용자 의도 존중이 최우선이다.
+
+### 설계 원칙
+
+1. **자동 변경 금지** — PM은 절대로 사용자가 선택한 scale을 자기 마음대로 바꾸지 않는다. 제안 후 사용자 결정을 기다린다.
+2. **제안만 제공** — 아래 heuristic 신호가 2개 이상 동시에 만족될 때만 AskUserQuestion을 띄운다.
+3. **첫 옵션은 "그대로 진행"** — 사용자가 무심코 Enter 쳐도 원래 선택이 유지된다.
+4. **약한 신호 무시** — 노이즈 방지.
+5. **ralph/hotfix는 점검 대상 제외** — 의도가 매우 specific한 경우라 제안 없이 사용자 선택 존중.
+6. **`.vela/config.json`의 `scale_guard.enabled: false`로 옵트아웃 가능** — 설정이 꺼져 있으면 이 단계를 스킵한다.
+
+### Heuristic 신호 리스트
+
+#### Downgrade 신호 (선택한 scale이 너무 큼 — 더 작은 scale 제안)
+
+**2개 이상 만족 시 발동**:
+
+1. 프롬프트에 downgrade 키워드 포함:
+   - 한국어: `typo`, `오타`, `주석`, `포맷팅`, `들여쓰기`, `한 줄`, `하나만`, `간단히`, `빠르게`
+   - 영어: `typo`, `comment`, `formatting`, `one line`, `small`, `minor`, `quick`
+
+2. 프롬프트 길이 20단어 미만
+
+3. 프롬프트에 명확한 좌표가 이미 있음 (예: `auth.ts:42`, `loginHandler` 함수명, 단일 파일 경로)
+
+4. `scale = large`이고 위 1~3 중 2개 이상 → small 또는 medium 제안
+
+#### Upgrade 신호 (선택한 scale이 너무 작음 — 더 큰 scale 제안)
+
+**2개 이상 만족 시 발동**:
+
+1. 프롬프트에 upgrade 키워드 포함:
+   - 한국어: `마이그레이션`, `리팩토링`, `재설계`, `전체`, `시스템`, `보안`, `인증`, `결제`, `OAuth`, `aggregate`, `도메인`, `레이어`
+   - 영어: `migration`, `refactor`, `redesign`, `system-wide`, `security`, `authentication`, `payment`, `OAuth`, `aggregate`, `domain`
+
+2. 3개 이상의 파일/디렉토리 언급
+
+3. "신규" + "기능" 또는 "새로운" + "모듈" 조합
+
+4. `scale = small` 또는 `scale = medium`이고 위 1~3 중 2개 이상 → 더 큰 scale 제안
+
+### 판정 매트릭스
+
+| 사용자 선택 | downgrade ≥2 | upgrade ≥2 | 신호 부족 |
+|---|---|---|---|
+| `/vela:small` | — | medium 또는 large 제안 | 그대로 |
+| `/vela:medium` | small 제안 | large 제안 | 그대로 |
+| `/vela:large` | small 또는 medium 제안 | — | 그대로 |
+| `/vela:ralph` | (점검 제외) | (점검 제외) | 그대로 |
+| `/vela:hotfix` | (점검 제외) | (점검 제외) | 그대로 |
+
+### AskUserQuestion — Scale 점검 제안
+
+신호 2개 이상 발동 시 `.vela/references/interactive-ui.md`의 **"Scale 점검 — 작업 무게 재확인"** 섹션 템플릿으로 AskUserQuestion을 실행한다.
+
+예시 (downgrade 시):
+```
+⛵ Scale 점검 — 이 작업은 {현재 scale}보다 가벼워 보입니다.
+
+원본: {user_original}
+추정: {단일 파일 / 1-2줄 / 간단한 편집 등 — 감지된 신호 요약}
+현재 scale: {현재} ({현재 pipeline type}, 단계 수, 추정 토큰 범위)
+권장 scale: {권장} ({권장 pipeline type}, 단계 수, 추정 토큰 범위)
+```
+
+옵션 (순서 절대 고정 — "그대로 진행"이 반드시 첫 번째):
+1. **"{현재 scale} 그대로 진행 (사용자 의도 존중)"** ← 안전 기본값
+2. **"{권장 scale}로 변경 (비용/단계 축소)"**
+3. **"중간 scale로 절충"** (downgrade small vs 현재 large인 경우 medium, upgrade small vs large인 경우 medium)
+4. **"취소"**
+
+사용자가 옵션 1을 선택하면 원래 scale 그대로 `vela-engine init` 호출.
+옵션 2~3을 선택하면 새 scale로 `vela-engine init` 호출.
+옵션 4를 선택하면 절차 중단.
+
+### 설정
+
+`.vela/config.json`:
+```json
+{
+  "scale_guard": {
+    "enabled": true,
+    "thresholds": {
+      "downgrade_signals_min": 2,
+      "upgrade_signals_min": 2
+    }
+  }
+}
+```
+
+- `enabled: false` → 이 단계 전체 스킵
+- `thresholds`를 낮추면 더 민감하게 (발동률 ↑), 높이면 덜 민감하게 (노이즈 ↓)
+
+### 제외 조건 (한 번 더 강조)
+
+- **ralph/hotfix scale 선택 시 이 단계 전체 스킵** — 사용자가 의도를 명확히 표현한 경우
+- `config.scale_guard.enabled == false` 시 스킵
+- 신호 미달 시 조용히 진행 — 사용자에게 보여주지 않는다
 
 ---
 

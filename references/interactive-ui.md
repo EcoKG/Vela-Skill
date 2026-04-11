@@ -59,6 +59,54 @@ PM이 해당 단계에 진입할 때 이 파일의 해당 섹션을 읽으세요
 }
 ```
 
+## Scale 점검 — 작업 무게 재확인 (v6.1)
+
+prompt-optimizer 5단계 Scale Mismatch Guard에서 발동. PM이 사용자 선택 scale과 작업 무게의 misalignment를 감지했을 때만 표시한다. **첫 옵션이 항상 "그대로 진행"** — 사용자 의도 존중이 최우선.
+
+### Downgrade 제안 (선택한 scale이 너무 큼)
+
+```json
+{
+  "questions": [{
+    "question": "⛵ 이 작업은 {current_scale}보다 가벼워 보입니다. 어떻게 진행할까요?",
+    "header": "⛵ Scale 점검",
+    "options": [
+      { "label": "{current_scale} 그대로 진행 (Recommended)", "description": "사용자 의도 존중 — 원래 선택대로 진행합니다" },
+      { "label": "{recommended_scale}로 변경", "description": "{recommended_pipeline} — 단계 축소로 비용/시간 절감" },
+      { "label": "중간으로 절충", "description": "{middle_scale} — 검증은 유지하되 research 생략" },
+      { "label": "취소", "description": "파이프라인 시작을 중단합니다" }
+    ],
+    "multiSelect": false
+  }]
+}
+```
+
+### Upgrade 제안 (선택한 scale이 너무 작음)
+
+```json
+{
+  "questions": [{
+    "question": "⛵ 이 작업은 {current_scale}보다 커 보입니다. 어떻게 진행할까요?",
+    "header": "⛵ Scale 점검",
+    "options": [
+      { "label": "{current_scale} 그대로 진행 (Recommended)", "description": "사용자 의도 존중 — 원래 선택대로 진행합니다" },
+      { "label": "{recommended_scale}로 확대", "description": "{recommended_pipeline} — 설계/검증 단계 추가로 품질 강화" },
+      { "label": "중간으로 절충", "description": "{middle_scale} — plan은 추가하되 research는 생략" },
+      { "label": "취소", "description": "파이프라인 시작을 중단합니다" }
+    ],
+    "multiSelect": false
+  }]
+}
+```
+
+**옵션 순서 고정**:
+1. "그대로 진행" — 무조건 첫 번째 (Enter 눌러도 안전)
+2. "권장 scale로 변경" — 강한 제안
+3. "중간으로 절충" — 보수적 타협안
+4. "취소"
+
+PM은 이 템플릿을 **heuristic 신호 ≥ 2일 때만** 띄운다. 약한 신호(신호 1개 이하)에서는 조용히 진행하여 노이즈를 만들지 않는다.
+
 ## 세션 재개
 
 ```json
