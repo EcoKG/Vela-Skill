@@ -284,6 +284,13 @@ jobs:
           bash scripts/tests/test-pm-coverage.sh 2>&1 | tee /tmp/pm-coverage.log
           exit ${PIPESTATUS[0]}
 
+      - name: update.sh runtime integration (v7.0.3)
+        id: s_upd
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-update-runtime.sh 2>&1 | tee /tmp/update-runtime.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -318,6 +325,7 @@ jobs:
           R_LOCB: ${{ steps.s_locb.outcome }}
           R_SUR: ${{ steps.s_sur.outcome }}
           R_PMC: ${{ steps.s_pmc.outcome }}
+          R_UPD: ${{ steps.s_upd.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -349,6 +357,7 @@ jobs:
           Bench: locate accuracy (v6.1, non-blocking)	${R_LOCB}	/tmp/locate-bench.log
           E2E: surgical pipeline (v7.0 skeleton)	${R_SUR}	/tmp/surgical-pipeline.log
           Static: PM coverage (v7.0.1)	${R_PMC}	/tmp/pm-coverage.log
+          Runtime: update.sh integration (v7.0.3)	${R_UPD}	/tmp/update-runtime.log
           EOF
 
           PASS=0
