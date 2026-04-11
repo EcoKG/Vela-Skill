@@ -28,43 +28,104 @@ const path = require("path");
 const { execSync, execFileSync } = require("child_process");
 
 /**
- * Walk up from the current working directory to find the nearest
- * ancestor containing a `.vela/` directory, and return that path.
- * Returns the original cwd if no ancestor has `.vela/` — commands
- * that actually need `.vela/` will fail loudly with a clear message
- * when they try to read from it.
+ * Walk up from `startDir` looking for the nearest ancestor that
+ * contains a `.vela/` directory. Returns null if none is found — the
+ * caller decides whether to fall back to cwd or error out.
  *
- * v7.0.6: Prior versions hard-coded `CWD = process.cwd()`, so running
- * the engine from any project subdirectory (e.g. `src/foo/bar/`)
- * caused every path calculation to resolve against a non-existent
- * `<subdir>/.vela/` tree. Combined with the PM calling the engine via
- * the bare relative path `node .vela/cli/vela-engine.js state`, users
- * who opened a Claude Code session inside a subdirectory hit
- * `Cannot find module` before the engine could even run. This walk-up
- * hardens the engine against that case when it IS reached (i.e. when
- * the PM correctly invokes it with an absolute path or from a
- * project-root shell).
+ * v7.0.6: introduced to rescue engine invocations launched from a
+ * project subdirectory (Claude Code sessions don't always start at
+ * the project root).
  */
-function findProjectRoot(startDir) {
+function walkUpForVelaDir(startDir) {
   let dir = path.resolve(startDir);
   while (true) {
     if (fs.existsSync(path.join(dir, ".vela"))) return dir;
     const parent = path.dirname(dir);
-    if (parent === dir) return path.resolve(startDir); // reached filesystem root
+    if (parent === dir) return null; // reached filesystem root
     dir = parent;
   }
 }
 
-const CWD = findProjectRoot(process.cwd());
-// If the engine walked up from a subdirectory, make every downstream
-// shell-out (git, node -e, etc.) see the project root as its cwd too.
-try {
-  if (CWD !== process.cwd()) {
-    process.chdir(CWD);
+/**
+ * Resolve the project root for this invocation.
+ *
+ * v7.0.7: Prior versions relied purely on walk-up, which is a
+ * heuristic — it can pick the wrong ancestor on symlinked trees,
+ * bind mounts, or nested Vela projects, and it hides the fact that
+ * cwd ever drifted.
+ *
+ * The installer (scripts/install.js → writeWorkspaceRecord) now
+ * pins the true project root in `.vela/state/workspace.json` on
+ * every install/upgrade/validate. This function reads that pin,
+ * validates it, and falls back to the walk-up heuristic only when
+ * the pin is absent or stale:
+ *
+ *   1. walk up from cwd to find any `.vela/` ancestor (velaDir)
+ *   2. read `<velaDir>/.vela/state/workspace.json` if present
+ *   3. if the recorded projectRoot still has a `.vela/`, use it
+ *   4. otherwise use the walked-up velaDir (v7.0.6 behavior)
+ *   5. if there is no `.vela/` anywhere, return process.cwd()
+ *      unchanged — downstream commands that actually need .vela/
+ *      will surface their own clear errors.
+ *
+ * When the resolved root differs from process.cwd() (i.e. cwd has
+ * drifted — almost always because a prior Bash tool invocation in
+ * the same session ran a bare `cd subdir`), the engine emits a
+ * loud stderr warning so the root cause is visible and process.chdir
+ * back so git/node child processes see a consistent cwd.
+ */
+function resolveProjectRoot() {
+  const originalCwd = process.cwd();
+  const velaDir = walkUpForVelaDir(originalCwd);
+  if (!velaDir) {
+    // No .vela/ anywhere in the ancestor chain. Leave cwd as-is.
+    return originalCwd;
   }
-} catch {
-  /* chdir may fail in exotic environments — path.join(CWD, …) still works */
+
+  // Try the pinned workspace first.
+  const wsPath = path.join(velaDir, ".vela", "state", "workspace.json");
+  let pinned = null;
+  if (fs.existsSync(wsPath)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(wsPath, "utf8"));
+      if (raw && typeof raw.projectRoot === "string" && raw.projectRoot) {
+        // A stale pin (project was `mv`d) points at a path that no
+        // longer has .vela/. In that case we must NOT chdir there —
+        // fall through to the walk-up result.
+        if (fs.existsSync(path.join(raw.projectRoot, ".vela"))) {
+          pinned = raw.projectRoot;
+        } else {
+          process.stderr.write(
+            `⚠️  Vela: .vela/state/workspace.json points at ${raw.projectRoot} but that path no longer has .vela/ — falling back to walk-up. Re-run \`node .vela/install.js validate\` from the new project location to refresh the pin.\n`,
+          );
+        }
+      }
+    } catch {
+      /* malformed workspace.json — fall back to walk-up */
+    }
+  }
+
+  const resolved = pinned || velaDir;
+
+  if (resolved !== originalCwd) {
+    // Loud warning so the root cause — usually a stray `cd subdir`
+    // inside a prior Bash tool invocation — gets noticed and fixed,
+    // rather than being silently masked by auto-recovery.
+    process.stderr.write(
+      `⚠️  Vela: chdir ${originalCwd} → ${resolved} (cwd drift detected; a prior Bash tool call probably ran a bare \`cd\` — use \`( cd dir && cmd )\` subshell isolation or absolute paths instead)\n`,
+    );
+    try {
+      process.chdir(resolved);
+    } catch {
+      /* chdir may fail in exotic environments — downstream path.join
+         calls use the returned value directly so we still succeed */
+    }
+  }
+
+  return resolved;
 }
+
+const CWD = resolveProjectRoot();
 const VELA_DIR = path.join(CWD, ".vela");
 const ARTIFACTS_DIR = path.join(VELA_DIR, "artifacts");
 const TEMPLATES_DIR = path.join(VELA_DIR, "templates");

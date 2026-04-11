@@ -255,6 +255,63 @@ function collectFiles(dir, baseDir) {
 }
 
 /**
+ * v7.0.7: Pin the workspace root.
+ *
+ * Claude Code's Bash tool has a persistent working directory — a bare
+ * `cd subdir` inside one tool call changes cwd for every later tool
+ * call in the same session. When the PM later runs
+ * `node .vela/cli/vela-engine.js state`, Node's module loader resolves
+ * the relative path against whatever directory the Bash tool is now
+ * parked in, and fails at load time with "Cannot find module".
+ *
+ * v7.0.6 patched this via a walk-up search for `.vela/`. That works,
+ * but it's a heuristic: it can pick the wrong ancestor on symlinked
+ * trees, bind mounts, or nested Vela projects, and it hides the fact
+ * that cwd ever drifted in the first place.
+ *
+ * v7.0.7 replaces the heuristic with an explicit record. At install,
+ * upgrade, and validate time we write an absolute path to
+ * `.vela/state/workspace.json`. The engine reads that file on every
+ * invocation and chdirs back to it (loudly, via stderr warning) if
+ * cwd has drifted. `.vela/state/` is already gitignored, so this
+ * record is per-checkout and safe for multi-user / multi-environment
+ * use. If the user later `mv`s the project, the recorded path goes
+ * stale and the engine emits a clear error pointing at the fix
+ * (re-run `node .vela/install.js validate`) rather than silently
+ * running in the wrong directory.
+ */
+function writeWorkspaceRecord(projectRoot) {
+  try {
+    const stateDir = path.join(projectRoot, ".vela", "state");
+    fs.mkdirSync(stateDir, { recursive: true });
+    const record = {
+      projectRoot,
+      recordedAt: new Date().toISOString(),
+      recordedBy: "install.js",
+      hostName: os.hostname(),
+    };
+    // Read velaVersion from the deployed skill's package.json for
+    // diagnostics. Best-effort — version is informational only.
+    try {
+      const pkgPath = path.resolve(__dirname, "..", "package.json");
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        if (pkg && pkg.version) record.velaVersion = pkg.version;
+      }
+    } catch {
+      /* version is optional */
+    }
+    fs.writeFileSync(
+      path.join(stateDir, "workspace.json"),
+      JSON.stringify(record, null, 2),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Find orphan files in managed subdirectories of velaDir.
  * An orphan is any file inside MANAGED_DIRS that is NOT in FILE_MANIFEST's dst list.
  * Returns array of relative paths (e.g. 'agents/old-file.md').
@@ -604,9 +661,38 @@ This project uses Vela for development governance.
 - PM (vela agent) orchestrates the pipeline by spawning role agents via the Agent tool.
 - Follow pipeline steps in order. Do NOT skip steps or bypass the pipeline.
 - Do NOT modify pipeline-state.json directly — use vela-engine.js CLI only.
+
+## Bash tool — never use bare \`cd\` inside a single invocation
+
+Claude Code's Bash tool has a persistent working directory that survives
+between tool calls. A bare \`cd subdir\` inside one Bash invocation will
+cause every subsequent Bash call (including the PM's
+\`node .vela/cli/vela-engine.js ...\` invocations) to run from that
+subdirectory, and Node's module loader will fail with \`Cannot find
+module\` before the engine ever runs.
+
+- **Wrong**: \`cd server/data && node build.js\` (leaks the cwd change)
+- **Right**: \`( cd server/data && node build.js )\` (subshell isolates it)
+- **Also right**: pass absolute paths — \`node /abs/path/to/build.js\`
+
+Vela v7.0.7+ records the true project root in
+\`.vela/state/workspace.json\` at install time and the engine will
+\`chdir\` back on every invocation if cwd has drifted, printing a
+warning to stderr. Treat that warning as a bug in the calling code
+(usually a stray \`cd\` inside a Bash tool) and fix it rather than
+relying on the auto-recovery.
 `,
     );
   }
+
+  // ─── Pin the workspace root (v7.0.7) ───
+  // Writes .vela/state/workspace.json with PROJECT_ROOT so the engine
+  // can chdir back on every invocation regardless of how the Bash tool's
+  // working directory has drifted mid-session. Runs on EVERY install,
+  // not just first-time ones, so existing projects get the pin after
+  // an `upgrade` or `validate` too. Silent on failure — the walk-up
+  // fallback in vela-engine.js still works.
+  writeWorkspaceRecord(PROJECT_ROOT);
 
   // Human-readable output (JSON with --json flag)
   if (process.argv.includes("--json")) {
@@ -1001,6 +1087,11 @@ function upgrade() {
     results.errors.push(`orphan cleanup scan: ${e.message}`);
   }
 
+  // ─── Pin the workspace root (v7.0.7) ───
+  // upgrade() also refreshes .vela/state/workspace.json so existing
+  // users get the pin on their next `node .vela/install.js upgrade`.
+  writeWorkspaceRecord(PROJECT_ROOT);
+
   console.log(
     JSON.stringify(
       {
@@ -1374,6 +1465,19 @@ function validate() {
         );
       }
     }
+  }
+
+  // ─── Pin the workspace root (v7.0.7) ───
+  // validate() is the path most likely to run on an existing project
+  // (triggered by /vela:large and friends via install.js invocation).
+  // Refreshing workspace.json here means any project touched by a
+  // scale skill gets the pin without needing a full install/upgrade.
+  if (writeWorkspaceRecord(PROJECT_ROOT)) {
+    results.ok.push("workspace.json pinned");
+  } else {
+    results.warnings.push(
+      "Could not write .vela/state/workspace.json — engine will fall back to walk-up",
+    );
   }
 
   return results;
