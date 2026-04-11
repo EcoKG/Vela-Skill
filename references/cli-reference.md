@@ -11,21 +11,60 @@ node .vela/cli/vela-engine.js branch [--mode auto|prompt|none]
 node .vela/cli/vela-engine.js commit [--message TEXT]
 node .vela/cli/vela-engine.js cancel
 node .vela/cli/vela-engine.js history
+node .vela/cli/vela-engine.js locate [--request "..."] [--json]    # v6.1
 node .vela/cli/vela-engine.js clean-scan
 node .vela/cli/vela-engine.js clean-exec
 ```
 
-## V6 파이프라인 실행
+### `locate` 명령 (v6.1, LLM 0)
 
-V6에서는 `vela-pipeline.js`가 제거되었다. PM(vela.md agent)이 직접 파이프라인을 오케스트레이션한다:
+Universal Locate — 결정론적 file/symbol 식별자 탐지. ripgrep (없으면 git grep) + git ls-files 기반.
+
+```bash
+# 현재 활성 파이프라인의 request를 읽어 targets.json 생성 (PM이 locate 단계에서 호출)
+node .vela/cli/vela-engine.js locate
+
+# 파이프라인 없이 미리보기
+node .vela/cli/vela-engine.js locate --request "auth.ts의 login 함수 검증 추가"
+
+# 전체 targets.json 구조 출력
+node .vela/cli/vela-engine.js locate --json
+```
+
+출력: `{artifactDir}/targets.json` (또는 `.vela/locate-preview/targets.json` for --request)
+- `primary[]`: file:line 주요 수정 대상
+- `tests[]`: primary를 커버하는 테스트 파일
+- `blast_radius[]`: primary를 import/reference하는 read-only 파일
+- `confidence`: `high | medium | low`
+- `tokens_extracted[]`: 프롬프트에서 추출된 식별자 힌트
+
+### 지원하는 `--scale` 값 (v6.1/v7.0)
+
+| `--scale` 값 | pipeline_type | 슬래시 명령 | 단계 수 |
+|---|---|---|---|
+| `fix` **(v7.0 기본 추천)** | surgical | `/vela:fix` | 8 |
+| `small` | trivial | `/vela:small` | 5 |
+| `medium` | quick | `/vela:medium` | 7 |
+| `large` | standard | `/vela:large` | 13 |
+| `ralph` | ralph | `/vela:ralph` | 5+루프 |
+| `hotfix` | hotfix | `/vela:hotfix` | 4 |
+
+`--scale` 누락 시 `medium`으로 폴백 (deprecation 경고 출력). `autoDetectScale()`은 v6.1부터 deprecated (v7.0에서 제거 예정).
+
+## V6/V7 파이프라인 실행
+
+V6에서 `vela-pipeline.js`가 제거되었다. PM(vela.md agent)이 직접 파이프라인을 오케스트레이션한다:
 
 ```
-PM → vela-engine.js init "요청"
+PM → vela-engine.js init "요청" --scale {scale}
+   → vela-engine.js locate                    ← v6.1 (모든 scale 공통)
    → Agent(vela-researcher) → Agent(vela-reviewer)
-   → Agent(vela-planner) → Agent(vela-reviewer)
-   → Agent(vela-executor) → Agent(vela-reviewer)
+   → Agent(vela-planner) → Agent(vela-reviewer)   ← plan mode 또는 mode: spec (v7.0)
+   → Agent(vela-executor) → Agent(vela-reviewer)  ← legacy execute 또는 patch (v7.0)
    → Agent(vela-verifier) → ... → vela-engine.js commit
 ```
+
+v7.0 surgical(`/vela:fix`)은 `plan` 대신 `spec` 단계에서 planner를 `mode: spec`으로 호출하여 `patch-spec.md`를 생성하고, `execute` 대신 `patch` 단계에서 executor가 이 spec을 정확히 적용한다.
 
 ## vela-sprint (스프린트 — V6)
 

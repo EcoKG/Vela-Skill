@@ -136,6 +136,62 @@
           "check": "transition 이후 해당 단계의 review-gate 상태 파일 부재"
         }
       ]
+    },
+    {
+      "id": 4,
+      "name": "vela-fix-surgical-pipeline",
+      "prompt": "/vela:fix src/auth.js의 loginHandler 함수에 이메일/비밀번호 입력 검증 추가",
+      "expected_output": "v7.0 surgical 파이프라인 8단계 실행: init → locate → research(targeted) → spec → patch → verify → commit → finalize. locate가 src/auth.js를 high confidence로 식별, research가 targeted mode로 좁은 범위 분석, planner가 mode:spec으로 patch-spec.md(## Before, ## After, ## Explicitly out of scope) 작성, executor가 patch-spec을 정확히 적용, verifier가 Phase 4.5 out-of-scope 위반 검사 실행. 결과: src/auth.js만 수정되고 다른 파일은 무변경.",
+      "files": [
+        {
+          "path": "src/auth.js",
+          "content": "function loginHandler(email, password) { return { ok: true, user: email }; }\nmodule.exports = { loginHandler };"
+        }
+      ],
+      "assertions": [
+        {
+          "name": "surgical-pipeline-type",
+          "description": "vela-engine init이 --scale fix → pipeline_type: surgical로 리졸브되었는가",
+          "type": "output_contains",
+          "check": "\"pipeline_type\":\\s*\"surgical\""
+        },
+        {
+          "name": "locate-executed",
+          "description": "locate 단계가 targets.json을 생성했는가 (src/auth.js가 primary)",
+          "type": "file_exists",
+          "check": ".vela/artifacts/*/targets.json"
+        },
+        {
+          "name": "spec-mode-planner",
+          "description": "planner가 mode:spec으로 호출되어 patch-spec.md를 작성했는가",
+          "type": "file_exists",
+          "check": ".vela/artifacts/*/patch-spec.md"
+        },
+        {
+          "name": "patch-spec-required-sections",
+          "description": "patch-spec.md에 ## Before, ## After, ## Explicitly out of scope 3개 섹션 모두 있는가",
+          "type": "behavior_check",
+          "check": "patch-spec.md 안에 세 섹션이 모두 존재 (patch_spec_complete gate 통과)"
+        },
+        {
+          "name": "executor-spec-mode",
+          "description": "executor가 patch 단계에서 specPath를 받아 patch-spec.md를 권위 source로 사용했는가",
+          "type": "output_contains",
+          "check": "Agent.*vela-executor.*specPath|patch-spec\\.md"
+        },
+        {
+          "name": "verifier-out-of-scope-check",
+          "description": "verifier가 specPath 주입 시 Phase 4.5 out-of-scope 위반 검사를 실행했는가",
+          "type": "behavior_check",
+          "check": "verification.md에 '범위 검사' 섹션 존재 (surgical pipeline 한정)"
+        },
+        {
+          "name": "code-modified-in-scope-only",
+          "description": "src/auth.js만 수정되고 targets.primary 밖 파일은 변경되지 않았는가",
+          "type": "behavior_check",
+          "check": "git diff에 src/auth.js만 등장, out-of-scope 파일 무변경"
+        }
+      ]
     }
   ]
 }
