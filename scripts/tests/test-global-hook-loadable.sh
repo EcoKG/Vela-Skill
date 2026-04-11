@@ -193,6 +193,64 @@ LOADED=$(node -e "
 note "global constants.js exports SAFE_BASH_READ (got '$LOADED')" $?
 
 # ══════════════════════════════════════════════════════════════
+# Phase 2.5 (v7.1.5) — run install.js from {project}/.vela/install.js
+# instead of from the skill repo. This simulates the update.sh --local
+# path where the install.js copy inside .vela/ is invoked.
+#
+# In that layout:
+#   __dirname     = {project}/.vela
+#   skillBase     = {project}            ← NOT a skill repo!
+#   PROJECT_ROOT  = {project}
+#
+# v7.1.4 would fall through to the wrapper here because skillBase/
+# scripts/shared/constants.js doesn't exist in a user project. v7.1.5
+# adds {project}/.vela/shared/constants.js as a search candidate, so
+# this path now finds the real file that sync_local_project staged.
+# ══════════════════════════════════════════════════════════════
+echo "📋 Phase 2.5: install.js run from {project}/.vela/install.js"
+setup_sandbox
+# First run populates .vela/ and ~/.vela/hooks/ via the skill-repo
+# install.js path. This also drops scripts/shared/constants.js into
+# $PROJECT/.vela/shared/constants.js via validate()'s FILE_MANIFEST
+# copy, which is what candidates[1] depends on below.
+run_install
+
+# install.js is NOT in FILE_MANIFEST — it's only copied into
+# .vela/install.js by sync_local_project in deploy-common.sh. We
+# reproduce that copy manually so we can invoke the project-local
+# install.js (what update.sh --local actually does).
+cp "$INSTALL_JS" "$PROJECT/.vela/install.js"
+
+# Remove the global constants to force re-copy and prove the second
+# install really goes through the candidates loop.
+rm -f "$FAKE_HOME/.vela/hooks/shared/constants.js"
+
+(
+  cd "$PROJECT"
+  HOME="$FAKE_HOME" node "$PROJECT/.vela/install.js" >/dev/null 2>&1
+)
+
+# Now ~/.vela/hooks/shared/constants.js must still be the real source
+GLOBAL_CONSTANTS="$FAKE_HOME/.vela/hooks/shared/constants.js"
+[ -f "$GLOBAL_CONSTANTS" ]
+note "Phase 2.5: constants.js deployed after project-local install" $?
+
+if grep -q 'require("../../shared/constants")' "$GLOBAL_CONSTANTS"; then
+  note "Phase 2.5: constants.js is NOT the wrapper after project-local install" 1
+else
+  note "Phase 2.5: constants.js is NOT the wrapper after project-local install" 0
+fi
+
+# gate-keeper must still load cleanly from the global hook dir
+probe_hook "$FAKE_HOME/.vela/hooks/vela-gate-keeper.js" || true
+if grep -q 'MODULE_NOT_FOUND\|loader:1386' /tmp/probe-err; then
+  note "Phase 2.5: gate-keeper loads cleanly after project-local install" 1
+  echo "     stderr: $(head -1 /tmp/probe-err)"
+else
+  note "Phase 2.5: gate-keeper loads cleanly after project-local install" 0
+fi
+
+# ══════════════════════════════════════════════════════════════
 # Phase 3: reverse-sanity — swap in the wrapper and verify the
 # test would catch a regression.
 # ══════════════════════════════════════════════════════════════
