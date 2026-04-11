@@ -326,6 +326,62 @@ jobs:
           bash scripts/tests/test-claudemd-cd-rule-injection.sh 2>&1 | tee /tmp/claudemd-cd-rule.log
           exit ${PIPESTATUS[0]}
 
+      - name: Gate Keeper verify bash safelist (v7.1 M2)
+        id: s_vba
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-verify-bash-allowed.sh 2>&1 | tee /tmp/verify-bash-allowed.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Verifier Phase 3 smoke test (v7.1 M3)
+        id: s_vsm
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-verifier-smoke.sh 2>&1 | tee /tmp/verifier-smoke.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Plan checker sanity heuristics (v7.1 M4)
+        id: s_pcs
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-plan-checker-sanity.sh 2>&1 | tee /tmp/plan-checker-sanity.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Architecture Guardrails forbidden imports (v7.1 M4)
+        id: s_agr
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-architecture-guardrails.sh 2>&1 | tee /tmp/architecture-guardrails.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Researcher targeted scope enforcement (v7.1 M11)
+        id: s_rts
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-researcher-targeted-scope.sh 2>&1 | tee /tmp/researcher-targeted-scope.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Context Pack contract (v7.1 M7)
+        id: s_cpk
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-context-pack.sh 2>&1 | tee /tmp/context-pack.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Role budgets (v7.1 M9)
+        id: s_rbg
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-role-budgets.sh 2>&1 | tee /tmp/role-budgets.log
+          exit ${PIPESTATUS[0]}
+
+      - name: File read cache hook (v7.1 M10)
+        id: s_frc
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-file-read-cache.sh 2>&1 | tee /tmp/file-read-cache.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -366,6 +422,14 @@ jobs:
           R_SLUG: ${{ steps.s_slug.outcome }}
           R_ADV: ${{ steps.s_adv.outcome }}
           R_CMD: ${{ steps.s_cmd.outcome }}
+          R_VBA: ${{ steps.s_vba.outcome }}
+          R_VSM: ${{ steps.s_vsm.outcome }}
+          R_PCS: ${{ steps.s_pcs.outcome }}
+          R_AGR: ${{ steps.s_agr.outcome }}
+          R_RTS: ${{ steps.s_rts.outcome }}
+          R_CPK: ${{ steps.s_cpk.outcome }}
+          R_RBG: ${{ steps.s_rbg.outcome }}
+          R_FRC: ${{ steps.s_frc.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -403,6 +467,14 @@ jobs:
           Unit: slug fs-safe truncation (v7.1 M5)	${R_SLUG}	/tmp/slug-truncate.log
           Unit: engine advance command (v7.1 M8)	${R_ADV}	/tmp/engine-advance.log
           Unit: CLAUDE.md cd-rule injection (v7.1 M12)	${R_CMD}	/tmp/claudemd-cd-rule.log
+          Unit: verify bash safelist (v7.1 M2)	${R_VBA}	/tmp/verify-bash-allowed.log
+          Unit: verifier smoke Phase (v7.1 M3)	${R_VSM}	/tmp/verifier-smoke.log
+          Unit: plan-checker sanity (v7.1 M4)	${R_PCS}	/tmp/plan-checker-sanity.log
+          Unit: architecture guardrails (v7.1 M4)	${R_AGR}	/tmp/architecture-guardrails.log
+          Unit: researcher targeted scope (v7.1 M11)	${R_RTS}	/tmp/researcher-targeted-scope.log
+          Unit: context pack contract (v7.1 M7)	${R_CPK}	/tmp/context-pack.log
+          Unit: role budgets (v7.1 M9)	${R_RBG}	/tmp/role-budgets.log
+          Unit: file read cache (v7.1 M10)	${R_FRC}	/tmp/file-read-cache.log
           EOF
 
           PASS=0

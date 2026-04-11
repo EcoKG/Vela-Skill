@@ -124,6 +124,34 @@ const FILE_MANIFEST = [
     dst: "templates/config.json",
     skipOnUpgrade: true,
   },
+  // v7.1 M3 — verifier Phase 0/3 templates. Example-only files live
+  // under .vela/templates/guidelines/ so users can copy them to
+  // .vela/guidelines/*.json or .vela/guidelines/*.sh when they need
+  // them. Install.js ships them as examples — never overwrites a
+  // file the user copied into the active guidelines dir.
+  {
+    src: "templates/guidelines/live-processes.json",
+    dst: "templates/guidelines/live-processes.json",
+  },
+  {
+    src: "templates/guidelines/smoke-test.sh.example",
+    dst: "templates/guidelines/smoke-test.sh.example",
+  },
+  // v7.1 M4 — Architecture Guardrails sample plan. vela-planner.md
+  // references this to show what Allowed/Forbidden/Injection sections
+  // look like. Deployed to .vela/templates/plan-templates/quick.md so
+  // planners can open it as a starting skeleton.
+  {
+    src: "templates/plan-templates/quick.md",
+    dst: "templates/plan-templates/quick.md",
+  },
+  // v7.1 M9 — per-scale tool_use budgets. PM injects the budget for
+  // each Agent spawn; exceeding triggers a budget-exceeded.json marker
+  // inside artifactDir (non-fatal). /vela:analyze rolls them up.
+  {
+    src: "templates/role-budgets.json",
+    dst: "templates/role-budgets.json",
+  },
   // References
   { src: "references/interactive-ui.md", dst: "references/interactive-ui.md" },
   {
@@ -220,6 +248,10 @@ const FILE_MANIFEST = [
   { src: "scripts/hooks/vela-gate-guard.js",  dst: "hooks/vela-gate-guard.js"  },
   { src: "scripts/hooks/vela-stop.js",        dst: "hooks/vela-stop.js"        },
   { src: "scripts/hooks/vela-review-gate.js", dst: "hooks/vela-review-gate.js" },
+  // v7.1 M10 — file read cache hook. Purely observational (exit 0 on
+  // every call). Logs Read calls to <artifactDir>/read-cache.jsonl
+  // so vela-stop.js and /vela:analyze can aggregate duplicates.
+  { src: "scripts/hooks/vela-file-read-cache.js", dst: "hooks/vela-file-read-cache.js" },
   { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
 
@@ -1582,7 +1614,7 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js"];
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js", "vela-file-read-cache.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1668,6 +1700,11 @@ function registerGlobalHooks(hooksSourceDir) {
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-keeper.js")}`, 10);
   addGlobalHook("PreToolUse", "vela-gate-guard",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
+  // v7.1 M10 — file read cache is also PreToolUse, but purely
+  // observational. The hook always returns exit 0 even on internal
+  // error, so adding it cannot break an otherwise-working project.
+  addGlobalHook("PreToolUse", "vela-file-read-cache",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-file-read-cache.js")}`, 5);
   addGlobalHook("Stop", "vela-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
   addGlobalHook("Stop", "vela-review-gate",

@@ -413,6 +413,15 @@ function cmdState() {
       : null,
     git: state.git || null,
     artifact_dir: state._artifactDir,
+    // v7.1 M7: surface context-pack path so the PM can hand it to
+    // executor/verifier spawns without having to check the filesystem
+    // itself. Also exposes budget-exceeded.json if it was dropped.
+    contextPackPath: state._artifactDir && fs.existsSync(
+      path.join(state._artifactDir, "context-pack.json"),
+    ) ? path.join(state._artifactDir, "context-pack.json") : null,
+    requestTxtPath: state._artifactDir && fs.existsSync(
+      path.join(state._artifactDir, "request.txt"),
+    ) ? path.join(state._artifactDir, "request.txt") : null,
   });
 }
 

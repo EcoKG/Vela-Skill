@@ -1,0 +1,13 @@
+{
+  "$schema": "https://github.com/EcoKG/Vela-Skill/blob/main/docs/live-processes-schema.json",
+  "__doc__": "v7.1 M3 — long-running process recovery template. Copy to .vela/guidelines/live-processes.json in your project and edit. If the file is absent, verify Phase 0 is skipped. Add one entry per long-running service the verifier should ensure is healthy before unit tests run. The verifier kills+restarts + waits for readyPath on each entry before proceeding to Phase 1.",
+  "processes": [
+    {
+      "name": "dev-server",
+      "port": 3001,
+      "restartCommand": "pkill -f 'node --watch' 2>/dev/null; (npm run dev:server &) >/dev/null 2>&1",
+      "readyPath": "/api/health",
+      "readyTimeoutMs": 20000
+    }
+  ]
+}

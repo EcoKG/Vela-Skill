@@ -30,16 +30,28 @@ tools: Read, Glob, Grep, Write, Edit, NotebookEdit, Bash
 
 ## 구현 절차
 
-### 0단계: 참조 파일 + targets.json 읽기
+### 0단계: Context Pack 우선 로드 (v7.1 M7 — 필수)
 
-`.vela/agents/executor/tdd.md`를 읽어 TDD 단계를 확인한다.
-`.vela/agents/executor/file-ownership.md`를 읽어 파일 소유권 규칙을 확인한다.
+**가장 먼저**: `{artifactDir}/context-pack.json` 이 존재하면 이 파일을 Read 한다. 이것이 researcher 가 이미 수행한 프로젝트 탐색 결과다.
 
-**(v6.1) targets.json 로드**: `targetsPath`가 전달되면 `{artifactDir}/targets.json`을 먼저 읽는다:
+context-pack.json 의 내용:
+- `relatedFilesForRequest[]` — 본인이 반드시 Read 해야 할 파일 목록. **이 목록 밖 파일을 Glob/Grep 으로 전수 탐색하지 않는다.**
+- `sourceTree[]` — 각 파일의 role/summary. executor 는 이 summary 만 읽고도 대략적인 레이어 이해가 가능해야 한다.
+- `entryPoints[]` — 프로젝트 진입점. 새 코드 추가 시 어디에 wire-in 해야 하는지 참조.
+- `testDirs[]` — 새 테스트 파일을 어디에 둘지 결정하는 근거.
+- `conventions` — module system (ESM/CJS), test runner 등. import 구문 스타일 결정에 사용.
+
+**context-pack.json 이 없으면** (trivial/hotfix 같은 research 없는 scale) 기존 방식으로 fallback — targets.json + plan.md 또는 request 만으로 구현.
+
+**tool_use 예산 (v7.1 M9 large scale)**: 80. 초과 시 `{artifactDir}/budget-exceeded.json` 에 기록하고 task-summary.md 맨 위에 경고. 초과해도 계속 진행해서 구현은 마무리한다.
+
+**(v6.1) targets.json 로드**: `targetsPath`가 전달되면 `{artifactDir}/targets.json`을 읽는다:
 - `primary[]`의 파일이 *허용된 수정 범위*다
 - `blast_radius[]`는 caller/import만 — 읽기만 하고 수정하지 않는다
 - `tests[]`의 테스트 파일이 TDD Phase 1의 편집 대상이 될 수 있다
 - `confidence: high`이면 primary 외 파일 수정은 엄격 금지. `low`이면 plan.md/Class Specification에 명시된 범위 준수.
+
+**참조 파일**: `.vela/agents/executor/tdd.md`, `.vela/agents/executor/file-ownership.md` — TDD 단계와 파일 소유권 규칙 확인. context-pack.json 이 있으면 프로젝트 트리 재탐색은 **금지**된다.
 
 ### 1단계: 권위 source 읽기 (planPath 또는 specPath)
 

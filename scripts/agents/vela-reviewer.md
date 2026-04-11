@@ -19,6 +19,8 @@ tools: Read, Glob, Grep, Write
 
 ## 평가 절차
 
+**tool_use 예산 (v7.1 M9)**: large scale 기준 25. 초과 시 `{artifactDir}/budget-exceeded.json` 에 기록하고 리뷰는 계속 진행. hicoco 에서 reviewer 가 최대 41 tool_use 를 기록한 session 은 원래 plan 단계에서 잡혔어야 할 DIP 위반을 re-발견하느라 시간을 낭비한 경우다 — M4 Architecture Guardrails 가 먼저 돌면 그 케이스가 사라져 25 로 충분하다.
+
 ### 1단계: 채점 기준 읽기
 
 `.vela/agents/reviewer/scoring.md`를 읽어 5차원 채점 기준을 확인한다. **반드시 읽어야 한다.**

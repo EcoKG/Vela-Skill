@@ -222,8 +222,10 @@ for hook in "${ACTIVE_HOOKS[@]}"; do
   assert_file "A: ~/.vela/hooks/$hook present (global)" "$FAKE_HOME/.vela/hooks/$hook"
 done
 
-# Global settings.json has 2 PreToolUse + 2 Stop vela hooks
-assert_eq "A: PreToolUse vela hook count"  "2" "$(count_global_hooks PreToolUse)"
+# v7.1 M10: global settings.json has 3 PreToolUse (gate-keeper,
+# gate-guard, file-read-cache) + 2 Stop (vela-stop, vela-review-gate).
+# Pre-v7.1 there were only 2 PreToolUse.
+assert_eq "A: PreToolUse vela hook count"  "3" "$(count_global_hooks PreToolUse)"
 assert_eq "A: Stop vela hook count"        "2" "$(count_global_hooks Stop)"
 
 # Hook commands point at the global hooks dir under the fake HOME
@@ -423,8 +425,9 @@ for legacy in "${LEGACY_HOOKS[@]}"; do
     "$PROJECT/.vela/hooks/$legacy"
 done
 
-# sync_local_project internally runs install.js → global hooks registered
-assert_eq "E: global PreToolUse count after sync" "2" "$(count_global_hooks PreToolUse)"
+# sync_local_project internally runs install.js → global hooks registered.
+# v7.1 M10 adds vela-file-read-cache to PreToolUse bringing the count to 3.
+assert_eq "E: global PreToolUse count after sync" "3" "$(count_global_hooks PreToolUse)"
 assert_eq "E: global Stop count after sync"       "2" "$(count_global_hooks Stop)"
 
 teardown
@@ -440,7 +443,8 @@ install_js > /dev/null 2>&1 || true
 
 PRE_UNINSTALL_PRE=$(count_global_hooks PreToolUse)
 PRE_UNINSTALL_STOP=$(count_global_hooks Stop)
-assert_eq "F: baseline PreToolUse count" "2" "$PRE_UNINSTALL_PRE"
+# v7.1 M10 raised PreToolUse from 2 to 3 (added vela-file-read-cache).
+assert_eq "F: baseline PreToolUse count" "3" "$PRE_UNINSTALL_PRE"
 assert_eq "F: baseline Stop count"       "2" "$PRE_UNINSTALL_STOP"
 
 UNINSTALL_OUT=$(install_js uninstall 2>&1 || true)

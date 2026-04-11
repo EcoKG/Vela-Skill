@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────
+# smoke-test.sh — v7.1 M3 Phase 3 smoke test template
+#
+# Copy to .vela/guidelines/smoke-test.sh (note: no .example suffix)
+# and customise for your project. vela-verifier Phase 3 runs this
+# if the file exists; otherwise it looks for package.json.scripts.
+# ["test:smoke"]; otherwise it logs a WARNING and passes Phase 3.
+#
+# Exit codes:
+#   0 — smoke test passed
+#   non-zero — smoke test failed (verifier marks Phase 3 FAIL)
+#
+# This is NOT a unit test. A smoke test verifies the integrated
+# runtime: HTTP endpoints reachable, DB queries return rows, core
+# CLI commands produce expected output. Keep it under 30 seconds.
+# ──────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "🔥 running smoke test..."
+
+# Example 1: HTTP health check (replace the URL with your service)
+if command -v curl >/dev/null; then
+  curl -fs http://localhost:3001/api/health >/dev/null \
+    && echo "  ✓ /api/health reachable" \
+    || { echo "  ✗ /api/health unreachable"; exit 1; }
+fi
+
+# Example 2: CLI invocation round-trip
+# if [ -f ./cli.js ]; then
+#   node ./cli.js --version | grep -q '^[0-9]' || { echo "  ✗ cli --version"; exit 1; }
+# fi
+
+# Example 3: database connection
+# psql "$DATABASE_URL" -c 'SELECT 1' >/dev/null \
+#   || { echo "  ✗ db not reachable"; exit 1; }
+
+echo "✅ smoke test passed"
