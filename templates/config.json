@@ -13,6 +13,13 @@
     "validation_rounds": 1,
     "steps": ["execute"]
   },
+  "scale_guard": {
+    "enabled": true,
+    "thresholds": {
+      "downgrade_signals_min": 2,
+      "upgrade_signals_min": 2
+    }
+  },
   "changeSurface": {
     "enabled": true,
     "excludePaths": [

@@ -15,9 +15,20 @@ tools: Read, Glob, Grep, Write
 
 - `request` — 구현할 작업 요청
 - `artifactDir` — 결과물 저장 경로
-- `researchPath` — `{artifactDir}/research.md` 경로
+- `targetsPath` — (v6.1) `{artifactDir}/targets.json` 경로. locate 단계가 식별한 파일:심볼:줄 좌표. plan.md의 **"변경되는 파일 목록"과 "Class Specification"을 이 targets 기반으로 작성해야 한다**. targets에 없는 파일을 임의로 plan에 추가하지 않는다 — 범위 확장이 필요하면 PM에게 알리고 locate 재실행을 요청한다.
+- `researchPath` — `{artifactDir}/research.md` 경로. research 단계가 없는 scale(medium/small/ralph/hotfix)에서는 생략되어 전달되지 않을 수 있다. 없으면 targets.json과 request만으로 plan을 작성한다.
 
 ## 작성 절차
+
+### 0단계: targets.json 로드 (v6.1)
+
+PM이 전달한 `targetsPath`가 있으면 `{artifactDir}/targets.json`을 먼저 읽는다:
+- `primary[]`의 file:line이 plan의 1차 편집 대상
+- `blast_radius[]`는 변경 영향을 평가할 caller/importer 목록
+- `confidence: high`이면 primary 외 파일 수정 금지, plan의 "변경 파일 목록"도 primary+tests에 한정
+- `confidence: low`이면 범위 확장을 Risk Assessment에 명시
+
+targets.json이 없으면 (레거시 호출 경로) 기존처럼 research.md만으로 진행한다.
 
 ### 1단계: 참조 파일 읽기
 
@@ -26,8 +37,8 @@ tools: Read, Glob, Grep, Write
 
 ### 2단계: research.md 읽기
 
-`{artifactDir}/research.md`를 읽고 핵심 발견사항과 구현 제약사항을 파악한다.
-research.md가 없으면 즉시 중단하고 PM에게 알린다.
+`researchPath`가 전달된 경우 `{artifactDir}/research.md`를 읽고 핵심 발견사항과 구현 제약사항을 파악한다.
+research 단계가 없는 scale(medium/small/ralph/hotfix)에서는 research.md가 존재하지 않을 수 있다 — 이때는 targets.json + request만으로 plan을 작성한다.
 
 ### 3단계: plan.md 작성
 
@@ -67,7 +78,8 @@ research.md가 없으면 즉시 중단하고 PM에게 알린다.
 
 ## 절대 위반 금지
 
-1. `research.md`를 읽지 않고 plan을 작성하지 않는다
-2. 필수 섹션(Architecture, Class Specification, Test Strategy) 누락 금지 — 엔진이 차단
-3. 각 필수 섹션은 반드시 200bytes 이상
-4. 소스 코드를 수정하지 않는다 — plan.md만 작성한다
+1. (research 단계 있는 scale) `research.md`를 읽지 않고 plan을 작성하지 않는다
+2. (v6.1) `targets.json`이 전달되면 그 `primary[]` 범위를 벗어나는 파일을 plan에 임의 추가하지 않는다
+3. 필수 섹션(Architecture, Class Specification, Test Strategy) 누락 금지 — 엔진이 차단
+4. 각 필수 섹션은 반드시 200bytes 이상
+5. 소스 코드를 수정하지 않는다 — plan.md만 작성한다

@@ -1,9 +1,35 @@
 ---
 name: "vela:start"
-description: "🧭 Vela 파이프라인 바로 시작 — init이 안 되어 있으면 자동으로 환경 구축 후 파이프라인을 시작합니다. 작업 내용과 규모를 선택하면 즉시 진행됩니다."
+description: "⚠️ DEPRECATED (v6.1) — /vela:small, /vela:medium, /vela:large, /vela:ralph, /vela:hotfix 중 하나를 직접 사용하세요. 호환성을 위해 유지되며 medium으로 폴백됩니다."
 ---
 
-# /vela:start — 파이프라인 바로 시작
+# /vela:start — 파이프라인 바로 시작 (⚠️ DEPRECATED)
+
+**이 커맨드는 v6.1부터 deprecated되었다. v7.0에서 제거될 예정이다.**
+
+사용자에게 아래 메시지를 반드시 먼저 표시한 후 진행한다:
+
+```
+⚠️ /vela:start는 v6.1부터 deprecated되었습니다.
+   다음 명령 중 하나를 직접 사용하는 것을 권장합니다:
+
+   - /vela:small   — 단일 파일/오타/한 줄 수정
+   - /vela:medium  — 명확한 기능 추가 (대부분의 일상 작업, 기본 추천)
+   - /vela:large   — 신규 모듈/광범위 리팩토링/critical path
+   - /vela:ralph   — TDD 루프 버그 수정
+   - /vela:hotfix  — 문서/설정 수정
+
+   이번 호출은 호환성을 위해 /vela:medium으로 진행합니다.
+   (v7.0에서 /vela:start는 완전히 제거됩니다.)
+```
+
+그 후 `/vela:medium`의 절차를 그대로 실행한다 (`skills/medium/SKILL.md` 참조).
+
+---
+
+## (레거시) 원본 /vela:start 절차
+
+아래는 v6.0까지의 동작이다. deprecation 이후에도 내부적으로 아래 절차를 실행하되 scale은 `medium`으로 고정한다.
 
 이 커맨드가 호출되면 Vela 파이프라인을 즉시 시작한다.
 init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
@@ -31,15 +57,13 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
 
    원본 요청 확보 후 **프롬프트 최적화** 절차를 실행한다 (`.vela/agents/pm/prompt-optimizer.md` 참조).
 
-4. **파이프라인 규모 선택**
-   사용자에게 선택지를 제시한다:
-   - ⛵ **small**: trivial (init → execute → commit → finalize) — 단일 파일, 10줄 이하
-   - 🧭 **medium**: quick (init → plan → execute → verify → commit → finalize) — 3파일 이하
-   - ✦ **large**: standard (full 12-step: research, plan, plan-check, checkpoint, branch, execute, verify, diff-summary, learning, commit, finalize) — 대규모 작업
+4. **(deprecated 동작) scale 자동 medium 고정**
+   v6.1부터 /vela:start는 scale 선택 단계를 건너뛰고 항상 `medium`을 사용한다.
+   명시적으로 다른 scale을 원하면 `/vela:small`, `/vela:large`, `/vela:ralph`, `/vela:hotfix`를 직접 호출한다.
 
 5. **파이프라인 초기화**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large>
+   node .vela/cli/vela-engine.js init "작업 설명" --scale medium
    ```
 
 6. **파이프라인 진행**

@@ -71,12 +71,28 @@ node .vela/cli/vela-engine.js state
 각 단계에서 PM은 해당 역할의 에이전트를 Agent 도구로 소환한다.
 `artifactDir`과 `request`를 프롬프트에 반드시 포함한다.
 
+**[locate 단계] (v6.1 — 모든 scale 공통)**
+```bash
+node .vela/cli/vela-engine.js locate
+```
+- `vela-engine locate`는 LLM 호출 0. ripgrep + git ls-files 기반 결정론적 좌표 식별.
+- `{artifactDir}/targets.json`을 생성한다 (primary/tests/blast_radius/confidence).
+- **confidence 해석 및 후속 분기**:
+  - `high` → 자동으로 다음 단계 transition, research가 호출되면 `project_mode: targeted`
+  - `medium` → AskUserQuestion으로 사용자에게 *"식별된 파일이 맞는지 확인"* (primary 리스트 표시), 승인 시 `project_mode: targeted`
+  - `low` → 원인에 따라 분기:
+    - tokens_extracted가 비어있음 → 프롬프트가 모호함 → AskUserQuestion으로 파일/함수 명시 요청
+    - 매칭이 너무 넓음 (>10) → `project_mode: exploratory`로 폴백 (research가 광범위 분석)
+    - 좌표가 전혀 없음 → bootstrap (신규 프로젝트) 가능성 → `project_mode: bootstrap`
+- `record pass` → `transition` 순서로 진행.
+
 **[research 단계]**
 ```
 Agent(subagent_type="vela-researcher", prompt="
   request: {request}
   artifactDir: {artifactDir}
-  project_mode: {exploratory|targeted|bootstrap}
+  targetsPath: {artifactDir}/targets.json
+  project_mode: {targeted|exploratory|bootstrap}  ← locate confidence에서 자동 결정
   projectEnv: {언어, 프레임워크 정보}
   {artifactDir}/research.md를 생성하라.
 ")
@@ -101,7 +117,8 @@ Agent(subagent_type="vela-researcher", prompt="
 Agent(subagent_type="vela-planner", prompt="
   request: {request}
   artifactDir: {artifactDir}
-  researchPath: {artifactDir}/research.md
+  targetsPath: {artifactDir}/targets.json
+  researchPath: {artifactDir}/research.md   ← research 단계 없는 scale에서는 생략
   {artifactDir}/plan.md를 생성하라.
 ")
 → Agent(subagent_type="vela-reviewer", prompt="step: plan, ...")
@@ -139,7 +156,8 @@ node .vela/cli/vela-engine.js branch
 Agent(subagent_type="vela-executor", prompt="
   request: {request}
   artifactDir: {artifactDir}
-  planPath: {artifactDir}/plan.md
+  targetsPath: {artifactDir}/targets.json
+  planPath: {artifactDir}/plan.md            ← plan 단계 없는 scale에서는 생략
   {reviewFeedback가 있으면 포함}
 ")
 → Agent(subagent_type="vela-reviewer", prompt="step: execute, ...")

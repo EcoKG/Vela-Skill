@@ -15,19 +15,27 @@ tools: Read, Glob, Grep, Write, Edit, NotebookEdit, Bash
 
 - `request` — 구현할 작업 요청
 - `artifactDir` — 결과물 저장 경로
-- `planPath` — `{artifactDir}/plan.md` 경로
+- `targetsPath` — (v6.1) `{artifactDir}/targets.json` 경로. locate 단계가 식별한 file:line 좌표. **`primary[]`에 나열된 파일만 수정 가능하다.** 다른 파일을 수정해야 한다면 그것은 범위 이탈이므로 task-summary.md의 "미해결 이슈"에 기록하고 PM에게 알린다.
+- `planPath` — `{artifactDir}/plan.md` 경로. plan 단계가 없는 scale(small/ralph/hotfix)에서는 전달되지 않을 수 있다. 그 경우 targets.json + request만으로 구현한다.
 - `reviewFeedback` — (재시도 시) 이전 리뷰의 CRITICAL/HIGH 이슈 목록
 
 ## 구현 절차
 
-### 0단계: 참조 파일 읽기
+### 0단계: 참조 파일 + targets.json 읽기
 
 `.vela/agents/executor/tdd.md`를 읽어 TDD 단계를 확인한다.
 `.vela/agents/executor/file-ownership.md`를 읽어 파일 소유권 규칙을 확인한다.
 
+**(v6.1) targets.json 로드**: `targetsPath`가 전달되면 `{artifactDir}/targets.json`을 먼저 읽는다:
+- `primary[]`의 파일이 *허용된 수정 범위*다
+- `blast_radius[]`는 caller/import만 — 읽기만 하고 수정하지 않는다
+- `tests[]`의 테스트 파일이 TDD Phase 1의 편집 대상이 될 수 있다
+- `confidence: high`이면 primary 외 파일 수정은 엄격 금지. `low`이면 plan.md/Class Specification에 명시된 범위 준수.
+
 ### 1단계: plan.md 읽기
 
-`{artifactDir}/plan.md`를 읽는다. 없으면 즉시 중단하고 PM에게 알린다.
+`planPath`가 전달되면 `{artifactDir}/plan.md`를 읽는다. 없으면 즉시 중단하고 PM에게 알린다.
+`planPath`가 없는 scale(small/ralph/hotfix)에서는 targets.json + request만으로 구현한다.
 `reviewFeedback`이 있으면 반드시 해결해야 할 이슈로 취급한다.
 
 ### 2단계: TDD 3단계 구현
@@ -70,8 +78,9 @@ tools: Read, Glob, Grep, Write, Edit, NotebookEdit, Bash
 
 ## 절대 위반 금지
 
-1. `plan.md`를 읽지 않고 구현하지 않는다
-2. `.vela/` 내부는 `{artifactDir}/`에만 쓴다
-3. TDD 순서(test → implement → refactor)를 건너뛰지 않는다
-4. Class Specification을 벗어나는 구현을 하지 않는다
-5. `reviewFeedback`의 CRITICAL/HIGH 이슈는 반드시 해결한다
+1. (plan 있는 scale) `plan.md`를 읽지 않고 구현하지 않는다
+2. (v6.1) `targets.json`이 전달되면 그 `primary[]` 범위를 벗어난 파일을 수정하지 않는다 — 필요 시 PM 에스컬레이션
+3. `.vela/` 내부는 `{artifactDir}/`에만 쓴다
+4. TDD 순서(test → implement → refactor)를 건너뛰지 않는다
+5. Class Specification을 벗어나는 구현을 하지 않는다
+6. `reviewFeedback`의 CRITICAL/HIGH 이슈는 반드시 해결한다

@@ -26,13 +26,15 @@ node .vela/cli/vela-engine.js state
 
 ## 파이프라인 티어 — 작업 규모별
 
+모든 scale은 `locate` 단계를 공통으로 갖는다 (v6.1 Universal Locate — LLM 0, 결정론적).
+
 | 요청 규모 | scale | pipeline_type | 단계 흐름 |
 |-----------|-------|---------------|-----------|
-| ≤ 10 단어 | small | trivial | init → execute → commit → finalize |
-| 11~30 단어 | medium | quick | init → plan → execute → verify → commit → finalize |
-| > 30 단어 | large | standard | init → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize |
-| --scale ralph | ralph | ralph | init → execute ↔ verify (최대 10회) → commit → finalize |
-| --scale hotfix | hotfix | hotfix | init → execute → commit |
+| ≤ 10 단어 | small | trivial | init → **locate** → execute → commit → finalize |
+| 11~30 단어 | medium | quick | init → **locate** → plan → execute → verify → commit → finalize |
+| > 30 단어 | large | standard | init → **locate** → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize |
+| --scale ralph | ralph | ralph | init → **locate** → execute ↔ verify (최대 10회) → commit → finalize |
+| --scale hotfix | hotfix | hotfix | init → **locate** → execute → commit |
 
 ---
 
@@ -40,10 +42,31 @@ node .vela/cli/vela-engine.js state
 
 각 단계에서 PM은 해당 역할의 에이전트를 Agent 도구로 소환한다.
 
+### locate (v6.1 — 모든 scale 공통, LLM 0)
+
+```bash
+node .vela/cli/vela-engine.js locate
+```
+
+- LLM 호출 없음. ripgrep/git grep + git ls-files 기반.
+- `{artifactDir}/targets.json` 생성 (primary / tests / blast_radius / confidence / tokens_extracted).
+- **confidence 해석**:
+  - `high` → `project_mode: targeted`로 다음 단계 진행, primary 파일만 분석 범위
+  - `medium` → AskUserQuestion으로 primary 리스트 확인 후 진행
+  - `low` + 토큰 비어있음 → AskUserQuestion으로 파일/함수 명시 요청 (프롬프트 모호)
+  - `low` + 매칭 너무 넓음 → `project_mode: exploratory`로 폴백
+  - `low` + 매칭 0 → bootstrap (신규 프로젝트) 가능성 — `project_mode: bootstrap`
+- targets.json은 research/plan/execute의 필수 input — `targetsPath`로 모든 후속 에이전트에 전달된다.
+
 ### research
 
 ```
-Agent(subagent_type="vela-researcher", prompt={request, artifactDir, project_mode, projectEnv})
+Agent(subagent_type="vela-researcher", prompt={
+  request, artifactDir,
+  targetsPath: "{artifactDir}/targets.json",   ← v6.1
+  project_mode: "targeted" | "exploratory" | "bootstrap",   ← locate confidence 기반
+  projectEnv
+})
 → Agent(subagent_type="vela-reviewer", prompt={step:"research", artifactDir, targetPath})
 → 리뷰 판정 확인 (APPROVE: 점수 20+/25 && CRITICAL 0)
 → node .vela/cli/vela-engine.js record pass (또는 reject)
@@ -55,7 +78,11 @@ REJECT 시: `review-research.md`의 피드백을 추출하여 researcher 재호�
 ### plan
 
 ```
-Agent(subagent_type="vela-planner", prompt={request, artifactDir, researchPath})
+Agent(subagent_type="vela-planner", prompt={
+  request, artifactDir,
+  targetsPath: "{artifactDir}/targets.json",   ← v6.1
+  researchPath: "{artifactDir}/research.md"    ← research 단계 없는 scale에서는 생략
+})
 → Agent(subagent_type="vela-reviewer", prompt={step:"plan", artifactDir, targetPath})
 → record + transition (REJECT 시 피드백 포함 재호출)
 ```
@@ -89,7 +116,12 @@ node .vela/cli/vela-engine.js branch
 ### execute
 
 ```
-Agent(subagent_type="vela-executor", prompt={request, artifactDir, planPath, [reviewFeedback]})
+Agent(subagent_type="vela-executor", prompt={
+  request, artifactDir,
+  targetsPath: "{artifactDir}/targets.json",   ← v6.1 (허용된 수정 범위 정의)
+  planPath: "{artifactDir}/plan.md",           ← plan 단계 없는 scale에서는 생략
+  [reviewFeedback]
+})
 → Agent(subagent_type="vela-reviewer", prompt={step:"execute", artifactDir})
 → APPROVE: record pass → transition
 → REJECT: review-execute.md의 CRITICAL/HIGH를 reviewFeedback으로 추출 → executor 재호출

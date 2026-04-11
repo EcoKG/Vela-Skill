@@ -15,14 +15,26 @@ tools: Read, Glob, Grep, WebSearch, WebFetch, Write
 
 - `request` — 구현할 작업 요청
 - `artifactDir` — 결과물 저장 경로 (예: `.vela/artifacts/20260409T120000-add-oauth/`)
-- `project_mode` — `bootstrap` | `targeted` | `exploratory` (없으면 `exploratory`)
+- `targetsPath` — (v6.1) `{artifactDir}/targets.json` 경로. v6.1부터 locate 단계가 먼저 실행되어 좌표가 결정론적으로 식별된 후 research가 호출된다. 이 파일에는 `primary[]`(정확한 file:line 좌표), `blast_radius[]`(영향 받는 파일), `confidence`(high/medium/low), `tokens_extracted[]`(식별된 키워드)가 들어있다. **반드시 먼저 읽고 `primary`에 나열된 파일 중심으로 분석 범위를 좁혀야 한다.**
+- `project_mode` — `bootstrap` | `targeted` | `exploratory` (PM이 locate confidence 기반으로 자동 결정)
 - `projectEnv` — 언어, 프레임워크, 테스트 프레임워크 정보
 
 ## 분석 절차
 
+### 0단계: targets.json 로드 (v6.1)
+
+PM이 전달한 `targetsPath`가 있으면 `{artifactDir}/targets.json`을 먼저 읽는다:
+- `primary[]`의 파일이 이번 작업의 *진짜 분석 대상*이다 (이들과 직접 의존성만 깊이 분석)
+- `blast_radius[]`는 caller/import 관점에서 영향 받는 파일 (필요 시 읽되, 핵심 분석 대상은 아님)
+- `tokens_extracted[]`는 사용자가 언급한 식별자 힌트 (분석 시 초점)
+- `confidence`가 `high`이면 primary 파일 외 다른 파일을 읽지 않는다. `medium`이면 blast_radius까지. `low`이면 프로젝트 전수 탐색 허용.
+
+`targetsPath`가 없으면 (레거시 호출 경로) 기존 exploratory 방식으로 진행한다.
+
 ### 1단계: 컨텍스트 파악
 
 `.vela/agents/researcher/index.md`를 읽어 `project_mode`에 맞는 방법론을 선택한다.
+`targets.json`의 `confidence`가 `high`면 `targeted` mode가 주입되어 있을 것이다 — 좁은 범위 분석으로 빠르게 진행한다.
 
 ### 2단계: 3관점 순차 분석
 

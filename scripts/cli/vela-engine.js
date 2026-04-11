@@ -47,6 +47,7 @@ const commands = {
   commit: cmdCommit,
   cancel: cmdCancel,
   history: cmdHistory,
+  locate: cmdLocate,
   "clean-scan": cmdCleanScan,
   "clean-exec": cmdCleanExec,
 };
@@ -108,10 +109,23 @@ function cmdInit() {
     });
   }
 
-  // Scale resolution: --scale flag > autoDetectScale > "large" fallback
-  // scales map in pipeline.json: { small: "trivial", medium: "quick", large: "standard", ... }
+  // Scale resolution (v6.1): --scale flag required.
+  // If omitted → fall back to "medium" with a deprecation warning.
+  // autoDetectScale() is deprecated — word-count heuristics don't reflect
+  // actual work weight (e.g. "OAuth 추가" is small but <10 words, "single-
+  // line typo fix in auth.ts" is >10 words). Use explicit scale.
+  let scaleWarning = null;
   const scaleFlag = getFlag("--scale");
-  const scaleName = scaleFlag || autoDetectScale(request);
+  let scaleName;
+  if (scaleFlag) {
+    scaleName = scaleFlag;
+  } else {
+    scaleWarning =
+      "⚠️ --scale not specified. Defaulting to 'medium'. " +
+      "Use /vela:small | /vela:medium | /vela:large | /vela:ralph | /vela:hotfix " +
+      "to be explicit (autoDetectScale was deprecated in v6.1).";
+    scaleName = "medium";
+  }
   const scalesMap = pipelineDef.scales || {};
   // scalesMap lookup: known scale names (small/medium/large/ralph/hotfix) → pipeline type.
   // If scaleName is already a pipeline type (e.g. "standard"), fall through directly.
@@ -210,6 +224,7 @@ function cmdInit() {
     artifact_dir: artifactDir,
     steps: steps.map((s) => ({ id: s.id, name: s.name, mode: s.mode })),
     cleaned_cancelled: cleaned,
+    ...(scaleWarning ? { warning: scaleWarning } : {}),
     message:
       `Pipeline initialized. Scale: ${scaleName} → ${pipelineType}. Current step: ${firstStep.name} (${firstStep.mode} mode)` +
       (cleaned > 0 ? ` (cleaned ${cleaned} cancelled artifact(s))` : ""),
@@ -632,6 +647,125 @@ function cmdCommit() {
     branch: state.git.current_branch || state.git.pipeline_branch,
     files_in_diff: status.split("\n").length,
     message: `Committed: ${commitMessage} (${commitHash.substring(0, 7)})`,
+  });
+}
+
+/**
+ * cmdLocate — Mechanical Locate (v6.1)
+ *
+ * Runs scripts/shared/locate.js against the active pipeline's request and
+ * writes {artifactDir}/targets.json. LLM-free: deterministic grep + git
+ * ls-files. Used by every scale's locate step (small/medium/large/ralph/hotfix)
+ * to give downstream agents a precise file:line target list.
+ *
+ * Flags:
+ *   --request "..."   Override the request (defaults to active pipeline's request)
+ *   --json            Print the full targets.json to stdout (default: summary)
+ *
+ * Exit gates that depend on this:
+ *   - targets_json_exists  (added in checkExitGate)
+ */
+function cmdLocate() {
+  // Resolve target dir + request
+  const requestOverride = getFlag("--request");
+  const state = findActiveState();
+  let artifactDir;
+  let request;
+
+  if (requestOverride) {
+    request = requestOverride;
+    // When called outside an active pipeline, write to a temp inspection dir
+    artifactDir =
+      (state && state._artifactDir) || path.join(VELA_DIR, "locate-preview");
+    if (!fs.existsSync(artifactDir)) {
+      fs.mkdirSync(artifactDir, { recursive: true });
+    }
+  } else {
+    if (!state) {
+      return output({
+        ok: false,
+        error:
+          "No active pipeline. Pass --request \"...\" to locate without a pipeline.",
+      });
+    }
+    request = state.request;
+    artifactDir = state._artifactDir;
+  }
+
+  // Lazy-load locate module — keeps engine startup fast for other commands
+  let locateMod;
+  try {
+    // Project-local copy first (post-install layout: .vela/shared/locate.js),
+    // fall back to source layout for tests and dev runs.
+    const candidates = [
+      path.join(CWD, ".vela", "shared", "locate.js"),
+      path.join(__dirname, "..", "shared", "locate.js"),
+    ];
+    let resolved = null;
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        resolved = c;
+        break;
+      }
+    }
+    if (!resolved) {
+      return output({
+        ok: false,
+        error:
+          "locate.js not found. Run `node scripts/install.js` to deploy shared modules.",
+      });
+    }
+    locateMod = require(resolved);
+  } catch (e) {
+    return output({ ok: false, error: `Failed to load locate.js: ${e.message}` });
+  }
+
+  // Run locate
+  let result;
+  try {
+    result = locateMod.locate(request, { cwd: CWD });
+  } catch (e) {
+    return output({ ok: false, error: `locate() failed: ${e.message}` });
+  }
+
+  // Write targets.json
+  const targetsPath = path.join(artifactDir, "targets.json");
+  try {
+    writeJSON(targetsPath, result);
+  } catch (e) {
+    return output({
+      ok: false,
+      error: `Failed to write targets.json: ${e.message}`,
+      targets_path: targetsPath,
+    });
+  }
+
+  // Output summary (or full JSON if --json)
+  if (hasFlag("--json")) {
+    return output({
+      ok: true,
+      command: "locate",
+      targets_path: targetsPath,
+      ...result,
+    });
+  }
+
+  output({
+    ok: true,
+    command: "locate",
+    targets_path: targetsPath,
+    confidence: result.confidence,
+    primary_count: result.primary.length,
+    primary: result.primary.slice(0, 10).map((p) => ({
+      file: p.file,
+      symbol: p.symbol,
+      lines: p.lines,
+      match_source: p.match_source,
+    })),
+    tests_count: result.tests.length,
+    blast_radius_count: result.blast_radius.length,
+    warnings: result.warnings,
+    backend: locateMod.searchBackend(),
   });
 }
 
@@ -1104,6 +1238,15 @@ function checkExitGate(stepDef, state) {
         )
           missing.push(gate);
         break;
+      case "targets_json_exists":
+        // v6.1 universal locate gate — every pipeline scale's `locate` step
+        // produces this artifact via `vela-engine locate`
+        if (
+          !artifactDir ||
+          !fs.existsSync(path.join(artifactDir, "targets.json"))
+        )
+          missing.push(gate);
+        break;
       case "plan_md_exists":
         if (!artifactDir || !fs.existsSync(path.join(artifactDir, "plan.md")))
           missing.push(gate);
@@ -1311,6 +1454,19 @@ function checkExitGate(stepDef, state) {
   return { passed: missing.length === 0, missing };
 }
 
+/**
+ * @deprecated since v6.1 — scheduled for removal in v7.0.
+ *
+ * Word-count heuristic doesn't reflect actual work weight.
+ * Users should pick scale explicitly via /vela:small, /vela:medium,
+ * /vela:large, /vela:ralph, or /vela:hotfix. When --scale is omitted,
+ * cmdInit() now falls back to "medium" with a deprecation warning
+ * instead of calling this function.
+ *
+ * Left in place only to avoid breaking any external callers that
+ * require('./vela-engine') this module. Will be deleted in v7.0
+ * along with the /vela:start slash command removal.
+ */
 function autoDetectScale(request) {
   const words = request.split(/\s+/).length;
   if (words <= 10) return "small";
