@@ -245,6 +245,59 @@ assert_eq \
   "$EXPECTED_COUNT" \
   "$ACTUAL_COUNT3"
 
+# ─── Phase 5: skill-name collision prevention (v7.0.4) ─────
+# Pre-v7.0.4 update.sh copied the entire skills/ tree into
+# $SKILL_DIR/skills/ in addition to the top-level vela-*/ install.
+# Claude Code discovers skills recursively, so it saw BOTH copies
+# of the same SKILL.md under the same `name:` frontmatter — causing
+# silent collisions that hid the new /vela:fix, /vela:small etc.
+# commands from autocomplete.
+#
+# The fix is to NOT copy skills/ into $SKILL_DIR/skills/ at all.
+# This phase verifies:
+#   1. $SKILL_DIR/skills/ does not exist after update.sh runs
+#   2. There is exactly ONE SKILL.md per skill name in the tree
+#      (i.e. the only copies live under $SKILLS_ROOT/vela-*/)
+
+echo ""
+echo "📋 Phase 5: collision prevention — no duplicate SKILL.md"
+
+LEGACY_SUBDIR="$TMP_HOME/.claude/skills/vela/skills"
+if [ ! -d "$LEGACY_SUBDIR" ]; then
+  assert_eq "legacy .claude/skills/vela/skills/ subdir absent" "ok" "ok"
+else
+  assert_eq "legacy .claude/skills/vela/skills/ subdir absent" "ok" "still-present"
+  echo "     found: $LEGACY_SUBDIR"
+  find "$LEGACY_SUBDIR" -maxdepth 2 -name 'SKILL.md' 2>/dev/null | head -10
+fi
+
+# Verify each vela-<sub> name has exactly one SKILL.md file anywhere
+# under $TMP_HOME/.claude/skills/ (i.e. no pair of files share the
+# same `name:` frontmatter value).
+TOTAL=$((TOTAL + 1))
+collision_found=0
+for sub in "${EXPECTED_SKILLS[@]}"; do
+  # Match the frontmatter `name:` field for this sub-skill.
+  # The value may be `vela:<sub>` or `vela-<sub>` depending on
+  # frontmatter convention, so we check both.
+  count=$(grep -rslE "^name:\s*[\"']?vela[:-]${sub}[\"']?\s*$" \
+    "$TMP_HOME/.claude/skills/" 2>/dev/null | wc -l)
+  if [ "$count" != "1" ]; then
+    echo "  ❌ collision: name vela:${sub} appears in $count SKILL.md files:"
+    grep -rslE "^name:\s*[\"']?vela[:-]${sub}[\"']?\s*$" \
+      "$TMP_HOME/.claude/skills/" 2>/dev/null | sed 's/^/       /'
+    collision_found=1
+  fi
+done
+
+if [ "$collision_found" = "0" ]; then
+  echo "  ✅ PASS: every vela-* name has exactly one SKILL.md"
+  PASS=$((PASS + 1))
+else
+  echo "  ❌ FAIL: duplicate SKILL.md files detected for at least one name"
+  FAIL=$((FAIL + 1))
+fi
+
 # ─── Summary ────────────────────────────────────────────────
 
 echo ""

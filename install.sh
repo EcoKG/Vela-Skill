@@ -54,10 +54,22 @@ if [ -d "$TMP/references" ]; then
 fi
 
 # Skills (sub-skills installed as independent top-level skills for Claude Code autocomplete)
-if [ -d "$TMP/skills" ]; then
-  rm -rf "$SKILL_DIR/skills" 2>/dev/null
-  cp -r "$TMP/skills" "$SKILL_DIR/skills"
+#
+# v7.0.4: We NO LONGER copy the skills/ tree into $SKILL_DIR/skills/.
+# Pre-v7.0.4 installs did `cp -r "$TMP/skills" "$SKILL_DIR/skills"`,
+# which created $SKILL_DIR/skills/<name>/SKILL.md files with the same
+# frontmatter `name: vela:<name>` as the top-level
+# $HOME/.claude/skills/vela-<name>/SKILL.md files installed by the
+# loop below. Claude Code discovers skills from nested .claude/skills/
+# directories, so it registered BOTH SKILL.md files under the same
+# name, causing a silent collision that hid the new /vela:fix,
+# /vela:small etc. commands from autocomplete.
+#
+# We still rm -rf the legacy directory on fresh installs as a
+# defensive measure in case a user had pre-v7.0.4 state lying around.
+rm -rf "$SKILL_DIR/skills" 2>/dev/null
 
+if [ -d "$TMP/skills" ]; then
   # Install as independent top-level skills so /vela:fix, /vela:small etc.
   # appear in Claude Code slash-command autocomplete. Dynamic glob — any
   # skills/*/ directory is picked up automatically.
