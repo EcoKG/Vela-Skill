@@ -1392,24 +1392,26 @@ function checkExitGate(stepDef, state) {
         }
         break;
       case "implementation_complete":
-        // File-based: approval-execute.json must exist with decision: "approve"
+        // File-based: approval-{current_step}.json must exist with decision: "approve"
+        // v7.0: this gate is reused by both the legacy `execute` step and the
+        // new `patch` step (surgical pipeline). Resolve the approval filename
+        // from state.current_step so both steps share one implementation.
         if (artifactDir) {
-          const execApprovalPath = path.join(
-            artifactDir,
-            "approval-execute.json",
-          );
-          if (!fs.existsSync(execApprovalPath)) {
-            missing.push("approval_missing:approval-execute.json");
+          const implStep = state.current_step || "execute";
+          const approvalFile = `approval-${implStep}.json`;
+          const implApprovalPath = path.join(artifactDir, approvalFile);
+          if (!fs.existsSync(implApprovalPath)) {
+            missing.push(`approval_missing:${approvalFile}`);
           } else {
             try {
               const approval = JSON.parse(
-                fs.readFileSync(execApprovalPath, "utf-8"),
+                fs.readFileSync(implApprovalPath, "utf-8"),
               );
               if (approval.decision !== "approve") {
-                missing.push("rejected:execute");
+                missing.push(`rejected:${implStep}`);
               }
             } catch (e) {
-              missing.push("approval_invalid:execute");
+              missing.push(`approval_invalid:${implStep}`);
             }
           }
         }

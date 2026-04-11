@@ -1,15 +1,16 @@
 ---
 name: vela
-description: "⛵ Vela 샌드박스 엔진. v6.1부터 scale별 직접 호출: /vela:small /vela:medium(기본) /vela:large /vela:ralph /vela:hotfix. 또한 /vela:analyze 분석 보고서, /vela:git-clean git 정리, /vela:update 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, small, medium, large, ralph, hotfix, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
+description: "⛵ Vela 샌드박스 엔진. v7.0부터 surgical: /vela:fix (Target-First 결정론). v6.1 scale: /vela:small /vela:medium(기본) /vela:large /vela:ralph /vela:hotfix. 또한 /vela:analyze 분석 보고서, /vela:git-clean git 정리, /vela:update 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, fix, small, medium, large, ralph, hotfix, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
 ---
 
-# ⛵ Vela Engine v6.1 — Sandbox Development System (Precision & Locate)
+# ⛵ Vela Engine v7.0 — Sandbox Development System (Surgical Pipeline)
 
 Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 
 ## /vela 호출 시
 
 `$ARGUMENTS`를 확인한다:
+- `$ARGUMENTS`가 `fix` 또는 `fix <작업설명>` → **(v7.0)** `/vela:fix` 절차 (Target-First surgical pipeline)
 - `$ARGUMENTS`가 `small | medium | large | ralph | hotfix` 또는 `small <작업설명>` 형태 → 해당 scale skill 절차 실행 (`/vela:{scale}`)
 - `$ARGUMENTS`가 `start` 또는 `start <작업설명>` → **(deprecated)** deprecation 경고 후 `/vela:medium` 절차로 폴백
 - `$ARGUMENTS`가 `status` → 현재 파이프라인 상태를 보여준다:
@@ -32,10 +33,11 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 ```json
 {
   "questions": [{
-    "question": "⛵ Vela — 어떤 scale로 시작할까요?",
+    "question": "⛵ Vela — 어떤 파이프라인으로 시작할까요?",
     "header": "⛵ Vela",
     "options": [
-      { "label": "medium (Recommended)", "description": "명확한 기능 추가 — 7단계 quick 파이프라인" },
+      { "label": "fix (Recommended, v7.0)", "description": "Target-First 정밀 수정 — locate → research(targeted) → spec → patch (8단계, 결정론적)" },
+      { "label": "medium", "description": "명확한 기능 추가 — 7단계 quick 파이프라인" },
       { "label": "small", "description": "단일 파일/오타/한 줄 수정 — 5단계 trivial" },
       { "label": "large", "description": "광범위 설계/critical path — 13단계 standard" },
       { "label": "ralph", "description": "TDD 루프 버그 수정 — execute ↔ verify 반복" },
@@ -46,20 +48,23 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 }
 ```
 
-선택된 scale에 해당하는 skill(`skills/{scale}/SKILL.md`)을 실행한다.
+선택된 파이프라인에 해당하는 skill(`skills/{fix|small|medium|large|ralph|hotfix}/SKILL.md`)을 실행한다.
 
 ---
 
-## /vela:{scale} — 파이프라인 바로 시작 (v6.1)
+## /vela:{scale} — 파이프라인 바로 시작 (v6.1/v7.0)
 
 상세 skill 파일은 `skills/{scale}/SKILL.md` 참조:
+- `skills/fix/SKILL.md` — **surgical (8단계, v7.0 기본 추천)** — Target-First 결정론적 patch
 - `skills/small/SKILL.md` — trivial (5단계)
-- `skills/medium/SKILL.md` — quick (7단계, 기본 추천)
+- `skills/medium/SKILL.md` — quick (7단계)
 - `skills/large/SKILL.md` — standard (13단계)
 - `skills/ralph/SKILL.md` — ralph (TDD 루프)
 - `skills/hotfix/SKILL.md` — hotfix (4단계, 문서/설정)
 
-**모든 scale은 `locate` 단계를 공통으로 갖는다** — v6.1 Universal Locate가 `targets.json`을 먼저 생성하여 research/plan/execute가 결정론적 좌표 기반으로 작동한다 (LLM 0).
+**모든 파이프라인은 `locate` 단계를 공통으로 갖는다** — v6.1 Universal Locate가 `targets.json`을 먼저 생성하여 research/plan/execute/spec/patch가 결정론적 좌표 기반으로 작동한다 (LLM 0).
+
+**v7.0 surgical 파이프라인(`/vela:fix`)은 추가로 `spec` 단계를 갖는다** — planner가 `mode: spec`으로 호출되어 `patch-spec.md`(file:line Before/After + Explicitly out of scope)를 작성하고, executor가 이 spec을 정확히 적용하며, verifier가 범위 위반을 검사한다.
 
 ## /vela:start — (⚠️ deprecated v6.1, v7.0 제거 예정)
 
