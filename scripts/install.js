@@ -1305,16 +1305,27 @@ function validate() {
     );
   }
 
-  // 9. Global pollution cleanup — remove legacy vela files from ~/.claude/
-  // Valid entries: vela/ (main skill), vela-start/ vela-analyze/ vela-git-clean/ vela-update/ (sub-skills)
-  // Invalid (legacy): vela-init/ vela-auto/ (removed in V6.2), commands/vela/ (v1/v2 slash commands)
+  // 9. Global pollution cleanup — remove ONLY explicitly-known legacy
+  //    directories from ~/.claude/skills/.
+  //
+  // v7.0.5: This block used to be an allow-list of five hardcoded
+  // directory names that deleted every other vela-* directory as
+  // "pollution". That design coupled install.js to the skills/
+  // catalog — whenever a new slash command skill was added to the
+  // repo (v6.1 added vela-small/medium/large/ralph/hotfix, v7.0
+  // added vela-fix) install.js would delete them on every /vela:large
+  // run, silently breaking slash-command autocomplete. update.sh and
+  // install.js disagreed on the single source of truth.
+  //
+  // The fix is to invert it into a BLOCK-LIST of directory names that
+  // were *explicitly* retired in past Vela versions. Every other
+  // vela-* directory is preserved, regardless of whether install.js
+  // "knows" about it. Adding a new slash-command skill now requires
+  // touching ONLY install.sh/update.sh, never this file.
   const HOME = process.env.HOME || process.env.USERPROFILE;
-  const VALID_SUB_SKILLS = new Set([
-    "vela",
-    "vela-start",
-    "vela-analyze",
-    "vela-git-clean",
-    "vela-update",
+  const KNOWN_LEGACY_SKILLS = new Set([
+    "vela-init", // removed in v6.2 (used to be the `/vela init` wrapper)
+    "vela-auto", // removed in v6.2 (used to be the `/vela auto` wrapper)
   ]);
   if (HOME) {
     const globalSkillsDir = path.join(HOME, ".claude", "skills");
@@ -1322,11 +1333,11 @@ function validate() {
       const velaDirs = [];
       try {
         for (const entry of fs.readdirSync(globalSkillsDir)) {
-          // Only remove vela-* dirs that are NOT valid sub-skills
-          if (
-            (entry === "vela" || entry.startsWith("vela-")) &&
-            !VALID_SUB_SKILLS.has(entry)
-          ) {
+          // Only remove vela-* dirs explicitly on the legacy block-list.
+          // Everything else — including the main `vela` skill and every
+          // current slash-command skill (vela-start, vela-fix, vela-small
+          // etc.) — is preserved.
+          if (KNOWN_LEGACY_SKILLS.has(entry)) {
             velaDirs.push(entry);
           }
         }
@@ -1339,7 +1350,7 @@ function validate() {
         try {
           fs.rmSync(dirPath, { recursive: true, force: true });
           results.fixed.push(
-            `Removed global pollution: ~/.claude/skills/${dir}`,
+            `Removed legacy global skill: ~/.claude/skills/${dir}`,
           );
         } catch (e) {
           results.warnings.push(
