@@ -1630,7 +1630,7 @@ function registerGlobalHooks(hooksSourceDir) {
       }
     }
 
-    // v7.1.4 — shared/constants.js: deploy the REAL source, not the wrapper.
+    // v7.1.4/v7.1.5 — shared/constants.js: deploy the REAL source, not the wrapper.
     //
     // scripts/hooks/shared/constants.js is a 3-line re-export wrapper:
     //     module.exports = require("../../shared/constants");
@@ -1640,33 +1640,76 @@ function registerGlobalHooks(hooksSourceDir) {
     // the wrapper file is copied to ~/.vela/hooks/shared/constants.js:
     // now the parent lookup points at ~/.vela/shared/constants.js — which
     // does not exist, because the global hook dir only ships hooks/, not
-    // the whole scripts/shared/ tree. Any hook that require()s
-    // ./shared/constants (gate-keeper, gate-guard, stop, review-gate)
-    // then throws:
+    // the whole scripts/shared/ tree. gate-keeper and gate-guard then
+    // throw MODULE_NOT_FOUND at node:internal/modules/cjs/loader:1386 on
+    // every PreToolUse.
     //
-    //     Error: Cannot find module '../../shared/constants'
-    //     at /home/USER/.vela/hooks/shared/constants.js:7:18
+    // v7.1.4 first attempt resolved `skillBase = path.resolve(__dirname,"..")`
+    // and pointed at skillBase/scripts/shared/constants.js. That works
+    // when running install.js from inside the skill repository, but fails
+    // when install.js has been deployed to a USER PROJECT at
+    // {project}/.vela/install.js — in that path, __dirname is
+    // {project}/.vela and skillBase is {project}. A user project is not
+    // a skill repo; there is no scripts/shared/ there. install.js then
+    // silently fell back to the wrapper, reintroducing the original bug.
     //
-    // Pre-v7.1.4 this didn't surface in day-to-day use because
-    // ~/.claude/settings.json happened to reference the repo path
-    // (~/.claude/skills/vela/scripts/hooks/vela-*.js), where the wrapper
-    // resolves correctly. But v7.1.3's addGlobalHook guard made the
-    // ~/.vela/hooks/ path a legitimate fallback, and anyone whose
-    // settings.json lost the repo-path entry would flip to the broken
-    // wrapper chain and start seeing loader:1386 on every tool call.
-    //
-    // v7.1.4 deploys the *actual* scripts/shared/constants.js content
-    // (resolved from skillBase = the repo root, via __dirname), so the
-    // hook-dir file is self-contained and no parent lookup is needed.
-    // The wrapper in scripts/hooks/shared/constants.js still ships inside
-    // the repo for any code that expects to require it from there.
+    // v7.1.5 search order (pick the FIRST that exists):
+    //   1. skillBase/scripts/shared/constants.js
+    //      — install.js running from the skill repo itself
+    //   2. {project}/.vela/shared/constants.js
+    //      — install.js running from {project}/.vela/install.js where
+    //        sync_local_project has already copied scripts/shared/*.js
+    //        into .vela/shared/. This is the MAIN path for user projects
+    //        running `update.sh --local`.
+    //   3. {PROJECT_ROOT}/.vela/shared/constants.js
+    //      — explicit fallback via PROJECT_ROOT, for install flows that
+    //        run install.js from somewhere other than its parent dir.
+    //   4. hooksSourceDir/shared/constants.js
+    //      — legacy wrapper fallback (with loud warning) for exotic
+    //        install layouts.
     const skillBase = path.resolve(__dirname, "..");
-    const realConstantsSrc = path.join(skillBase, "scripts", "shared", "constants.js");
-    const wrapperSrc = path.join(hooksSourceDir, "shared", "constants.js");
-    const sharedSrcToUse = fs.existsSync(realConstantsSrc)
-      ? realConstantsSrc
-      : wrapperSrc;
-    if (fs.existsSync(sharedSrcToUse)) {
+    const candidates = [
+      path.join(skillBase, "scripts", "shared", "constants.js"),
+      path.join(path.dirname(hooksSourceDir), "shared", "constants.js"),
+      path.join(PROJECT_ROOT, ".vela", "shared", "constants.js"),
+    ];
+
+    // Only pick a candidate that is the REAL constants file (not the
+    // wrapper). The wrapper is a 3-line file whose entire body consists
+    // of the re-export call. Detect and skip it.
+    function isRealConstants(p) {
+      try {
+        if (!fs.existsSync(p)) return false;
+        const body = fs.readFileSync(p, "utf8");
+        if (body.includes('require("../../shared/constants")')) return false;
+        // A sanity check — the real file exports SAFE_BASH_READ among others
+        return body.includes("SAFE_BASH_READ");
+      } catch {
+        return false;
+      }
+    }
+
+    let sharedSrcToUse = null;
+    for (const c of candidates) {
+      if (isRealConstants(c)) { sharedSrcToUse = c; break; }
+    }
+    if (!sharedSrcToUse) {
+      // Last resort: ship the wrapper and hope the parent dir chain
+      // resolves in the user's layout. This is the pre-v7.1.4 behaviour;
+      // we leave it as a fallback so install.js never crashes, but emit
+      // a stderr warning so unusual layouts are surfaced.
+      const wrapperSrc = path.join(hooksSourceDir, "shared", "constants.js");
+      if (fs.existsSync(wrapperSrc)) {
+        sharedSrcToUse = wrapperSrc;
+        process.stderr.write(
+          "⚠️  Vela install: could not locate a self-contained constants.js " +
+          "(tried " + candidates.length + " paths). Falling back to the " +
+          "re-export wrapper — hooks may fail to load from ~/.vela/hooks/. " +
+          "Please file an issue with your install layout.\n",
+        );
+      }
+    }
+    if (sharedSrcToUse) {
       fs.copyFileSync(
         sharedSrcToUse,
         path.join(GLOBAL_VELA_HOOKS_DIR, "shared", "constants.js"),
