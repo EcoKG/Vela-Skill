@@ -1,8 +1,8 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "pipelines": {
     "standard": {
-      "description": "Full 12-step pipeline — research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize",
+      "description": "Full 13-step pipeline — locate → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize",
       "steps": [
         {
           "id": "init",
@@ -15,11 +15,22 @@
           "max_revisions": 1
         },
         {
+          "id": "locate",
+          "name": "Locate Targets",
+          "actor": "pm",
+          "mode": "read",
+          "entry_gate": ["init_complete"],
+          "exit_gate": ["targets_json_exists"],
+          "artifacts": ["targets.json"],
+          "max_revisions": 1,
+          "description": "v6.1 Universal Locate — deterministic file/symbol identification via `vela-engine locate` (no LLM)"
+        },
+        {
           "id": "research",
           "name": "Research & Analysis",
           "actor": "agent",
           "mode": "rw-artifact",
-          "entry_gate": ["init_complete"],
+          "entry_gate": ["targets_json_exists"],
           "exit_gate": ["research_md_exists", "approval_exists"],
           "artifacts": ["research.md"],
           "max_revisions": 3,
@@ -173,12 +184,12 @@
     },
 
     "quick": {
-      "description": "Quick 6-step pipeline — plan → execute → verify → commit → finalize (no research/plan-check/checkpoint/branch/diff-summary/learning)",
+      "description": "Quick 7-step pipeline — locate → plan → execute → verify → commit → finalize (no research/plan-check/checkpoint/branch/diff-summary/learning)",
       "inherits": "standard",
-      "steps_only": ["init", "plan", "execute", "verify", "commit", "finalize"],
+      "steps_only": ["init", "locate", "plan", "execute", "verify", "commit", "finalize"],
       "overrides": {
         "plan": {
-          "entry_gate": ["init_complete"],
+          "entry_gate": ["targets_json_exists"],
           "exit_gate": ["plan_md_exists", "plan_architecture_complete"]
         },
         "execute": {
@@ -191,12 +202,12 @@
     },
 
     "trivial": {
-      "description": "Trivial 4-step pipeline — execute → commit → finalize (no planning, no verification gates)",
+      "description": "Trivial 5-step pipeline — locate → execute → commit → finalize (no planning, no verification gates)",
       "inherits": "standard",
-      "steps_only": ["init", "execute", "commit", "finalize"],
+      "steps_only": ["init", "locate", "execute", "commit", "finalize"],
       "overrides": {
         "execute": {
-          "entry_gate": ["init_complete"],
+          "entry_gate": ["targets_json_exists"],
           "exit_gate": ["implementation_complete"],
           "max_revisions": 3
         },
@@ -207,12 +218,12 @@
     },
 
     "ralph": {
-      "description": "Ralph TDD loop — execute ↔ verify repeats up to 10× until tests pass, then commit",
+      "description": "Ralph TDD loop — locate → execute ↔ verify repeats up to 10× until tests pass, then commit",
       "inherits": "standard",
-      "steps_only": ["init", "execute", "verify", "commit", "finalize"],
+      "steps_only": ["init", "locate", "execute", "verify", "commit", "finalize"],
       "overrides": {
         "execute": {
-          "entry_gate": ["init_complete"],
+          "entry_gate": ["targets_json_exists"],
           "exit_gate": ["implementation_complete"],
           "max_revisions": 10,
           "sub_phases": ["test-write", "implement", "refactor"],
@@ -231,12 +242,12 @@
     },
 
     "hotfix": {
-      "description": "Hotfix 3-step pipeline — execute → commit only (docs/config/README changes, no review)",
+      "description": "Hotfix 4-step pipeline — locate → execute → commit (docs/config/README changes, no review)",
       "inherits": "standard",
-      "steps_only": ["init", "execute", "commit"],
+      "steps_only": ["init", "locate", "execute", "commit"],
       "overrides": {
         "execute": {
-          "entry_gate": ["init_complete"],
+          "entry_gate": ["targets_json_exists"],
           "exit_gate": ["implementation_complete"],
           "max_revisions": 2,
           "mode": "write"

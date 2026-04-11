@@ -315,8 +315,8 @@ echo ""
 setup_sandbox
 
 # ────────────────── STEP 1: init ──────────────────
-echo "📋 Step 1/12 — init"
-INIT_OUT=$(engine init "Refactor formatDate helper to support ISO 8601 output format" --scale large)
+echo "📋 Step 1/13 — init"
+INIT_OUT=$(engine init "Refactor src/utils/helper.js formatDate helper to support ISO 8601 output format" --scale large)
 assert_ok "init ok" "$INIT_OUT"
 resolve_artifact_dir
 assert_eq "artifact_dir populated" "1" "$([ -n "$ARTIFACT_DIR" ] && echo 1 || echo 0)"
@@ -324,12 +324,32 @@ assert_eq "current_step=init" "init" "$(current_step)"
 
 # init exit gate is auto-passed; just record and transition
 assert_ok "record pass (init)" "$(engine record pass)"
-assert_ok "transition init→research" "$(engine transition)"
+assert_ok "transition init→locate" "$(engine transition)"
+assert_eq "current_step=locate" "locate" "$(current_step)"
+
+# ────────────────── STEP 1.5: locate ──────────────────
+# v6.1 Universal Locate — deterministic file/symbol identification.
+# The request explicitly names src/utils/helper.js so locate should hit
+# that file with high confidence using file_path matching.
+echo ""
+echo "📋 Step 2/13 — locate (v6.1)"
+LOC_OUT=$(engine locate)
+assert_ok "engine locate ok" "$LOC_OUT"
+assert_file "targets.json created" "$ARTIFACT_DIR/targets.json"
+# Verify targets.json has the expected structure + picked up our file
+TARGETS_OK=$(node -e "
+  const t = JSON.parse(require('fs').readFileSync('$ARTIFACT_DIR/targets.json', 'utf8'));
+  const hit = t.primary.some(p => p.file === 'src/utils/helper.js');
+  process.stdout.write(hit && t.confidence !== 'low' ? 'ok' : 'miss');
+" 2>/dev/null)
+assert_eq "locate found src/utils/helper.js" "ok" "$TARGETS_OK"
+assert_ok "record pass (locate)" "$(engine record pass)"
+assert_ok "transition locate→research" "$(engine transition)"
 assert_eq "current_step=research" "research" "$(current_step)"
 
 # ────────────────── STEP 2: research ──────────────────
 echo ""
-echo "📋 Step 2/12 — research"
+echo "📋 Step 3/13 — research"
 # Agent produces research.md
 cat > "$ARTIFACT_DIR/research.md" <<'MD'
 # Research: formatDate ISO 8601 refactor
@@ -361,7 +381,7 @@ assert_no_file "review-gate-research.json cleared after transition" \
 
 # ────────────────── STEP 3: plan ──────────────────
 echo ""
-echo "📋 Step 3/12 — plan"
+echo "📋 Step 4/13 — plan"
 # Plan must contain the three required sections, each >=200 chars of substance.
 cat > "$ARTIFACT_DIR/plan.md" <<'MD'
 # Plan: formatDate ISO 8601 refactor
@@ -403,7 +423,7 @@ assert_no_file "review-gate-plan.json cleared after transition" \
 
 # ────────────────── STEP 4: plan-check ──────────────────
 echo ""
-echo "📋 Step 4/12 — plan-check"
+echo "📋 Step 5/13 — plan-check"
 cat > "$ARTIFACT_DIR/plan-check.md" <<'MD'
 # Plan Check
 
@@ -418,14 +438,14 @@ assert_eq "current_step=checkpoint" "checkpoint" "$(current_step)"
 
 # ────────────────── STEP 5: checkpoint ──────────────────
 echo ""
-echo "📋 Step 5/12 — checkpoint (user approval)"
+echo "📋 Step 6/13 — checkpoint (user approval)"
 assert_ok "record pass (checkpoint)" "$(engine record pass)"
 assert_ok "transition checkpoint→branch" "$(engine transition)"
 assert_eq "current_step=branch" "branch" "$(current_step)"
 
 # ────────────────── STEP 6: branch ──────────────────
 echo ""
-echo "📋 Step 6/12 — branch"
+echo "📋 Step 7/13 — branch"
 BR_OUT=$(engine branch --mode auto)
 assert_ok "branch create ok" "$BR_OUT"
 # Confirm we're on a vela/* branch now
@@ -438,7 +458,7 @@ assert_eq "current_step=execute" "execute" "$(current_step)"
 
 # ────────────────── STEP 7: execute ──────────────────
 echo ""
-echo "📋 Step 7/12 — execute (real code edit)"
+echo "📋 Step 8/13 — execute (real code edit)"
 # Make the actual refactor: formatDate → ISO 8601
 cat > "$PROJECT/src/utils/helper.js" <<'JS'
 function formatDate(date) {
@@ -469,7 +489,7 @@ assert_no_file "review-gate-execute.json cleared after transition" \
 
 # ────────────────── STEP 8: verify ──────────────────
 echo ""
-echo "📋 Step 8/12 — verify"
+echo "📋 Step 9/13 — verify"
 cat > "$ARTIFACT_DIR/verification.md" <<'MD'
 # Verification
 
@@ -485,7 +505,7 @@ assert_eq "current_step=diff-summary" "diff-summary" "$(current_step)"
 
 # ────────────────── STEP 9: diff-summary ──────────────────
 echo ""
-echo "📋 Step 9/12 — diff-summary"
+echo "📋 Step 10/13 — diff-summary"
 cat > "$ARTIFACT_DIR/diff-summary.md" <<'MD'
 # Diff Summary
 - src/utils/helper.js: formatDate → toISOString().slice(0,10)
@@ -497,7 +517,7 @@ assert_eq "current_step=learning" "learning" "$(current_step)"
 
 # ────────────────── STEP 10: learning ──────────────────
 echo ""
-echo "📋 Step 10/12 — learning"
+echo "📋 Step 11/13 — learning"
 cat > "$ARTIFACT_DIR/learning.md" <<'MD'
 # Learning
 toISOString().slice(0,10) is the canonical ISO 8601 date-only form.
@@ -509,7 +529,7 @@ assert_eq "current_step=commit" "commit" "$(current_step)"
 
 # ────────────────── STEP 11: commit ──────────────────
 echo ""
-echo "📋 Step 11/12 — commit (real git commit)"
+echo "📋 Step 12/13 — commit (real git commit)"
 COMMIT_OUT=$(engine commit --message "refactor: formatDate → ISO 8601 via toISOString")
 assert_ok "engine commit ok" "$COMMIT_OUT"
 # Verify a new commit actually landed on the pipeline branch
@@ -522,7 +542,7 @@ assert_eq "current_step=finalize" "finalize" "$(current_step)"
 
 # ────────────────── STEP 12: finalize ──────────────────
 echo ""
-echo "📋 Step 12/12 — finalize"
+echo "📋 Step 13/13 — finalize"
 cat > "$ARTIFACT_DIR/report.md" <<'MD'
 # Pipeline Report
 formatDate refactor complete. All 12 steps passed.
