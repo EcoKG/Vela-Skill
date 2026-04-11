@@ -1,8 +1,13 @@
 {
-  "version": "1.3",
+  "version": "1.4",
   "pipelines": {
     "standard": {
       "description": "Full 13-step pipeline — locate → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize",
+      "steps_only": [
+        "init", "locate", "research", "plan", "plan-check", "checkpoint",
+        "branch", "execute", "verify", "diff-summary", "learning",
+        "commit", "finalize"
+      ],
       "steps": [
         {
           "id": "init",
@@ -113,6 +118,42 @@
             "reviewer_role": "reviewer",
             "approver": "pm"
           }
+        },
+        {
+          "id": "spec",
+          "name": "Patch Specification",
+          "actor": "agent",
+          "mode": "write",
+          "entry_gate": ["research_md_exists", "targets_json_exists"],
+          "exit_gate": ["patch_spec_complete", "approval_exists"],
+          "artifacts": ["patch-spec.md"],
+          "max_revisions": 3,
+          "team": {
+            "worker_role": "planner",
+            "reviewer_role": "reviewer",
+            "approver": "pm"
+          },
+          "description": "(v7.0 skeleton — reserved) Target-first pipeline spec stage. Planner invoked with mode: spec to produce patch-spec.md (file:line Before/After + out-of-scope). Not yet wired into any active pipeline.",
+          "v7_skeleton": true
+        },
+        {
+          "id": "patch",
+          "name": "Patch Application",
+          "actor": "agent",
+          "mode": "readwrite",
+          "entry_gate": ["patch_spec_complete"],
+          "exit_gate": ["implementation_complete", "review_exists", "ref_integrity"],
+          "artifacts": ["task-summary.md", "diff.patch"],
+          "max_revisions": 5,
+          "sub_phases": ["test-write", "implement", "refactor"],
+          "sub_phase_tracking": true,
+          "team": {
+            "worker_role": "executor",
+            "reviewer_role": "reviewer",
+            "approver": "pm"
+          },
+          "description": "(v7.0 skeleton — reserved) Target-first pipeline patch stage. Executor applies patch-spec.md strictly within targets.primary scope. Not yet wired into any active pipeline.",
+          "v7_skeleton": true
         },
         {
           "id": "verify",
@@ -257,6 +298,34 @@
           "exit_gate": ["changes_committed"]
         }
       }
+    },
+
+    "surgical": {
+      "description": "(v7.0 SKELETON — RESERVED) Target-first surgical pipeline — locate → research(targeted) → spec → patch → verify → commit → finalize. Uses patch-spec.md (file:line Before/After) instead of abstract plan.md. Planner runs with mode: spec; Executor applies spec strictly within targets.primary scope. NOT YET FULLY WIRED — requires vela-planner.md mode:spec branching and vela-verifier.md out-of-scope check (v7.0 work).",
+      "inherits": "standard",
+      "steps_only": ["init", "locate", "research", "spec", "patch", "verify", "commit", "finalize"],
+      "overrides": {
+        "research": {
+          "entry_gate": ["targets_json_exists"],
+          "exit_gate": ["research_md_exists", "approval_exists"]
+        },
+        "spec": {
+          "entry_gate": ["research_md_exists", "targets_json_exists"],
+          "exit_gate": ["patch_spec_complete", "approval_exists"]
+        },
+        "patch": {
+          "entry_gate": ["patch_spec_complete"],
+          "exit_gate": ["implementation_complete", "review_exists", "ref_integrity"]
+        },
+        "verify": {
+          "entry_gate": ["implementation_complete"],
+          "exit_gate": ["verification_md_exists", "ref_integrity"]
+        },
+        "commit": {
+          "entry_gate": ["verification_md_exists"]
+        }
+      },
+      "v7_skeleton": true
     }
   },
 
@@ -265,7 +334,8 @@
     "medium": "quick",
     "large":  "standard",
     "ralph":  "ralph",
-    "hotfix": "hotfix"
+    "hotfix": "hotfix",
+    "fix":    "surgical"
   },
 
   "modes": {

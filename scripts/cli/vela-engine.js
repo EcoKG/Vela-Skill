@@ -1196,17 +1196,31 @@ function resolveSteps(pipelineDef, pipelineType) {
   const pipeline = pipelineDef.pipelines[pipelineType || "standard"];
   if (!pipeline) return [];
 
-  let steps = pipeline.steps;
-  if (pipeline.inherits && pipeline.steps_only) {
+  // Resolve base step list:
+  //   - inherits + steps_only → pull from parent, filter by steps_only
+  //   - no inherits + steps_only → own `steps` array, filter by steps_only
+  //     (this is the case for "standard" after v7.0 skeleton commit —
+  //     the steps array contains extra v7 skeletons like spec/patch
+  //     that must be excluded from the default standard flow)
+  //   - no steps_only → own `steps` array as-is
+  let steps;
+  if (pipeline.inherits) {
     const parent = pipelineDef.pipelines[pipeline.inherits];
-    if (parent) {
-      steps = parent.steps.filter((s) => pipeline.steps_only.includes(s.id));
-      if (pipeline.overrides) {
-        steps = steps.map((s) =>
-          pipeline.overrides[s.id] ? { ...s, ...pipeline.overrides[s.id] } : s,
-        );
-      }
-    }
+    if (!parent) return [];
+    steps = pipeline.steps_only
+      ? parent.steps.filter((s) => pipeline.steps_only.includes(s.id))
+      : parent.steps;
+  } else {
+    steps = pipeline.steps_only
+      ? pipeline.steps.filter((s) => pipeline.steps_only.includes(s.id))
+      : pipeline.steps;
+  }
+
+  // Apply per-step overrides if declared
+  if (pipeline.overrides) {
+    steps = steps.map((s) =>
+      pipeline.overrides[s.id] ? { ...s, ...pipeline.overrides[s.id] } : s,
+    );
   }
 
   return steps;
@@ -1277,6 +1291,29 @@ function checkExitGate(stepDef, state) {
             break;
           }
           missing.push(gate);
+        }
+        break;
+      case "patch_spec_complete":
+        // v7.0 skeleton exit gate — patch-spec.md must exist with required
+        // sections. Mirrors plan_architecture_complete but for spec stage.
+        // Required sections: ## Before, ## After, ## Explicitly out of scope
+        if (artifactDir && fs.existsSync(path.join(artifactDir, "patch-spec.md"))) {
+          const specContent = fs.readFileSync(
+            path.join(artifactDir, "patch-spec.md"),
+            "utf-8",
+          );
+          const required = [
+            "## Before",
+            "## After",
+            "## Explicitly out of scope",
+          ];
+          for (const section of required) {
+            if (!specContent.includes(section)) {
+              missing.push(`patch_spec_missing_section:${section}`);
+            }
+          }
+        } else {
+          missing.push("patch_spec_missing:patch-spec.md");
         }
         break;
       case "plan_architecture_complete":
