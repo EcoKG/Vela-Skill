@@ -1124,6 +1124,14 @@ function upgrade() {
   // users get the pin on their next `node .vela/install.js upgrade`.
   writeWorkspaceRecord(PROJECT_ROOT);
 
+  // v7.1 M6 — ensure .vela/artifacts/ exists so engine doctor passes
+  // immediately after upgrade. Pre-v7.1 the dir was only created on
+  // first cmdInit, which meant a fresh upgrade then a doctor call
+  // reported a bogus missing-dir warning.
+  try {
+    fs.mkdirSync(path.join(velaDir, "artifacts"), { recursive: true });
+  } catch { /* non-fatal */ }
+
   // ─── v7.1 M12: CLAUDE.md — inject the `cd` rule on upgrade ───
   //
   // The "Bash tool — never use bare `cd`" section was added to the

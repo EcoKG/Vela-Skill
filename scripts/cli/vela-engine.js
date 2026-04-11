@@ -992,12 +992,15 @@ function cmdDoctor() {
     addCheck("parse:config.json", false, e.message);
   }
 
-  // 6. v7.1 template additions
-  const v71Templates = [
+  // 6. v7.1 template + hook additions
+  const v71Files = [
     ".vela/templates/role-budgets.json",
     ".vela/templates/plan-templates/quick.md",
+    ".vela/templates/guidelines/live-processes.json",
+    ".vela/templates/guidelines/smoke-test.sh.example",
+    ".vela/hooks/vela-file-read-cache.js",
   ];
-  for (const f of v71Templates) {
+  for (const f of v71Files) {
     const abs = path.join(CWD, f);
     addCheck(`file:${f}`, fs.existsSync(abs));
   }

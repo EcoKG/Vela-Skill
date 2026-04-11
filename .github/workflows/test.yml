@@ -382,6 +382,13 @@ jobs:
           bash scripts/tests/test-file-read-cache.sh 2>&1 | tee /tmp/file-read-cache.log
           exit ${PIPESTATUS[0]}
 
+      - name: Engine doctor health check (v7.1 M6)
+        id: s_doc
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-engine-doctor.sh 2>&1 | tee /tmp/engine-doctor.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -430,6 +437,7 @@ jobs:
           R_CPK: ${{ steps.s_cpk.outcome }}
           R_RBG: ${{ steps.s_rbg.outcome }}
           R_FRC: ${{ steps.s_frc.outcome }}
+          R_DOC: ${{ steps.s_doc.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -475,6 +483,7 @@ jobs:
           Unit: context pack contract (v7.1 M7)	${R_CPK}	/tmp/context-pack.log
           Unit: role budgets (v7.1 M9)	${R_RBG}	/tmp/role-budgets.log
           Unit: file read cache (v7.1 M10)	${R_FRC}	/tmp/file-read-cache.log
+          Unit: engine doctor (v7.1 M6)	${R_DOC}	/tmp/engine-doctor.log
           EOF
 
           PASS=0

@@ -47,6 +47,16 @@ while [ "$d" != "/" ] && [ ! -d "$d/.vela" ]; do d="$(dirname "$d")"; done
 pwd  # 현재 위치 확인 — 이후 모든 `node .vela/cli/vela-engine.js ...` 호출은 이 디렉토리 기준으로 동작한다
 ```
 
+**1.5단계 — 엔진 health check (v7.1 M6):**
+```bash
+node .vela/cli/vela-engine.js doctor
+```
+- 출력이 `"ok": true` → 정상, 2단계로 진행
+- `"ok": false` → `missing[]` 리스트를 읽고 AskUserQuestion 으로 사용자에게 `node .vela/install.js validate` 실행을 제안한다. 사용자가 승인하면 그 명령을 실행해 누락된 파일을 복구한 뒤 doctor 를 다시 돌린다. 거절하면 Explore 모드로만 동작한다 (파이프라인 시작 금지).
+- 비-Vela 프로젝트 (`.vela/` 없음) 이면 이 단계 스킵.
+
+hicoco 초기 세션 (`ff03bb16`) 에서 사용자가 "vela install.js 로 환경구성부터 똑바로 해" 라고 수동 지시한 것이 이 단계의 배경이다 — PM 이 `.vela/` 불완전을 먼저 감지 못해 1.5 단계에서 실패를 강제한다.
+
 **2단계 — 상태 조회:**
 ```bash
 node .vela/cli/vela-engine.js state
