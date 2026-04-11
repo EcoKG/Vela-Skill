@@ -57,20 +57,39 @@ fi
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
+
   # Install as independent top-level skills so /vela:fix, /vela:small etc.
-  # appear in Claude Code slash-command autocomplete.
-  # Dynamic loop over every skills/*/ directory so new skills added to the
-  # repo are automatically deployed without touching this script. This
-  # replaces the earlier hardcoded list (start git-clean analyze update)
-  # that silently dropped v6.1's small/medium/large/ralph/hotfix and v7.0's fix.
+  # appear in Claude Code slash-command autocomplete. Dynamic glob — any
+  # skills/*/ directory is picked up automatically.
   SKILLS_ROOT="$HOME/.claude/skills"
+  mkdir -p "$SKILLS_ROOT"
+
+  _installed=0
+  _skill_install_log=""
   for skill_src in "$TMP/skills"/*/; do
-    [ -d "$skill_src" ] || continue
+    if [ ! -d "$skill_src" ]; then
+      continue
+    fi
     sub=$(basename "$skill_src")
-    [ -f "$skill_src/SKILL.md" ] || continue
-    mkdir -p "$SKILLS_ROOT/vela-$sub"
-    cp "$skill_src/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
+    if [ ! -f "$skill_src/SKILL.md" ]; then
+      _skill_install_log="${_skill_install_log}  ⚠ skipped $sub — no SKILL.md\n"
+      continue
+    fi
+    if ! mkdir -p "$SKILLS_ROOT/vela-$sub" 2>/dev/null; then
+      _skill_install_log="${_skill_install_log}  ❌ mkdir failed for $SKILLS_ROOT/vela-$sub\n"
+      continue
+    fi
+    if ! cp "$skill_src/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md" 2>/dev/null; then
+      _skill_install_log="${_skill_install_log}  ❌ cp failed for $sub\n"
+      continue
+    fi
+    _installed=$((_installed + 1))
   done
+
+  echo "  ✦ Slash commands installed: $_installed skill(s) under $SKILLS_ROOT/vela-*"
+  if [ -n "$_skill_install_log" ]; then
+    printf "%b" "$_skill_install_log"
+  fi
 fi
 
 # Test fixtures (sample data for analyze/report)
