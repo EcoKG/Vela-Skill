@@ -85,11 +85,15 @@ const NOISE_TOKENS = new Set([
 const REQUEST_TOKEN_EXTRACTORS = [
   // 1. Explicit file paths — highest confidence
   //    Matches: "src/auth.ts", "auth.ts", "auth.ts:42"
+  //    Extensions ordered LONGEST FIRST so alternation picks the
+  //    longest match (e.g. `.json` before `.js`, `.tsx` before `.ts`).
+  //    JS regex alternation is left-to-right, so a naive `.js|.json`
+  //    would match `.js` in `pipeline.json` and lose the `on` suffix.
   {
     name: "file_path",
     weight: 10,
     pattern:
-      /([\w./@-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|rb|php|cs|cpp|c|h|swift|kt|md|mdx|yml|yaml|json|toml|sh|bash|sql|html|css|scss|vue|svelte))(?::(\d+))?/g,
+      /([\w./@-]+\.(?:svelte|scss|toml|yaml|bash|json|java|swift|tsx|jsx|mjs|cjs|html|mdx|yml|sql|css|vue|cpp|md|js|ts|py|go|rb|php|cs|sh|kt|rs|c|h))(?::(\d+))?/g,
   },
 
   // 2. Quoted identifiers — high confidence (user explicitly delimited)
