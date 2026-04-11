@@ -2,6 +2,18 @@
 
 **핵심: PM이 `vela-engine.js`(상태 관리)와 Agent 도구(에이전트 소환)를 직접 사용한다. `vela-pipeline.js`는 V6에서 제거되었다.**
 
+## 사전 조건 — 반드시 프로젝트 루트에서 호출
+
+아래 모든 `node .vela/cli/vela-engine.js ...` 호출은 CWD 상대 경로다.
+Claude Code 세션은 서브 디렉토리에서 열릴 수 있으므로, 엔진을 호출하기 전에
+PM이 **walk-up으로 `.vela/`가 있는 프로젝트 루트로 cd** 되어 있어야 한다.
+
+자세한 절차는 `agents/vela.md` → "세션 시작 필수 동작" 참조. 요약:
+```bash
+d="$(pwd)"; while [ "$d" != "/" ] && [ ! -d "$d/.vela" ]; do d="$(dirname "$d")"; done
+[ -d "$d/.vela" ] && cd "$d"
+```
+
 ## 새 파이프라인 시작
 
 ```bash
