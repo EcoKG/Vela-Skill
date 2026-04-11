@@ -1,5 +1,5 @@
 {
-  "version": "7.1.1",
+  "version": "7.1.2",
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "playwright": "^1.52.0",

@@ -395,6 +395,13 @@ jobs:
           bash scripts/tests/test-engine-doctor.sh 2>&1 | tee /tmp/engine-doctor.log
           exit ${PIPESTATUS[0]}
 
+      - name: Deploy sync parity (v7.1.2 — FILE_MANIFEST ↔ deploy-common)
+        id: s_dsp
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-deploy-sync-parity.sh 2>&1 | tee /tmp/deploy-sync-parity.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -444,6 +451,7 @@ jobs:
           R_RBG: ${{ steps.s_rbg.outcome }}
           R_FRC: ${{ steps.s_frc.outcome }}
           R_DOC: ${{ steps.s_doc.outcome }}
+          R_DSP: ${{ steps.s_dsp.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -490,6 +498,7 @@ jobs:
           Unit: role budgets (v7.1 M9)	${R_RBG}	/tmp/role-budgets.log
           Unit: file read cache (v7.1 M10)	${R_FRC}	/tmp/file-read-cache.log
           Unit: engine doctor (v7.1 M6)	${R_DOC}	/tmp/engine-doctor.log
+          Unit: deploy sync parity (v7.1.2)	${R_DSP}	/tmp/deploy-sync-parity.log
           EOF
 
           PASS=0
