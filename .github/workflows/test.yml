@@ -249,6 +249,13 @@ jobs:
           bash scripts/tests/test-worktree-manager.sh 2>&1 | tee /tmp/worktree-manager.log
           exit ${PIPESTATUS[0]}
 
+      - name: Mechanical locate (v6.1)
+        id: s_loc
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-locate.sh 2>&1 | tee /tmp/locate.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -279,6 +286,7 @@ jobs:
           R_AM: ${{ steps.s_am.outcome }}
           R_CS: ${{ steps.s_cs.outcome }}
           R_WM: ${{ steps.s_wm.outcome }}
+          R_LOC: ${{ steps.s_loc.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -306,6 +314,7 @@ jobs:
           E2E: auto-mode	${R_AM}	/tmp/auto-mode.log
           E2E: change-surface	${R_CS}	/tmp/change-surface.log
           E2E: worktree-manager	${R_WM}	/tmp/worktree-manager.log
+          Unit: locate (v6.1)	${R_LOC}	/tmp/locate.log
           EOF
 
           PASS=0
