@@ -1196,17 +1196,31 @@ function resolveSteps(pipelineDef, pipelineType) {
   const pipeline = pipelineDef.pipelines[pipelineType || "standard"];
   if (!pipeline) return [];
 
-  let steps = pipeline.steps;
-  if (pipeline.inherits && pipeline.steps_only) {
+  // Resolve base step list:
+  //   - inherits + steps_only → pull from parent, filter by steps_only
+  //   - no inherits + steps_only → own `steps` array, filter by steps_only
+  //     (this is the case for "standard" after v7.0 skeleton commit —
+  //     the steps array contains extra v7 skeletons like spec/patch
+  //     that must be excluded from the default standard flow)
+  //   - no steps_only → own `steps` array as-is
+  let steps;
+  if (pipeline.inherits) {
     const parent = pipelineDef.pipelines[pipeline.inherits];
-    if (parent) {
-      steps = parent.steps.filter((s) => pipeline.steps_only.includes(s.id));
-      if (pipeline.overrides) {
-        steps = steps.map((s) =>
-          pipeline.overrides[s.id] ? { ...s, ...pipeline.overrides[s.id] } : s,
-        );
-      }
-    }
+    if (!parent) return [];
+    steps = pipeline.steps_only
+      ? parent.steps.filter((s) => pipeline.steps_only.includes(s.id))
+      : parent.steps;
+  } else {
+    steps = pipeline.steps_only
+      ? pipeline.steps.filter((s) => pipeline.steps_only.includes(s.id))
+      : pipeline.steps;
+  }
+
+  // Apply per-step overrides if declared
+  if (pipeline.overrides) {
+    steps = steps.map((s) =>
+      pipeline.overrides[s.id] ? { ...s, ...pipeline.overrides[s.id] } : s,
+    );
   }
 
   return steps;
@@ -1277,6 +1291,29 @@ function checkExitGate(stepDef, state) {
             break;
           }
           missing.push(gate);
+        }
+        break;
+      case "patch_spec_complete":
+        // v7.0 skeleton exit gate — patch-spec.md must exist with required
+        // sections. Mirrors plan_architecture_complete but for spec stage.
+        // Required sections: ## Before, ## After, ## Explicitly out of scope
+        if (artifactDir && fs.existsSync(path.join(artifactDir, "patch-spec.md"))) {
+          const specContent = fs.readFileSync(
+            path.join(artifactDir, "patch-spec.md"),
+            "utf-8",
+          );
+          const required = [
+            "## Before",
+            "## After",
+            "## Explicitly out of scope",
+          ];
+          for (const section of required) {
+            if (!specContent.includes(section)) {
+              missing.push(`patch_spec_missing_section:${section}`);
+            }
+          }
+        } else {
+          missing.push("patch_spec_missing:patch-spec.md");
         }
         break;
       case "plan_architecture_complete":
@@ -1355,24 +1392,26 @@ function checkExitGate(stepDef, state) {
         }
         break;
       case "implementation_complete":
-        // File-based: approval-execute.json must exist with decision: "approve"
+        // File-based: approval-{current_step}.json must exist with decision: "approve"
+        // v7.0: this gate is reused by both the legacy `execute` step and the
+        // new `patch` step (surgical pipeline). Resolve the approval filename
+        // from state.current_step so both steps share one implementation.
         if (artifactDir) {
-          const execApprovalPath = path.join(
-            artifactDir,
-            "approval-execute.json",
-          );
-          if (!fs.existsSync(execApprovalPath)) {
-            missing.push("approval_missing:approval-execute.json");
+          const implStep = state.current_step || "execute";
+          const approvalFile = `approval-${implStep}.json`;
+          const implApprovalPath = path.join(artifactDir, approvalFile);
+          if (!fs.existsSync(implApprovalPath)) {
+            missing.push(`approval_missing:${approvalFile}`);
           } else {
             try {
               const approval = JSON.parse(
-                fs.readFileSync(execApprovalPath, "utf-8"),
+                fs.readFileSync(implApprovalPath, "utf-8"),
               );
               if (approval.decision !== "approve") {
-                missing.push("rejected:execute");
+                missing.push(`rejected:${implStep}`);
               }
             } catch (e) {
-              missing.push("approval_invalid:execute");
+              missing.push(`approval_invalid:${implStep}`);
             }
           }
         }

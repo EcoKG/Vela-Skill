@@ -270,6 +270,13 @@ jobs:
           # always exit 0 — this is a measurement, not a gate
           exit 0
 
+      - name: Surgical pipeline skeleton E2E (v7.0)
+        id: s_sur
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-surgical-pipeline.sh 2>&1 | tee /tmp/surgical-pipeline.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -302,6 +309,7 @@ jobs:
           R_WM: ${{ steps.s_wm.outcome }}
           R_LOC: ${{ steps.s_loc.outcome }}
           R_LOCB: ${{ steps.s_locb.outcome }}
+          R_SUR: ${{ steps.s_sur.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -331,6 +339,7 @@ jobs:
           E2E: worktree-manager	${R_WM}	/tmp/worktree-manager.log
           Unit: locate (v6.1)	${R_LOC}	/tmp/locate.log
           Bench: locate accuracy (v6.1, non-blocking)	${R_LOCB}	/tmp/locate-bench.log
+          E2E: surgical pipeline (v7.0 skeleton)	${R_SUR}	/tmp/surgical-pipeline.log
           EOF
 
           PASS=0

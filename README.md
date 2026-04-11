@@ -33,17 +33,20 @@ AI 코딩 도구는 강력하지만, 통제 없는 자유는 위험하다. Vela�
 curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
 ```
 
-설치 후 **scale별 slash 명령**으로 파이프라인을 시작한다 (환경이 없으면 자동 구축).
+설치 후 **slash 명령**으로 파이프라인을 시작한다 (환경이 없으면 자동 구축).
 
 ```
-/vela:small   — 단일 파일/오타/한 줄 수정         (trivial, 5단계)
-/vela:medium  — 명확한 기능 추가 (기본 추천)       (quick, 7단계)
-/vela:large   — 신규 모듈/광범위 리팩토링/critical (standard, 13단계)
-/vela:ralph   — TDD 루프 버그 수정                (ralph, 5+루프)
-/vela:hotfix  — 문서/설정 수정                    (hotfix, 4단계)
+/vela:fix     — Target-First 정밀 수정 (v7.0, 기본 추천)   (surgical, 8단계)
+/vela:small   — 단일 파일/오타/한 줄 수정                  (trivial, 5단계)
+/vela:medium  — 명확한 기능 추가                          (quick, 7단계)
+/vela:large   — 신규 모듈/광범위 리팩토링/critical          (standard, 13단계)
+/vela:ralph   — TDD 루프 버그 수정                        (ralph, 5+루프)
+/vela:hotfix  — 문서/설정 수정                            (hotfix, 4단계)
 ```
 
 `/vela:start`는 v6.1부터 deprecated이며 v7.0에서 제거된다. 호환성을 위해 현재는 `/vela:medium`으로 자동 폴백된다.
+
+**v7.0 surgical(`/vela:fix`)**이 일상 작업의 새 기본 추천이다. locate → research(targeted) → **spec**(patch-spec.md) → **patch** → verify 흐름으로 결정론적 수정 + scope creep 방지 + audit trail을 제공한다. 같은 request → 같은 patch-spec.md → 같은 patch가 보장된다.
 
 ### 2. 프로젝트에서 사용
 
@@ -166,6 +169,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 
 | 종류 | 단계 | 선택 |
 |------|------|------|
+| **surgical** (v7.0) | init → **locate** → research(targeted) → **spec** → **patch** → verify → commit → finalize | `/vela:fix` |
 | **standard** | init → **locate** → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize | `/vela:large` |
 | **quick** | init → **locate** → plan → execute → verify → commit → finalize | `/vela:medium` |
 | **trivial** | init → **locate** → execute → commit → finalize | `/vela:small` |
@@ -581,6 +585,7 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v6.0 | M025 | **SDK 완전 제거 — 네이티브 Agent 도구 기반 재구성** — @anthropic-ai/claude-agent-sdk 의존성 제거. vela-pipeline.js/vela-sprint.js/sdk-*.js 삭제. PM(vela.md)이 Agent(subagent_type=...) 직접 오케스트레이션. 10개 역할 에이전트 파일 생성 (vela-researcher/planner/plan-checker/executor/reviewer/verifier/diff-summary/learning/sprint-planner/analyzer). VK-09 제거. install.js가 11개 에이전트를 .claude/agents/에 배포. |
 | v6.0.1 | M026 | **품질-중립 성능·비용 최적화** — 10개 에이전트 frontmatter에 `model:`/`tools:`/`effort:` 명시(Sonnet 품질 크리티컬 + Haiku 기계 검사), review-gate 기본 `validation_rounds: 3 → 1` & `steps: ["execute"]`만 재검증, 에이전트별 도구 정의 로드 축소. 모든 품질 게이트(5차원 20/25, CRITICAL 검출, plan 섹션 검증, ref_integrity, TDD 3단계) 무손상. 기존 사용자 config는 `skipOnUpgrade`로 보호. |
 | v6.1.0 | M027 | **v6.1 Precision & Locate** — Universal Locate 단계를 모든 5개 scale에 도입(`init → locate → ...`). `scripts/shared/locate.js` 결정론적 모듈(ripgrep + git grep + git ls-files, LLM 0). `vela-engine locate` 신규 CLI + `targets_json_exists` exit gate. PM/researcher/planner/executor 프롬프트에 `targetsPath` 주입. Slash command 재구성: `/vela:start` deprecated, `/vela:{small,medium,large,ralph,hotfix}` 신규. Scale Mismatch Guard (heuristic 제안, 자동 변경 금지). `autoDetectScale()` deprecated, `--scale` 누락 시 medium 폴백. 벤치마크 **15/15 recall 100%**(scripts/tests/test-locate-bench.sh). research(targeted) mode 자동 활성화로 기존 67k+ research 토큰 대폭 절감 예상. v7.0 surgical pipeline과 완전 호환. |
+| v7.0.0 | M028 | **v7.0 Surgical Pipeline** — Target-First 패러다임 구현. 신규 `surgical` 파이프라인(8단계: init → locate → research → spec → patch → verify → commit → finalize). `vela-planner`가 `mode: spec` 분기를 지원하여 기존 추상 plan.md 대신 결정론적 `patch-spec.md`(file:line Before/After + Explicitly out of scope)를 작성한다. `vela-verifier`에 out-of-scope 위반 검사 추가 — patch-spec에 명시된 범위를 벗어난 변경은 test 통과해도 FAIL. `vela-engine`에 `patch_spec_complete` exit gate + `implementation_complete` gate의 approval 파일 이름 동적 해석. 신규 `/vela:fix` 명령 (일상 작업의 새 기본 추천). `templates/pipeline.json` v1.4: `standard.steps_only` 명시, `spec`/`patch` step 정의, `surgical` 파이프라인 + `scales: fix → surgical`. E2E 테스트 `test-surgical-pipeline.sh` 35/35 PASS. v6.1 위에서 추가만 — 기존 파이프라인 동작 무손상. |
 
 ---
 
