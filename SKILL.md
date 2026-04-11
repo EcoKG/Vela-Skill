@@ -1,16 +1,17 @@
 ---
 name: vela
-description: "⛵ Vela 샌드박스 엔진. /vela:start 로 파이프라인 시작, /vela:analyze 로 분석 보고서, /vela:git-clean 으로 git 정리, /vela:update 로 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, start, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
+description: "⛵ Vela 샌드박스 엔진. v6.1부터 scale별 직접 호출: /vela:small /vela:medium(기본) /vela:large /vela:ralph /vela:hotfix. 또한 /vela:analyze 분석 보고서, /vela:git-clean git 정리, /vela:update 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, 시작, small, medium, large, ralph, hotfix, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
 ---
 
-# ⛵ Vela Engine v6.0 — Sandbox Development System (Enhanced Harness)
+# ⛵ Vela Engine v6.1 — Sandbox Development System (Precision & Locate)
 
 Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 
 ## /vela 호출 시
 
 `$ARGUMENTS`를 확인한다:
-- `$ARGUMENTS`가 `start` 또는 `start <작업설명>` → `/vela:start` 절차 실행
+- `$ARGUMENTS`가 `small | medium | large | ralph | hotfix` 또는 `small <작업설명>` 형태 → 해당 scale skill 절차 실행 (`/vela:{scale}`)
+- `$ARGUMENTS`가 `start` 또는 `start <작업설명>` → **(deprecated)** deprecation 경고 후 `/vela:medium` 절차로 폴백
 - `$ARGUMENTS`가 `status` → 현재 파이프라인 상태를 보여준다:
   ```bash
   node .vela/cli/vela-engine.js state
@@ -18,37 +19,49 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
   결과를 예쁘게 포맷하여 표시:
   ```
   ⛵ Vela Pipeline Status
-  🧭 standard │ Step: execute (7/12) │ Task: 인증 시스템 추가
+  🧭 standard │ Step: execute (8/13) │ Task: 인증 시스템 추가
   ✦ Branch: vela/auth-system-1358
-  🌟 Completed: init → research → plan → plan-check → checkpoint → branch
+  🌟 Completed: init → locate → research → plan → plan-check → checkpoint → branch
   ```
   파이프라인이 없으면: `⛵ Vela — Explore 모드. 활성 파이프라인 없음.`
-- `$ARGUMENTS`가 `git-clean` → `/vela:git-clean` 절차 실행. `skills/git-clean/SKILL.md`를 읽고 지시대로 수행한다.
+- `$ARGUMENTS`가 `git-clean` → `/vela:git-clean` 절차 실행
 - `$ARGUMENTS`가 `analyze` → `/vela:analyze` 절차 실행
 - `$ARGUMENTS`가 `sprint` 또는 `sprint <args>` → `/vela:sprint` 절차 실행
-- `$ARGUMENTS`가 비어있음 → AskUserQuestion으로 선택:
+- `$ARGUMENTS`가 비어있음 → AskUserQuestion으로 scale 선택:
 
 ```json
 {
   "questions": [{
-    "question": "⛵ Vela — 무엇을 하시겠습니까?",
+    "question": "⛵ Vela — 어떤 scale로 시작할까요?",
     "header": "⛵ Vela",
     "options": [
-      {
-        "label": "파이프라인 시작 (Recommended)",
-        "description": "작업을 시작합니다. Vela 환경이 없으면 자동으로 구축합니다."
-      }
+      { "label": "medium (Recommended)", "description": "명확한 기능 추가 — 7단계 quick 파이프라인" },
+      { "label": "small", "description": "단일 파일/오타/한 줄 수정 — 5단계 trivial" },
+      { "label": "large", "description": "광범위 설계/critical path — 13단계 standard" },
+      { "label": "ralph", "description": "TDD 루프 버그 수정 — execute ↔ verify 반복" },
+      { "label": "hotfix", "description": "문서/설정 수정 — 4단계 최소 파이프라인" }
     ],
     "multiSelect": false
   }]
 }
 ```
 
-- "파이프라인 시작" → `/vela:start` 절차
+선택된 scale에 해당하는 skill(`skills/{scale}/SKILL.md`)을 실행한다.
 
 ---
 
-## /vela:start — 파이프라인 바로 시작
+## /vela:{scale} — 파이프라인 바로 시작 (v6.1)
+
+상세 skill 파일은 `skills/{scale}/SKILL.md` 참조:
+- `skills/small/SKILL.md` — trivial (5단계)
+- `skills/medium/SKILL.md` — quick (7단계, 기본 추천)
+- `skills/large/SKILL.md` — standard (13단계)
+- `skills/ralph/SKILL.md` — ralph (TDD 루프)
+- `skills/hotfix/SKILL.md` — hotfix (4단계, 문서/설정)
+
+**모든 scale은 `locate` 단계를 공통으로 갖는다** — v6.1 Universal Locate가 `targets.json`을 먼저 생성하여 research/plan/execute가 결정론적 좌표 기반으로 작동한다 (LLM 0).
+
+## /vela:start — (⚠️ deprecated v6.1, v7.0 제거 예정)
 
 이 커맨드가 호출되면 Vela 파이프라인을 즉시 시작한다.
 `.vela/`가 없으면 자동으로 환경을 구축한 후 파이프라인을 시작한다.
@@ -80,7 +93,7 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
    - `code-refactor`: 리팩토링
    - `docs`: 문서/설정/비-소스 수정
 
-   모든 요청은 standard 12-step 파이프라인을 거친다.
+   (v6.1) scale별로 선택. `/vela:medium`이 기본 추천. `/vela:large`는 standard 13-step (init → locate → research → ...) 파이프라인을 거친다.
 
 4. **파이프라인 초기화**
    ```bash
