@@ -298,6 +298,77 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# ─── Phase 6: install.js doesn't nuke slash-command skills (v7.0.5) ─
+# Pre-v7.0.5 scripts/install.js carried an allow-list of five
+# "valid" vela-* directory names and aggressively deleted every
+# other vela-* directory as "pollution" on every run. Any workflow
+# that triggered `node install.js` (e.g. /vela:large invoking the
+# project installer) silently wiped the new v6.1 scale skills and
+# the v7.0 surgical skill right after update.sh installed them —
+# because update.sh and install.js didn't share a single source
+# of truth for the skill catalog.
+#
+# v7.0.5 inverts the cleanup block into a block-list of explicitly-
+# retired directories (vela-init, vela-auto). This phase proves it:
+#
+#   1. Run update.sh → 10 skills installed.
+#   2. Stage a fake legacy dir (vela-init/) to prove the block-list
+#      still works for actual retired names.
+#   3. Invoke scripts/install.js (upgrade mode) in a sandboxed cwd.
+#   4. Assert all 10 real slash-command skills still exist.
+#   5. Assert vela-init was removed.
+
+echo ""
+echo "📋 Phase 6: install.js preserves slash-command skills"
+
+# Fresh update to restore any state Phase 4/5 may have churned.
+HOME="$TMP_HOME" bash "$REPO_ROOT/update.sh" >/dev/null 2>&1
+
+# Stage a legacy directory. install.js should remove it.
+mkdir -p "$SKILLS_ROOT/vela-init"
+echo "legacy stub" > "$SKILLS_ROOT/vela-init/SKILL.md"
+
+# Run install.js in a temporary project directory so it doesn't try
+# to write into the real repo. install.js walks up looking for .vela/,
+# so we create an empty .vela/ in a temp dir to make it a valid
+# "project root".
+INSTALL_PROJECT_DIR=$(mktemp -d)
+mkdir -p "$INSTALL_PROJECT_DIR/.vela"
+# We invoke install.js via the `validate` subcommand. validate() is
+# the function that owns Phase 9 "Global pollution cleanup" — upgrade()
+# does NOT call it. install() also calls validate() internally, so
+# validate is the minimum invocation that exercises the cleanup path.
+# This is the exact same code path that ran on the user's machine
+# when /vela:large triggered the project installer and silently
+# wiped their slash-command skills pre-v7.0.5.
+(
+  cd "$INSTALL_PROJECT_DIR"
+  HOME="$TMP_HOME" node "$REPO_ROOT/scripts/install.js" validate \
+    >/tmp/install-js-run.log 2>&1 || true
+)
+rm -rf "$INSTALL_PROJECT_DIR"
+
+# Assertion 1: every expected slash-command skill survived.
+for sub in "${EXPECTED_SKILLS[@]}"; do
+  assert_dir "install.js preserved vela-$sub" "$SKILLS_ROOT/vela-$sub"
+  assert_file "install.js preserved vela-$sub/SKILL.md" \
+    "$SKILLS_ROOT/vela-$sub/SKILL.md"
+done
+
+# Assertion 2: the block-list legacy entry was removed.
+if [ ! -d "$SKILLS_ROOT/vela-init" ]; then
+  assert_eq "install.js removed legacy vela-init" "ok" "ok"
+else
+  assert_eq "install.js removed legacy vela-init" "ok" "still-present"
+fi
+
+# Assertion 3: total count still equals expected.
+ACTUAL_COUNT4=$(find "$SKILLS_ROOT" -maxdepth 1 -type d -name 'vela-*' 2>/dev/null | wc -l)
+assert_eq \
+  "vela-* count after install.js run" \
+  "$EXPECTED_COUNT" \
+  "$ACTUAL_COUNT4"
+
 # ─── Summary ────────────────────────────────────────────────
 
 echo ""

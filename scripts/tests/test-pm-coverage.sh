@@ -508,6 +508,78 @@ else
   done
 fi
 
+# ─── Category M: install.js doesn't nuke current slash-command skills ───
+# install.js used to carry an ALLOW-LIST (VALID_SUB_SKILLS) of the
+# only vela-* directories it considered valid under ~/.claude/skills/.
+# Every other vela-* directory was deleted as "pollution" on every
+# `node install.js` run. When v6.1 added scale skills and v7.0 added
+# the surgical fix skill, that list was never updated — so /vela:large
+# (which triggers install.js) silently wiped the new slash commands
+# from user machines.
+#
+# v7.0.5 inverts it: install.js now uses a KNOWN_LEGACY_SKILLS
+# block-list naming ONLY directories that were explicitly retired
+# (vela-init, vela-auto). This category asserts:
+#
+#   1. install.js no longer carries any allow-list referring to
+#      current scale/surgical skill names.
+#   2. KNOWN_LEGACY_SKILLS does NOT contain any directory that
+#      currently exists under skills/ in the repo — i.e. install.js
+#      won't delete a skill the repo itself ships.
+#   3. For every skills/<sub>/ directory in the repo there is NO
+#      hardcoded mention of "vela-<sub>" inside the cleanup block's
+#      allow-list (defense-in-depth against accidentally reintroducing
+#      the old design).
+echo ""
+echo "📋 Category M: install.js preserves every current slash-command skill"
+
+INSTALL_JS="$REPO_ROOT/scripts/install.js"
+
+# 1. No VALID_SUB_SKILLS identifier should remain anywhere.
+if grep -q "VALID_SUB_SKILLS" "$INSTALL_JS" 2>/dev/null; then
+  assert_true \
+    "install.js no longer references VALID_SUB_SKILLS allow-list" \
+    "0" \
+    "The allow-list has been reintroduced — it will silently delete new slash-command skills."
+else
+  assert_true "install.js no longer references VALID_SUB_SKILLS allow-list" "1"
+fi
+
+# 2. KNOWN_LEGACY_SKILLS (the new block-list) must exist.
+if grep -q "KNOWN_LEGACY_SKILLS" "$INSTALL_JS" 2>/dev/null; then
+  assert_true "install.js uses KNOWN_LEGACY_SKILLS block-list" "1"
+else
+  assert_true \
+    "install.js uses KNOWN_LEGACY_SKILLS block-list" \
+    "0" \
+    "Global pollution cleanup must use a block-list, not an allow-list."
+fi
+
+# 3. For every skills/<sub>/ directory in the repo, verify that
+#    "vela-<sub>" is NOT listed as a string literal inside the
+#    cleanup block (which would indicate either a reintroduced
+#    allow-list, or an accidental entry in KNOWN_LEGACY_SKILLS).
+#
+#    We extract the block between "9. Global pollution cleanup" and
+#    the matching closing brace that terminates the HOME guard.
+CLEANUP_BLOCK=$(awk '/9\. Global pollution cleanup/,/^  return results;/' "$INSTALL_JS")
+
+for skill_src in "$REPO_ROOT/skills"/*/; do
+  [ -f "$skill_src/SKILL.md" ] || continue
+  sub=$(basename "$skill_src")
+  pattern="\"vela-${sub}\""
+  if echo "$CLEANUP_BLOCK" | grep -Fq "$pattern"; then
+    assert_true \
+      "install.js cleanup block does NOT hardcode 'vela-$sub'" \
+      "0" \
+      "A current slash-command skill is named in the cleanup block — it will be treated as legacy."
+  else
+    assert_true \
+      "install.js cleanup block does NOT hardcode 'vela-$sub'" \
+      "1"
+  fi
+done
+
 # ─── Summary ────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════"
