@@ -64,6 +64,15 @@ PIPELINE_FLOW_MD="$REPO_ROOT/scripts/agents/pm/pipeline-flow.md"
 SKILLS_DIR="$REPO_ROOT/skills"
 INSTALL_SH="$REPO_ROOT/install.sh"
 UPDATE_SH="$REPO_ROOT/update.sh"
+PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
+PACKAGE_JSON="$REPO_ROOT/package.json"
+SKILL_MD="$REPO_ROOT/SKILL.md"
+ENGINE_JS="$REPO_ROOT/scripts/cli/vela-engine.js"
+CLI_REFERENCE="$REPO_ROOT/references/cli-reference.md"
+GATES_GUARDS="$REPO_ROOT/references/gates-and-guards.md"
+INSTALL_JS="$REPO_ROOT/scripts/install.js"
+DEPLOY_COMMON="$REPO_ROOT/scripts/deploy-common.sh"
+AGENTS_DIR="$REPO_ROOT/scripts/agents"
 
 PASS=0
 FAIL=0
@@ -274,6 +283,227 @@ if [ -d "$SKILLS_DIR" ]; then
         "skill '$skill_name' invokes '--scale $skill_name'" \
         "0" \
         "Ensure skills/$skill_name/SKILL.md body runs vela-engine init --scale $skill_name"
+    fi
+  done
+fi
+
+# ─── Category F: version consistency ──────────────────────
+# Catches v7.0.1's oversight: plugin.json and package.json were
+# version 7.0.0 even after v7.0.1 fixes landed. SKILL.md heading
+# should match. A mismatch means the update-notifier and usage
+# telemetry will report a stale version.
+echo ""
+echo "📋 Category F: Version consistency (plugin.json / package.json / SKILL.md)"
+
+PLUGIN_VER=$(node -e "process.stdout.write(require('$PLUGIN_JSON').version || '')" 2>/dev/null || echo "")
+PACKAGE_VER=$(node -e "process.stdout.write(require('$PACKAGE_JSON').version || '')" 2>/dev/null || echo "")
+# Extract the first vX.Y[.Z] token from the first H1 of SKILL.md
+SKILL_VER=$(grep -m1 '^# ' "$SKILL_MD" 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 | sed 's/^v//')
+
+if [ -n "$PLUGIN_VER" ] && [ -n "$PACKAGE_VER" ] && [ "$PLUGIN_VER" = "$PACKAGE_VER" ]; then
+  assert_true "plugin.json ($PLUGIN_VER) == package.json ($PACKAGE_VER)" "1"
+else
+  assert_true \
+    "plugin.json == package.json" \
+    "0" \
+    "plugin.json=$PLUGIN_VER, package.json=$PACKAGE_VER — bump both together"
+fi
+
+# SKILL.md only needs to agree on the major.minor prefix — patch
+# version is informational in the user-facing header.
+if [ -n "$SKILL_VER" ] && [ -n "$PLUGIN_VER" ]; then
+  PLUGIN_MM=$(echo "$PLUGIN_VER" | cut -d. -f1,2)
+  SKILL_MM=$(echo "$SKILL_VER" | cut -d. -f1,2)
+  if [ "$PLUGIN_MM" = "$SKILL_MM" ]; then
+    assert_true "SKILL.md header (v$SKILL_VER) matches plugin.json major.minor (v$PLUGIN_MM)" "1"
+  else
+    assert_true \
+      "SKILL.md header matches plugin.json" \
+      "0" \
+      "SKILL.md=v$SKILL_VER, plugin.json=v$PLUGIN_VER — update SKILL.md header on major/minor bumps"
+  fi
+else
+  assert_true \
+    "SKILL.md has a parseable version header" \
+    "0" \
+    "Expected first heading of SKILL.md to contain vX.Y[.Z]"
+fi
+
+# ─── Category G: skill frontmatter ↔ directory name ──────
+# Every skills/{name}/SKILL.md must have frontmatter name "vela:{name}"
+# (or "vela" for the base skill). Mismatch means the slash command
+# autocomplete label won't match the directory and users get confused.
+echo ""
+echo "📋 Category G: Skill frontmatter 'name:' matches directory"
+
+for skill_dir in "$SKILLS_DIR"/*/; do
+  [ -f "$skill_dir/SKILL.md" ] || continue
+  skill_name=$(basename "$skill_dir")
+  expected_name="vela:$skill_name"
+
+  # Extract name field from YAML frontmatter (first --- block)
+  actual_name=$(awk '/^---$/{f++; next} f==1 && /^name:/ {sub(/^name:[ \t]*/, ""); gsub(/^["'\'']|["'\'']$/, ""); print; exit}' "$skill_dir/SKILL.md" 2>/dev/null)
+
+  if [ "$actual_name" = "$expected_name" ]; then
+    assert_true "skills/$skill_name/SKILL.md name='$expected_name'" "1"
+  else
+    assert_true \
+      "skills/$skill_name/SKILL.md name='$expected_name'" \
+      "0" \
+      "Found: '$actual_name'. Fix frontmatter 'name:' field."
+  fi
+done
+
+# ─── Category H: vela-engine.js commands ↔ cli-reference.md ─
+# Every command registered in the engine's command router must
+# appear by name in the CLI reference documentation.
+echo ""
+echo "📋 Category H: vela-engine commands documented in cli-reference.md"
+
+# Extract command names from the `const commands = { ... }` block.
+# Lines look like: `  init: cmdInit,` or `  "clean-scan": cmdCleanScan,`
+ENGINE_COMMANDS=$(awk '
+  /^const commands = {/ {in_block=1; next}
+  in_block && /^};/ {exit}
+  in_block && /:/ {
+    # Extract key: strip quotes and trailing colon
+    sub(/^[ \t]*/, "")
+    key = $1
+    sub(/:.*/, "", key)
+    gsub(/["'\'']/, "", key)
+    if (key != "") print key
+  }
+' "$ENGINE_JS")
+
+for cmd in $ENGINE_COMMANDS; do
+  if grep -Eq "(^|[^A-Za-z0-9_-])${cmd}([^A-Za-z0-9_-]|$)" "$CLI_REFERENCE" 2>/dev/null; then
+    assert_true "cli-reference.md mentions '$cmd' command" "1"
+  else
+    assert_true \
+      "cli-reference.md mentions '$cmd' command" \
+      "0" \
+      "Add a 'vela-engine $cmd' example to references/cli-reference.md"
+  fi
+done
+
+# ─── Category I: checkExitGate cases ↔ gates-and-guards.md ─
+# Every exit-gate case in the engine must be documented in the
+# gates-and-guards reference. Catches adding a new gate to the
+# engine without updating the doc table.
+echo ""
+echo "📋 Category I: checkExitGate cases documented in gates-and-guards.md"
+
+# Extract `case "xxx":` strings from inside checkExitGate()
+GATE_CASES=$(awk '
+  /function checkExitGate\(/ {in_fn=1}
+  in_fn && /^}/ {if (brace_depth == 0) exit}
+  in_fn {
+    n_open = gsub(/{/, "{")
+    n_close = gsub(/}/, "}")
+    brace_depth += n_open - n_close
+  }
+  in_fn && /case "/ {
+    sub(/.*case "/, "")
+    sub(/".*/, "")
+    print
+  }
+' "$ENGINE_JS" | sort -u)
+
+for gate in $GATE_CASES; do
+  # Skip legacy backward-compat aliases
+  case "$gate" in
+    leader_approved|leader_review_exists|mode_detected|init_complete|git_clean) continue ;;
+  esac
+  if grep -Eq "\`?${gate}\`?" "$GATES_GUARDS" 2>/dev/null; then
+    assert_true "gates-and-guards.md documents gate '$gate'" "1"
+  else
+    assert_true \
+      "gates-and-guards.md documents gate '$gate'" \
+      "0" \
+      "Add '$gate' row to the engine exit gate table in references/gates-and-guards.md"
+  fi
+done
+
+# ─── Category J: agent frontmatter name ↔ filename ────────
+# scripts/agents/vela-*.md files must have `name: vela-{stem}`
+# matching their filename. Mismatch means Claude Code's subagent
+# matcher can't find the agent.
+echo ""
+echo "📋 Category J: Agent file frontmatter 'name:' matches filename"
+
+for agent_file in "$AGENTS_DIR"/vela-*.md; do
+  [ -f "$agent_file" ] || continue
+  basename_noext=$(basename "$agent_file" .md)
+
+  # Extract name field (unquoted, no leading/trailing whitespace)
+  actual_name=$(awk '/^---$/{f++; next} f==1 && /^name:/ {sub(/^name:[ \t]*/, ""); gsub(/^["'\'']|["'\'']$/, ""); print; exit}' "$agent_file" 2>/dev/null)
+
+  if [ "$actual_name" = "$basename_noext" ]; then
+    assert_true "$basename_noext.md frontmatter name='$basename_noext'" "1"
+  else
+    assert_true \
+      "$basename_noext.md frontmatter name='$basename_noext'" \
+      "0" \
+      "Found: '$actual_name'. Fix frontmatter 'name:' field."
+  fi
+done
+
+# ─── Category K: install.js FILE_MANIFEST ↔ filesystem ───
+# Every src path declared in FILE_MANIFEST must exist on disk.
+# A dangling entry silently fails at install time (skipped with
+# errno logging).
+echo ""
+echo "📋 Category K: install.js FILE_MANIFEST entries exist on disk"
+
+MANIFEST_SRCS=$(node -e "
+  const fs = require('fs');
+  const src = fs.readFileSync('$INSTALL_JS', 'utf8');
+  // Heuristic: scan for lines like { src: 'path/to/file', dst: '...' }
+  const re = /src:\s*['\"]([^'\"]+)['\"]/g;
+  let m;
+  const seen = new Set();
+  while ((m = re.exec(src))) {
+    seen.add(m[1]);
+  }
+  process.stdout.write(Array.from(seen).sort().join('\n'));
+")
+
+while IFS= read -r rel_path; do
+  [ -z "$rel_path" ] && continue
+  if [ -e "$REPO_ROOT/$rel_path" ]; then
+    assert_true "FILE_MANIFEST src exists: $rel_path" "1"
+  else
+    assert_true \
+      "FILE_MANIFEST src exists: $rel_path" \
+      "0" \
+      "install.js references a missing file. Remove the entry or add the file."
+  fi
+done <<< "$MANIFEST_SRCS"
+
+# ─── Category L: deploy-common.sh shared coverage ────────
+# sync_local_project() in deploy-common.sh copies scripts/shared/*.js
+# to .vela/shared/. If it uses a hardcoded list instead of a glob,
+# new modules added to scripts/shared/ might be silently dropped.
+# We verify by checking that deploy-common.sh either globs shared/
+# (cp "$SRC/scripts/shared/"*.js) OR explicitly names every file.
+echo ""
+echo "📋 Category L: deploy-common.sh deploys every scripts/shared/*.js"
+
+SHARED_FILES=$(find "$REPO_ROOT/scripts/shared" -maxdepth 1 -name "*.js" -type f 2>/dev/null | xargs -n1 basename 2>/dev/null)
+
+# Check if the deploy script uses a glob
+if grep -Eq "scripts/shared/[\"']?\*\.js" "$DEPLOY_COMMON" 2>/dev/null; then
+  assert_true "deploy-common.sh uses scripts/shared/*.js glob" "1"
+else
+  # No glob — verify each file is referenced by name
+  for f in $SHARED_FILES; do
+    if grep -Fq "$f" "$DEPLOY_COMMON" 2>/dev/null; then
+      assert_true "deploy-common.sh references scripts/shared/$f" "1"
+    else
+      assert_true \
+        "deploy-common.sh references scripts/shared/$f" \
+        "0" \
+        "Add $f to sync_local_project() or switch to a glob"
     fi
   done
 fi
