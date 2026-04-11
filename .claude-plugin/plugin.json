@@ -1,7 +1,7 @@
 {
   "name": "vela",
   "description": "⛵ Vela Engine — Pipeline-driven sandbox development system for Claude Code. Enforces structured development through 16 hooks, gates, guards, team verification, auto mode, and git integration.",
-  "version": "7.0.6",
+  "version": "7.0.7",
   "author": {
     "name": "EcoKG",
     "email": "EcoKG@users.noreply.github.com",
