@@ -342,7 +342,7 @@ mkdir -p "$INSTALL_PROJECT_DIR/.vela"
 # when /vela:large triggered the project installer and silently
 # wiped their slash-command skills pre-v7.0.5.
 (
-  cd "$INSTALL_PROJECT_DIR"
+  cd "$INSTALL_PROJECT_DIR" || exit 1
   HOME="$TMP_HOME" node "$REPO_ROOT/scripts/install.js" validate \
     >/tmp/install-js-run.log 2>&1 || true
 )
