@@ -57,13 +57,19 @@ fi
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
-  # Install as independent top-level skills so /vela:start etc. appear in autocomplete
+  # Install as independent top-level skills so /vela:fix, /vela:small etc.
+  # appear in Claude Code slash-command autocomplete.
+  # Dynamic loop over every skills/*/ directory so new skills added to the
+  # repo are automatically deployed without touching this script. This
+  # replaces the earlier hardcoded list (start git-clean analyze update)
+  # that silently dropped v6.1's small/medium/large/ralph/hotfix and v7.0's fix.
   SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in start git-clean analyze update; do
-    if [ -d "$TMP/skills/$sub" ]; then
-      mkdir -p "$SKILLS_ROOT/vela-$sub"
-      cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
-    fi
+  for skill_src in "$TMP/skills"/*/; do
+    [ -d "$skill_src" ] || continue
+    sub=$(basename "$skill_src")
+    [ -f "$skill_src/SKILL.md" ] || continue
+    mkdir -p "$SKILLS_ROOT/vela-$sub"
+    cp "$skill_src/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
   done
 fi
 

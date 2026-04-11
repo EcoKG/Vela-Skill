@@ -62,6 +62,8 @@ PIPELINE_JSON="$REPO_ROOT/templates/pipeline.json"
 VELA_MD="$REPO_ROOT/scripts/agents/vela.md"
 PIPELINE_FLOW_MD="$REPO_ROOT/scripts/agents/pm/pipeline-flow.md"
 SKILLS_DIR="$REPO_ROOT/skills"
+INSTALL_SH="$REPO_ROOT/install.sh"
+UPDATE_SH="$REPO_ROOT/update.sh"
 
 PASS=0
 FAIL=0
@@ -202,6 +204,48 @@ while IFS='|' read -r scale pipeline; do
       "Define pipelines.$pipeline in templates/pipeline.json"
   fi
 done < <(collect_scales)
+
+# ─── Category E: install.sh / update.sh deploy every skill ─
+# This catches v7.0.2: install.sh and update.sh had a hardcoded
+# "for sub in start git-clean analyze update" loop that installed
+# sub-skills as top-level `vela-{name}` skills for Claude Code
+# autocomplete. v6.1 added small/medium/large/ralph/hotfix and v7.0
+# added fix, but nobody updated the hardcoded list. Result: the
+# skill files were copied into ~/.claude/skills/vela/skills/ but
+# Claude Code's slash-command autocomplete didn't find them because
+# they weren't installed as top-level skills.
+#
+# We verify by scanning install.sh and update.sh for every skill
+# directory under skills/ and checking that each one is referenced
+# by name. An allowlist of "already handled" non-scale skills is
+# tolerated.
+echo ""
+echo "📋 Category E: install.sh / update.sh deploy every skill as top-level"
+
+for skill_dir in "$SKILLS_DIR"/*/; do
+  skill_name=$(basename "$skill_dir")
+  [ ! -f "$skill_dir/SKILL.md" ] && continue
+
+  # install.sh must reference the skill name (either in a hardcoded
+  # list or via a dynamic loop that processes every skills/ subdir)
+  if grep -Eq "(for sub in[^;]*\\b${skill_name}\\b|for .* in[^;]*\\\"\\\$TMP/skills\\\"/\\*/|skills/\\*/)" "$INSTALL_SH" 2>/dev/null; then
+    assert_true "install.sh deploys skills/$skill_name" "1"
+  else
+    assert_true \
+      "install.sh deploys skills/$skill_name" \
+      "0" \
+      "Add '$skill_name' to install.sh's skill loop (or use dynamic skills/*/ loop)"
+  fi
+
+  if grep -Eq "(for sub in[^;]*\\b${skill_name}\\b|for .* in[^;]*\\\"\\\$TMP/skills\\\"/\\*/|skills/\\*/)" "$UPDATE_SH" 2>/dev/null; then
+    assert_true "update.sh deploys skills/$skill_name" "1"
+  else
+    assert_true \
+      "update.sh deploys skills/$skill_name" \
+      "0" \
+      "Add '$skill_name' to update.sh's skill loop (or use dynamic skills/*/ loop)"
+  fi
+done
 
 # ─── Category D: scale skills actually use --scale ─────────
 echo ""

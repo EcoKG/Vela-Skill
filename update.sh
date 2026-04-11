@@ -56,13 +56,32 @@ fi
 if [ -d "$TMP/skills" ]; then
   rm -rf "$SKILL_DIR/skills" 2>/dev/null
   cp -r "$TMP/skills" "$SKILL_DIR/skills"
-  # Install as independent top-level skills so /vela:start etc. appear in autocomplete
+  # Install as independent top-level skills so /vela:fix, /vela:small etc.
+  # appear in Claude Code slash-command autocomplete.
+  # Dynamic loop over every skills/*/ directory so new skills added to the
+  # repo are automatically deployed on next update without touching this
+  # script. This replaces the earlier hardcoded list (start git-clean
+  # analyze update) that silently dropped v6.1's small/medium/large/ralph/
+  # hotfix and v7.0's fix — users updating with the old script would see
+  # only the original 4 slash commands despite having the files installed.
   SKILLS_ROOT="$HOME/.claude/skills"
-  for sub in start git-clean analyze update; do
-    if [ -d "$TMP/skills/$sub" ]; then
-      mkdir -p "$SKILLS_ROOT/vela-$sub"
-      cp "$TMP/skills/$sub/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
+  # Remove stale top-level vela-* skills that no longer have a source
+  # directory, so renames and deletions are honored on update.
+  for stale in "$SKILLS_ROOT"/vela-*/; do
+    [ -d "$stale" ] || continue
+    stale_name=$(basename "$stale")
+    sub_name="${stale_name#vela-}"
+    if [ ! -d "$TMP/skills/$sub_name" ]; then
+      rm -rf "$stale"
     fi
+  done
+  # Install every skills/*/ as a top-level vela-{name} skill
+  for skill_src in "$TMP/skills"/*/; do
+    [ -d "$skill_src" ] || continue
+    sub=$(basename "$skill_src")
+    [ -f "$skill_src/SKILL.md" ] || continue
+    mkdir -p "$SKILLS_ROOT/vela-$sub"
+    cp "$skill_src/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md"
   done
 fi
 
