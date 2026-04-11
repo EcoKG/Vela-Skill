@@ -10,6 +10,32 @@ _VELA_DEPLOY_COMMON_LOADED=1
 
 # ─── Shared function: sync local .vela/ project from source ───
 # Used by install.sh (auto-upgrade) and update.sh (--local)
+#
+# v7.1.1 drift fix:
+#   Pre-v7.1.1 this function enumerated individual hook filenames and
+#   hard-coded `templates/pipeline.json` as the only template to copy.
+#   v7.1 added:
+#     - scripts/hooks/vela-file-read-cache.js (M10)
+#     - templates/role-budgets.json (M9)
+#     - templates/guidelines/* (M3)
+#     - templates/plan-templates/* (M4)
+#   None of those were picked up by this function, so `update.sh --local`
+#   silently left users on partial v7.0.7 state for those artifacts. The
+#   install.js FILE_MANIFEST did list them, but sync_local_project runs
+#   BEFORE `node .vela/install.js`, and install.js upgrade requires
+#   velaDir to already exist. The final `node .vela/install.js` call at
+#   the bottom of this function is where FILE_MANIFEST takes over — but
+#   since the files aren't deployed yet, registerGlobalHooks() has
+#   nothing to point at for the new file-read-cache hook.
+#
+#   v7.1.1 flips the directory copies to `cp` globs so new files are
+#   picked up automatically. Subdirectories under templates/ are copied
+#   recursively so the new guidelines/ and plan-templates/ trees come
+#   along for free. The only thing that stays hand-listed is the
+#   agent subdir allowlist, because the Vela repo has some legacy subdirs
+#   (conflict-manager, leader) that install.js FILE_MANIFEST does NOT
+#   include; we keep the historical behaviour there to avoid re-shipping
+#   retired files.
 sync_local_project() {
   local SRC="$1"
 
@@ -17,13 +43,22 @@ sync_local_project() {
   mkdir -p .vela/shared
   cp "$SRC/scripts/shared/"*.js .vela/shared/ 2>/dev/null
 
-  # Hooks (staging — gate-keeper, gate-guard, stop, review-gate)
+  # Hooks — v7.1.1: glob over scripts/hooks/*.js so any hook added to the
+  # repo (M10's vela-file-read-cache, any future hook) is automatically
+  # deployed. session-start-version-check.js and vela-session-start.js
+  # live under hooks/ too and are meant for the global install path, not
+  # the project — filter them out explicitly so the project .vela/hooks/
+  # stays clean.
   mkdir -p .vela/hooks
   mkdir -p .vela/hooks/shared
-  cp "$SRC/scripts/hooks/vela-gate-keeper.js" .vela/hooks/ 2>/dev/null
-  cp "$SRC/scripts/hooks/vela-gate-guard.js" .vela/hooks/ 2>/dev/null
-  cp "$SRC/scripts/hooks/vela-stop.js" .vela/hooks/ 2>/dev/null
-  cp "$SRC/scripts/hooks/vela-review-gate.js" .vela/hooks/ 2>/dev/null
+  for hook_src in "$SRC/scripts/hooks/"*.js; do
+    [ -f "$hook_src" ] || continue
+    hook_name=$(basename "$hook_src")
+    case "$hook_name" in
+      session-start-version-check.js|vela-session-start.js) continue ;;
+    esac
+    cp "$hook_src" .vela/hooks/ 2>/dev/null
+  done
   cp "$SRC/scripts/hooks/shared/constants.js" .vela/hooks/shared/ 2>/dev/null
 
   # CLI
@@ -54,9 +89,28 @@ sync_local_project() {
   mkdir -p .vela/guidelines
   cp "$SRC/scripts/guidelines/"*.md .vela/guidelines/ 2>/dev/null
 
-  # Templates (skip config.json to preserve user settings)
+  # Templates (v7.1.1: recursive copy to pick up subdirs like
+  # guidelines/ (v7.1 M3) and plan-templates/ (v7.1 M4) and
+  # role-budgets.json (v7.1 M9) without maintaining a file list).
+  # config.json must NOT be overwritten — user may have customised it,
+  # so we copy templates/*.json / *.md excluding config.json, then
+  # recursively copy subdirectories.
   mkdir -p .vela/templates
-  cp "$SRC/templates/pipeline.json" .vela/templates/ 2>/dev/null
+  for f in "$SRC/templates/"*; do
+    [ -e "$f" ] || continue
+    fname=$(basename "$f")
+    if [ -d "$f" ]; then
+      # Subdirectory (guidelines/, plan-templates/) — recursive copy
+      mkdir -p ".vela/templates/$fname"
+      cp -r "$f/." ".vela/templates/$fname/" 2>/dev/null
+    else
+      # Top-level template file — skip config.json (user-owned)
+      if [ "$fname" = "config.json" ]; then
+        continue
+      fi
+      cp "$f" ".vela/templates/$fname" 2>/dev/null
+    fi
+  done
 
 
   # References
@@ -76,7 +130,9 @@ sync_local_project() {
     cp "$SRC/scripts/agents/vela.md" .claude/agents/ 2>/dev/null
   fi
 
-  # Re-run install to update settings.local.json
+  # Re-run install to update settings.local.json and register global hooks.
+  # This MUST come after the file copies above because registerGlobalHooks
+  # reads from .vela/hooks/ when staging to ~/.vela/hooks/.
   if [ -f ".vela/install.js" ]; then
     node .vela/install.js 2>/dev/null | tail -1
   fi

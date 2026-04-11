@@ -44,12 +44,16 @@ TMPDIR_ROOT=""
 FAKE_HOME=""
 PROJECT=""
 
-# The four hooks that must always be present after install/upgrade.
+# The active hooks that must always be present after install/upgrade.
+# v7.1.1: added vela-file-read-cache.js to catch the deploy-common.sh
+# sync_local_project() drift where the v7.1 hook was never copied
+# because the function enumerated hook filenames by hand.
 ACTIVE_HOOKS=(
   vela-gate-keeper.js
   vela-gate-guard.js
   vela-stop.js
   vela-review-gate.js
+  vela-file-read-cache.js
 )
 
 # Legacy V4.1 hooks that must NOT reappear in .vela/hooks/.
@@ -429,6 +433,44 @@ done
 # v7.1 M10 adds vela-file-read-cache to PreToolUse bringing the count to 3.
 assert_eq "E: global PreToolUse count after sync" "3" "$(count_global_hooks PreToolUse)"
 assert_eq "E: global Stop count after sync"       "2" "$(count_global_hooks Stop)"
+
+# ─────────────────────────────────────────────────────────────
+# v7.1.1 regression guard — sync_local_project MUST deploy every
+# v7.1 template file. Pre-v7.1.1 these were missed because the
+# function hard-coded `cp templates/pipeline.json` as the only
+# template, and hooks were listed by filename. `update.sh --local`
+# on a real project would leave the new v7.1 artifacts missing,
+# silently reverting affected behaviour (Phase 0 live processes,
+# Phase 3 smoke test, role budgets, Architecture Guardrails
+# samples, file-read cache hook).
+# ─────────────────────────────────────────────────────────────
+assert_file "E.v7.1: role-budgets.json deployed" \
+  "$PROJECT/.vela/templates/role-budgets.json"
+assert_file "E.v7.1: plan-templates/quick.md deployed" \
+  "$PROJECT/.vela/templates/plan-templates/quick.md"
+assert_file "E.v7.1: guidelines/live-processes.json deployed" \
+  "$PROJECT/.vela/templates/guidelines/live-processes.json"
+assert_file "E.v7.1: guidelines/smoke-test.sh.example deployed" \
+  "$PROJECT/.vela/templates/guidelines/smoke-test.sh.example"
+
+# Important back-compat invariant: config.json must NOT be
+# overwritten by sync_local_project even though we now recurse
+# through templates/. Plant a user-customised config.json and
+# confirm it survives a second sync.
+echo '{"custom":"keep-me"}' > "$PROJECT/.vela/templates/config.json"
+(
+  set +e
+  cd "$PROJECT"
+  export HOME="$FAKE_HOME"
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0=commit.gpgsign
+  export GIT_CONFIG_VALUE_0=false
+  # shellcheck disable=SC1090
+  source "$DEPLOY_COMMON"
+  sync_local_project "$REPO_ROOT" > /dev/null 2>&1
+)
+assert_contains "E.v7.1: user config.json NOT overwritten by sync" \
+  '"custom"' "$(cat "$PROJECT/.vela/templates/config.json" 2>/dev/null)"
 
 teardown
 
