@@ -63,16 +63,33 @@ research 단계가 없는 scale(medium/small/ralph/hotfix)에서는 research.md�
 - 레이어 구조와 의존성
 - 변경되는 파일 목록
 
+## Architecture Guardrails (v7.1 M4 — 필수)
+이 plan 이 허용하고 금지하는 의존성을 명시적으로 선언한다. executor 와
+verifier 가 이 섹션을 기준으로 범위 이탈을 감지한다. 누락 시 plan-check FAIL.
+
+- **Allowed imports**: 이번 수정에서 새로 import 해도 되는 layer / 모듈 목록
+  - 예: `scraper → domain`, `scraper → shared/url-parser`
+- **Forbidden imports**: 절대 import 하면 안 되는 의존성 (특히 cross-layer 위반)
+  - 예: `server/index.js 는 scraper/* 를 직접 import 하지 않는다` (T083634 DIP 위반 회귀 방지)
+- **Injection points**: DI 가 필요한 경우 어디에 어떤 인터페이스를 주입할지
+  - 예: `server bootstrap 에서 ScraperPort interface 로 scraper 구현체 주입`
+
+이 섹션은 plan-check Phase 2 design-sanity 가 grep 으로 검증한다. "Allowed imports",
+"Forbidden imports", "Injection points" 세 하위 항목이 모두 존재해야 한다.
+
 ## Class Specification
 (최소 200 bytes)
 - 새로 추가/변경할 클래스, 인터페이스, 함수 명세
 - 메서드 시그니처, 파라미터, 반환 타입
 - 각 컴포넌트의 책임
+- **도메인 값 (URL, ID, origin, endpoint, 경로)에는 반드시 "format:" 또는 "must be" 제약을 쓴다.** 단순 `string` 타입 선언만 있으면 plan-check FAIL.
+  예: `bookUrl: string` ❌ → `bookUrl: string (must be full URL including https:// and /book/{id} path)` ✅
 
 ## Test Strategy
 (최소 200 bytes)
 - 단위 테스트 대상과 케이스
 - 통합 테스트 시나리오
+- **각 주요 함수/클래스마다 엣지 케이스 ≥ 2개 명시** (plan-check Phase 2가 검증)
 - 엣지 케이스 처리
 
 ## Implementation Steps

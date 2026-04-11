@@ -7,6 +7,8 @@ node .vela/cli/vela-engine.js init "설명" [--type TYPE] [--scale SIZE] [--auto
 node .vela/cli/vela-engine.js state
 node .vela/cli/vela-engine.js transition
 node .vela/cli/vela-engine.js record pass|fail|reject
+node .vela/cli/vela-engine.js advance [pass|fail|reject]            # v7.1 M8 — record+transition
+node .vela/cli/vela-engine.js doctor                                # v7.1 M6 — health check
 node .vela/cli/vela-engine.js branch [--mode auto|prompt|none]
 node .vela/cli/vela-engine.js commit [--message TEXT]
 node .vela/cli/vela-engine.js cancel
@@ -15,6 +17,38 @@ node .vela/cli/vela-engine.js locate [--request "..."] [--json]    # v6.1
 node .vela/cli/vela-engine.js clean-scan
 node .vela/cli/vela-engine.js clean-exec
 ```
+
+### `advance` 명령 (v7.1 M8)
+
+`record pass` + `transition` 을 한 번의 엔진 호출로 수행한다. 정상 진행 시 PM 의
+top-level Bash 호출을 절반으로 줄이고, 응답에 `nextAction` 힌트가 포함되어
+`state` 재조회 없이 다음 단계의 Agent 소환으로 직행할 수 있다.
+
+```bash
+node .vela/cli/vela-engine.js advance            # 기본값 pass
+node .vela/cli/vela-engine.js advance pass       # 동일
+node .vela/cli/vela-engine.js advance reject     # revisions++ + 같은 단계 유지
+node .vela/cli/vela-engine.js advance fail       # reject 와 동일한 retry 시멘틱
+```
+
+응답 JSON: `{previousStep, currentStep, nextStep, revision, circuitOpen, nextAction, message}`.
+
+기존 `record` / `transition` 은 back-compat 으로 그대로 남는다.
+
+### `doctor` 명령 (v7.1 M6)
+
+엔진/에이전트/템플릿/훅 파일 전부가 있고 파싱 가능한지 검증. PM 이 세션 시작 시
+자동으로 호출한다 (vela.md 1.5단계). `ok: false` 리턴 시 `missing[]` 에 누락 파일이
+나열되고 `recovery: "node .vela/install.js validate"` 를 제안한다.
+
+```bash
+node .vela/cli/vela-engine.js doctor
+```
+
+검사 항목: core dirs, `cli/vela-engine.js`, `templates/pipeline.json` parse,
+`config.json` parse, agent manifest, v7.1 파일들 (role-budgets.json,
+plan-templates/quick.md, guidelines/live-processes.json,
+guidelines/smoke-test.sh.example, hooks/vela-file-read-cache.js).
 
 ### `locate` 명령 (v6.1, LLM 0)
 

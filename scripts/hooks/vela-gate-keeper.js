@@ -33,6 +33,99 @@ const { SAFE_BASH_READ } = require("./shared/constants");
 // VK-08: Chain operator regex — matches &&, ||, ;, | (pipe)
 const CHAIN_OPERATOR_RE = /&&|\|\||;|\|/;
 
+// v7.1 M2: verify-step safelist.
+//
+// The verify step runs the project's existing test and lint tooling.
+// Before v7.1, VK-08 blocked any command containing `|` (to catch
+// generic chain operators), and that included legitimate verifier
+// patterns like `npm test | tee /tmp/out.log` or `npx vitest run |
+// grep FAIL`. In the hicoco T081421 session the verifier had to
+// fall back to static-only analysis because every useful Bash call
+// was rejected.
+//
+// v7.1 solution: when the current pipeline step is `verify`, the
+// gate keeper matches the command against this regex *first*. A
+// match skips both the chain operator check and the generic
+// bash-policy check — the verifier's Bash is allowed to pipe,
+// because the whole point of verify is running the project's
+// tests end-to-end.
+//
+// The patterns listed here are intentionally conservative: they
+// cover the standard Node/Python/Go/Rust/.NET/Java test runners,
+// the linters that ship with them, and `node --check` style AST
+// syntax validators. Everything else still goes through VK-08
+// and the regular mode policy, so a malicious verifier can't
+// use this as an escape hatch for `git reset` or `rm -rf`.
+//
+// Projects can extend the list via .vela/guidelines/verify-commands.txt
+// (one extra ripgrep-style regex per line). loadVerifyExtras reads it
+// at hook-invocation time so edits are picked up without restarting
+// Claude Code.
+const VERIFY_SAFELIST_PATTERNS = [
+  /\bnode\s+--check\b/,
+  /\bnpm\s+(test|run\s+(test|lint|typecheck|check|build)\b)/,
+  /\byarn\s+(test|run\s+(test|lint|typecheck|check|build)\b)/,
+  /\bpnpm\s+(test|run\s+(test|lint|typecheck|check|build)\b)/,
+  /\bnpx\s+(jest|vitest|eslint|prettier|tsc|biome|playwright)\b/,
+  /\btsc\s+--noEmit\b/,
+  /\bpytest\b/,
+  /\bpython3?\s+-m\s+(pytest|unittest|mypy|ruff|flake8|black)/,
+  /\bruff\b/,
+  /\bmypy\b/,
+  /\bgo\s+(test|vet|build)\b/,
+  /\bcargo\s+(test|build|check|clippy|fmt)\b/,
+  /\bmake\s+(test|check|lint)\b/,
+  /\bdotnet\s+(test|build)\b/,
+  /\bmvn\s+(test|verify|-B|compile)\b/,
+  /\bgradle\s+(test|check|build)\b/,
+  /\bbash\s+scripts\/tests\//,
+  /\bbash\s+\.vela\/guidelines\/smoke-test\.sh\b/,
+  /\b\.vela\/guidelines\/smoke-test\.sh\b/,
+  /\bcurl\s+-fs\S*\s+http:\/\/(localhost|127\.0\.0\.1)/, // smoke-test health checks
+];
+
+/**
+ * Load project-local verify-command extras if the user has dropped
+ * a `.vela/guidelines/verify-commands.txt` file in their project.
+ * One pattern per line, blank lines and `#` comments allowed.
+ * Patterns are treated as ripgrep-style regex literals.
+ *
+ * Safe on any error — returns an empty array and falls through to
+ * the built-in safelist. Never crashes the hook.
+ */
+function loadVerifyExtras(cwd) {
+  try {
+    const p = path.join(cwd, ".vela", "guidelines", "verify-commands.txt");
+    if (!fs.existsSync(p)) return [];
+    const raw = fs.readFileSync(p, "utf8");
+    const out = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      try {
+        out.push(new RegExp(trimmed));
+      } catch {
+        // Malformed regex — skip silently, verifier falls back to
+        // built-in list. Logging from a gate hook would pollute
+        // unrelated tool outputs.
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function isVerifyStepSafe(cmd, cwd) {
+  for (const re of VERIFY_SAFELIST_PATTERNS) {
+    if (re.test(cmd)) return true;
+  }
+  for (const re of loadVerifyExtras(cwd)) {
+    if (re.test(cmd)) return true;
+  }
+  return false;
+}
+
 // ─── Helpers ───────────────────────────────────────────────
 
 /**
@@ -169,6 +262,17 @@ async function main() {
   if (toolName === "Bash") {
     const cmd = (typeof toolInput.command === "string" && toolInput.command) || "";
 
+    // v7.1 M2: verify step gets a whitelisted bypass of the chain-
+    // operator check so the verifier can pipe test output through
+    // tee/grep/jq. The safelist is narrow — only known test/lint
+    // runners — so a malicious verifier can't use this to tunnel
+    // `git reset --hard` or `rm -rf` through a `|` pipe.
+    const isVerifyStep =
+      pipelineState && pipelineState.current_step === "verify";
+    if (isVerifyStep && isVerifyStepSafe(cmd, cwd)) {
+      process.exit(0);
+    }
+
     // VK-08: Block chain operators even in safe commands
     if (CHAIN_OPERATOR_RE.test(cmd)) {
       process.exit(2);
@@ -223,8 +327,144 @@ async function main() {
     process.exit(2);
   }
 
+  // ─── v7.1 M11: researcher targeted-scope Read enforcement ───
+  //
+  // When the active pipeline is on the `research` step AND the
+  // locate targets.json has confidence ∈ {high, medium}, the researcher
+  // is only allowed to Read files in primary[] ∪ blast_radius[] ∪ tests[]
+  // plus a small allowlist of project-metadata files. Pre-v7.1 a researcher
+  // could happily `Read` server/index.js and client/src/App.jsx even when
+  // locate's primary[] was two files in scraper/, which is how hicoco
+  // research averaged 12 tool_use per session.
+  //
+  // Failure mode: we can't positively identify that the current Read is
+  // coming from a `vela-researcher` sub-agent (Claude Code doesn't pass
+  // the sub-agent type through tool_input), so we use pipeline
+  // current_step as a proxy: anything Read during the `research` step is
+  // assumed to be researcher activity. The PM itself may also Read during
+  // research (to look at review-research.md) — we exempt artifact files
+  // and config files below so PM operations still go through.
+  if (
+    toolName === "Read" &&
+    pipelineState &&
+    pipelineState.current_step === "research"
+  ) {
+    const filePath =
+      (typeof toolInput.file_path === "string" && toolInput.file_path) ||
+      (typeof toolInput.path === "string" && toolInput.path) ||
+      "";
+    if (filePath) {
+      const denied = isResearcherReadOutOfScope(cwd, pipelineState, filePath);
+      if (denied) {
+        process.exit(2);
+      }
+    }
+  }
+
   // Default: allow
   process.exit(0);
+}
+
+/**
+ * v7.1 M11 — return true if `filePath` is outside the researcher's
+ * allowed scope for the current pipeline. Returns false (allow) when
+ * any of the following:
+ *   - targets.json missing (legacy path)
+ *   - confidence !== high && confidence !== medium
+ *   - file matches primary / blast_radius / tests
+ *   - file is project metadata (package.json, README, etc.)
+ *   - file is inside .vela/ (artifacts, config, agent prompts)
+ */
+function isResearcherReadOutOfScope(cwd, pipelineState, filePath) {
+  try {
+    // Locate the artifactDir belonging to the active pipeline.
+    // pipelineState lives at .vela/artifacts/{slug}/pipeline-state.json.
+    // We don't carry the slug in state so we re-derive it.
+    const artifactsDir = path.join(cwd, ".vela", "artifacts");
+    if (!fs.existsSync(artifactsDir)) return false;
+    const dirs = fs
+      .readdirSync(artifactsDir)
+      .filter((d) => /^\d{8}T\d{6}-/.test(d))
+      .sort()
+      .reverse();
+
+    let targetsJson = null;
+    for (const dir of dirs) {
+      const sp = path.join(artifactsDir, dir, "pipeline-state.json");
+      if (!fs.existsSync(sp)) continue;
+      try {
+        const s = parseJsonSafe(fs.readFileSync(sp, "utf8"));
+        if (!s || s.status !== "active") continue;
+        const tp = path.join(artifactsDir, dir, "targets.json");
+        if (fs.existsSync(tp)) {
+          targetsJson = parseJsonSafe(fs.readFileSync(tp, "utf8"));
+        }
+        break;
+      } catch {
+        /* skip */
+      }
+    }
+
+    // No targets.json or low confidence → we don't enforce M11 scope
+    // (fall through to regular allow).
+    if (!targetsJson) return false;
+    const confidence = targetsJson.confidence;
+    if (confidence !== "high" && confidence !== "medium") return false;
+
+    // Normalise the path for comparison. Strip leading "./" and any
+    // cwd-relative absolute prefix so we compare in project-relative form.
+    let rel = filePath.replace(/\\/g, "/");
+    if (rel.startsWith(cwd.replace(/\\/g, "/") + "/")) {
+      rel = rel.slice(cwd.length + 1);
+    }
+    if (rel.startsWith("./")) rel = rel.slice(2);
+
+    // Allowlist: metadata + .vela/ artifacts + researcher self-refs
+    const META_ALLOW = [
+      "package.json",
+      "pyproject.toml",
+      "go.mod",
+      "go.sum",
+      "Cargo.toml",
+      "Cargo.lock",
+      "pom.xml",
+      "build.gradle",
+      "build.gradle.kts",
+      "Gemfile",
+      "README.md",
+      "CONTRIBUTING.md",
+      "CLAUDE.md",
+    ];
+    if (META_ALLOW.includes(rel) || META_ALLOW.includes(rel.split("/").pop())) {
+      return false;
+    }
+    if (rel.startsWith(".vela/") || rel.includes("/.vela/")) return false;
+
+    // Check against primary/blast_radius/tests
+    const isInList = (list, target) => {
+      if (!Array.isArray(list)) return false;
+      for (const entry of list) {
+        const file = typeof entry === "string" ? entry : entry && entry.file;
+        if (typeof file !== "string") continue;
+        const normEntry = file.replace(/\\/g, "/").replace(/^\.\//, "");
+        if (normEntry === target) return true;
+        // Allow subdir match: if entry is a directory-ish path, permit
+        // files under it (locate.js sometimes emits "scraper/" style).
+        if (normEntry.endsWith("/") && target.startsWith(normEntry)) return true;
+      }
+      return false;
+    };
+    if (isInList(targetsJson.primary, rel)) return false;
+    if (isInList(targetsJson.blast_radius, rel)) return false;
+    if (isInList(targetsJson.tests, rel)) return false;
+
+    // Nothing matched — out of scope.
+    return true;
+  } catch {
+    // On any error, fall through to allow — gate-keeper must never
+    // break a pipeline because its own scope helper crashed.
+    return false;
+  }
 }
 
 main().catch(() => process.exit(2));

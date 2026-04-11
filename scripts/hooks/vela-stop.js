@@ -63,6 +63,89 @@ function checkUncommittedChanges(cwd) {
 }
 
 /**
+ * v7.1 M9/M10 — roll up budget-exceeded.json + read-cache.jsonl from the
+ * active pipeline's artifact dir into tool-usage.json. Called from
+ * saveSessionEnd so /vela:analyze can aggregate across sessions without
+ * re-walking artifact trees.
+ *
+ * Non-fatal on any error; returns an object with whatever it managed to
+ * extract.
+ */
+function rollupToolUsage(cwd, pipelineState) {
+  const rollup = {
+    budgetExceeded: null,
+    duplicateReads: null,
+  };
+  if (!pipelineState) return rollup;
+  try {
+    const artifactsDir = path.join(cwd, ".vela", "artifacts");
+    if (!fs.existsSync(artifactsDir)) return rollup;
+    const dirs = fs.readdirSync(artifactsDir)
+      .filter(d => /^\d{8}T\d{6}-/.test(d))
+      .sort()
+      .reverse();
+    let activeArtifactDir = null;
+    for (const d of dirs) {
+      const sp = path.join(artifactsDir, d, "pipeline-state.json");
+      if (!fs.existsSync(sp)) continue;
+      try {
+        const s = parseJsonSafe(fs.readFileSync(sp, "utf8"));
+        if (s && s.status === "active") { activeArtifactDir = path.join(artifactsDir, d); break; }
+      } catch {/* skip */}
+    }
+    if (!activeArtifactDir) return rollup;
+
+    // M9: budget-exceeded.json (written by agents when their counter
+    // passed the injected budget)
+    const bePath = path.join(activeArtifactDir, "budget-exceeded.json");
+    if (fs.existsSync(bePath)) {
+      try {
+        rollup.budgetExceeded = parseJsonSafe(fs.readFileSync(bePath, "utf8"));
+      } catch {/* skip */}
+    }
+
+    // M10: read-cache.jsonl (written by vela-file-read-cache hook per
+    // Read tool call). Aggregate dup counts per (agent,file,sha).
+    const rcPath = path.join(activeArtifactDir, "read-cache.jsonl");
+    if (fs.existsSync(rcPath)) {
+      try {
+        const counts = new Map();
+        const raw = fs.readFileSync(rcPath, "utf8");
+        for (const line of raw.split(/\r?\n/)) {
+          const t = line.trim();
+          if (!t) continue;
+          const obj = parseJsonSafe(t);
+          if (!obj || !obj.file) continue;
+          const key = `${obj.agent || "unknown"}|${obj.file}|${obj.sha || ""}`;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        }
+        const dupes = [];
+        for (const [key, n] of counts.entries()) {
+          if (n >= 2) {
+            const [agent, file, sha] = key.split("|");
+            dupes.push({ agent, file, sha, count: n });
+          }
+        }
+        dupes.sort((a, b) => b.count - a.count);
+        rollup.duplicateReads = dupes.slice(0, 20);
+      } catch {/* skip */}
+    }
+
+    // Write a consolidated tool-usage.json next to the artifacts for
+    // /vela:analyze to aggregate later.
+    try {
+      const toolUsagePath = path.join(activeArtifactDir, "tool-usage.json");
+      fs.writeFileSync(toolUsagePath, JSON.stringify({
+        updatedAt: new Date().toISOString(),
+        budgetExceeded: rollup.budgetExceeded,
+        duplicateReads: rollup.duplicateReads || [],
+      }, null, 2));
+    } catch {/* skip */}
+  } catch {/* all rollup failures are non-fatal */}
+  return rollup;
+}
+
+/**
  * Save session-end snapshot to .vela/state/session-end.json.
  */
 function saveSessionEnd(cwd, pipelineState, changes) {
@@ -82,6 +165,8 @@ function saveSessionEnd(cwd, pipelineState, changes) {
       }
     } catch { /* skip */ }
 
+    const rollup = rollupToolUsage(cwd, pipelineState);
+
     const snapshot = {
       endedAt: new Date().toISOString(),
       activePipeline: pipelineState
@@ -89,6 +174,7 @@ function saveSessionEnd(cwd, pipelineState, changes) {
         : null,
       uncommittedChanges: changes.dirty ? changes.summary : null,
       analytics: analyticsSummary,
+      toolUsage: rollup,
     };
 
     fs.writeFileSync(

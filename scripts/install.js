@@ -124,6 +124,34 @@ const FILE_MANIFEST = [
     dst: "templates/config.json",
     skipOnUpgrade: true,
   },
+  // v7.1 M3 — verifier Phase 0/3 templates. Example-only files live
+  // under .vela/templates/guidelines/ so users can copy them to
+  // .vela/guidelines/*.json or .vela/guidelines/*.sh when they need
+  // them. Install.js ships them as examples — never overwrites a
+  // file the user copied into the active guidelines dir.
+  {
+    src: "templates/guidelines/live-processes.json",
+    dst: "templates/guidelines/live-processes.json",
+  },
+  {
+    src: "templates/guidelines/smoke-test.sh.example",
+    dst: "templates/guidelines/smoke-test.sh.example",
+  },
+  // v7.1 M4 — Architecture Guardrails sample plan. vela-planner.md
+  // references this to show what Allowed/Forbidden/Injection sections
+  // look like. Deployed to .vela/templates/plan-templates/quick.md so
+  // planners can open it as a starting skeleton.
+  {
+    src: "templates/plan-templates/quick.md",
+    dst: "templates/plan-templates/quick.md",
+  },
+  // v7.1 M9 — per-scale tool_use budgets. PM injects the budget for
+  // each Agent spawn; exceeding triggers a budget-exceeded.json marker
+  // inside artifactDir (non-fatal). /vela:analyze rolls them up.
+  {
+    src: "templates/role-budgets.json",
+    dst: "templates/role-budgets.json",
+  },
   // References
   { src: "references/interactive-ui.md", dst: "references/interactive-ui.md" },
   {
@@ -220,6 +248,10 @@ const FILE_MANIFEST = [
   { src: "scripts/hooks/vela-gate-guard.js",  dst: "hooks/vela-gate-guard.js"  },
   { src: "scripts/hooks/vela-stop.js",        dst: "hooks/vela-stop.js"        },
   { src: "scripts/hooks/vela-review-gate.js", dst: "hooks/vela-review-gate.js" },
+  // v7.1 M10 — file read cache hook. Purely observational (exit 0 on
+  // every call). Logs Read calls to <artifactDir>/read-cache.jsonl
+  // so vela-stop.js and /vela:analyze can aggregate duplicates.
+  { src: "scripts/hooks/vela-file-read-cache.js", dst: "hooks/vela-file-read-cache.js" },
   { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
 
@@ -1092,6 +1124,70 @@ function upgrade() {
   // users get the pin on their next `node .vela/install.js upgrade`.
   writeWorkspaceRecord(PROJECT_ROOT);
 
+  // v7.1 M6 — ensure .vela/artifacts/ exists so engine doctor passes
+  // immediately after upgrade. Pre-v7.1 the dir was only created on
+  // first cmdInit, which meant a fresh upgrade then a doctor call
+  // reported a bogus missing-dir warning.
+  try {
+    fs.mkdirSync(path.join(velaDir, "artifacts"), { recursive: true });
+  } catch { /* non-fatal */ }
+
+  // ─── v7.1 M12: CLAUDE.md — inject the `cd` rule on upgrade ───
+  //
+  // The "Bash tool — never use bare `cd`" section was added to the
+  // template in v7.0.7 via install() only. Projects that were first
+  // initialised before v7.0.7 have a CLAUDE.md that was never touched
+  // by upgrade() (upgrade skips CLAUDE.md precisely because user may
+  // have customised it), so they never get the rule and continue
+  // hitting the subshell-cd footgun on every session.
+  //
+  // v7.1 closes that loophole: upgrade() reads the existing CLAUDE.md,
+  // checks for the marker text, and appends the section if absent.
+  // Idempotent — re-running upgrade after the first injection is a
+  // no-op because the marker is already present.
+  try {
+    const claudeMdPath = path.join(PROJECT_ROOT, "CLAUDE.md");
+    if (fs.existsSync(claudeMdPath)) {
+      const existing = fs.readFileSync(claudeMdPath, "utf8");
+      const MARKER = "Bash tool — never use bare `cd`";
+      if (!existing.includes(MARKER)) {
+        const appendage = `
+## ${MARKER} inside a single invocation
+
+Claude Code's Bash tool has a persistent working directory that survives
+between tool calls. A bare \`cd subdir\` inside one Bash invocation will
+cause every subsequent Bash call (including the PM's
+\`node .vela/cli/vela-engine.js ...\` invocations) to run from that
+subdirectory, and Node's module loader will fail with \`Cannot find
+module\` before the engine ever runs.
+
+- **Wrong**: \`cd server/data && node build.js\` (leaks the cwd change)
+- **Right**: \`( cd server/data && node build.js )\` (subshell isolates it)
+- **Also right**: pass absolute paths — \`node /abs/path/to/build.js\`
+
+Vela v7.0.7+ records the true project root in
+\`.vela/state/workspace.json\` at install time and the engine will
+\`chdir\` back on every invocation if cwd has drifted, printing a
+warning to stderr. Treat that warning as a bug in the calling code
+(usually a stray \`cd\` inside a Bash tool) and fix it rather than
+relying on the auto-recovery.
+`;
+        fs.appendFileSync(claudeMdPath, appendage);
+        results.claudeMdInjected = true;
+      } else {
+        results.claudeMdInjected = false;
+      }
+    } else {
+      // No CLAUDE.md at all — install() handles first-time creation,
+      // so upgrade() should not create one from scratch. Users who
+      // deleted their CLAUDE.md intentionally stay deleted.
+      results.claudeMdInjected = false;
+    }
+  } catch (e) {
+    results.errors.push(`CLAUDE.md injection: ${e.message}`);
+    results.claudeMdInjected = false;
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -1102,6 +1198,7 @@ function upgrade() {
         skipped: results.skipped.length,
         orphansRemoved: results.orphansRemoved.length,
         configMigration: results.configMigration,
+        claudeMdInjected: !!results.claudeMdInjected,
         errors: results.errors,
         details: results,
       },
@@ -1525,7 +1622,7 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js"];
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js", "vela-file-read-cache.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1611,6 +1708,11 @@ function registerGlobalHooks(hooksSourceDir) {
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-keeper.js")}`, 10);
   addGlobalHook("PreToolUse", "vela-gate-guard",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
+  // v7.1 M10 — file read cache is also PreToolUse, but purely
+  // observational. The hook always returns exit 0 even on internal
+  // error, so adding it cannot break an otherwise-working project.
+  addGlobalHook("PreToolUse", "vela-file-read-cache",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-file-read-cache.js")}`, 5);
   addGlobalHook("Stop", "vela-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
   addGlobalHook("Stop", "vela-review-gate",

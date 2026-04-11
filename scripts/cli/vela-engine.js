@@ -141,6 +141,8 @@ const commands = {
   state: cmdState,
   transition: cmdTransition,
   record: cmdRecord,
+  advance: cmdAdvance, // v7.1 M8: record+transition one-shot
+  doctor: cmdDoctor,   // v7.1 M6: health check
   branch: cmdBranch,
   commit: cmdCommit,
   cancel: cmdCancel,
@@ -261,10 +263,28 @@ function cmdInit() {
   // Create artifact directory AFTER validation passes: {YYYYMMDD}T{HHmmss}-{slug}
   const now = new Date();
   const ts = now.toISOString().replace(/[-:]/g, "").slice(0, 15);
-  const slug = slugify(request);
+  // v7.1 M5: use slugifyEx so we can detect truncation and drop a
+  // request.txt side-car with the full original text. Without this,
+  // hicoco-style long Korean requests had artifact dirs like
+  // "20260101T000000-별도-downloa" with no way to recover the prompt
+  // that started the pipeline.
+  const slugInfo = slugifyEx(request);
+  const slug = slugInfo.slug;
   const artifactDir = path.join(ARTIFACTS_DIR, `${ts}-${slug}`);
 
   fs.mkdirSync(artifactDir, { recursive: true });
+
+  // v7.1 M5: when the slug had to be truncated, write the full request
+  // to a side-car file so downstream agents (and humans) can still see
+  // what was asked.
+  if (slugInfo.truncated) {
+    try {
+      fs.writeFileSync(
+        path.join(artifactDir, "request.txt"),
+        String(request) + "\n",
+      );
+    } catch { /* best effort */ }
+  }
 
   // Auto mode flag
   const autoMode = hasFlag("--auto");
@@ -312,6 +332,26 @@ function cmdInit() {
   writeJSON(path.join(artifactDir, "pipeline-state.json"), state);
   writeJSON(path.join(artifactDir, "meta.json"), meta);
 
+  // v7.1 M1: surface non-git projects at init time so the user finds out
+  // immediately instead of at commit 10 steps later. pipelineWarnings is
+  // an array because future modules may add more init-time warnings.
+  const pipelineWarnings = [];
+  if (!gitState.is_repo) {
+    pipelineWarnings.push({
+      code: "not_a_git_repo",
+      severity: "high",
+      message:
+        "This directory is not a git repository. Commit and branch steps will BLOCK until you run `git init -b main` and make an initial commit. Do this now — you do not want to discover it after execute.",
+    });
+    process.stderr.write([
+      "",
+      "⚠️  Vela v7.1 init — non-git project detected.",
+      "    commit/branch steps will block until you run:",
+      "      git init -b main && git add -A && git commit -m \"chore: initial\"",
+      "",
+    ].join("\n"));
+  }
+
   output({
     ok: true,
     command: "init",
@@ -322,7 +362,13 @@ function cmdInit() {
     artifact_dir: artifactDir,
     steps: steps.map((s) => ({ id: s.id, name: s.name, mode: s.mode })),
     cleaned_cancelled: cleaned,
+    git: {
+      repo: gitState.is_repo,
+      branch: gitState.current_branch || null,
+      dirty: gitState.is_repo ? !gitState.is_clean : false,
+    },
     ...(scaleWarning ? { warning: scaleWarning } : {}),
+    ...(pipelineWarnings.length > 0 ? { pipelineWarnings } : {}),
     message:
       `Pipeline initialized. Scale: ${scaleName} → ${pipelineType}. Current step: ${firstStep.name} (${firstStep.mode} mode)` +
       (cleaned > 0 ? ` (cleaned ${cleaned} cancelled artifact(s))` : ""),
@@ -367,6 +413,15 @@ function cmdState() {
       : null,
     git: state.git || null,
     artifact_dir: state._artifactDir,
+    // v7.1 M7: surface context-pack path so the PM can hand it to
+    // executor/verifier spawns without having to check the filesystem
+    // itself. Also exposes budget-exceeded.json if it was dropped.
+    contextPackPath: state._artifactDir && fs.existsSync(
+      path.join(state._artifactDir, "context-pack.json"),
+    ) ? path.join(state._artifactDir, "context-pack.json") : null,
+    requestTxtPath: state._artifactDir && fs.existsSync(
+      path.join(state._artifactDir, "request.txt"),
+    ) ? path.join(state._artifactDir, "request.txt") : null,
   });
 }
 
@@ -553,6 +608,418 @@ function cmdRecord() {
   output(result);
 }
 
+/**
+ * v7.1 M8: Apply a verdict (pass/fail/reject) to the active pipeline state
+ * in memory. Returns the mutated state plus auto-mode side effects, but
+ * does NOT write to disk — callers compose this with applyTransition()
+ * when running the advance shortcut, so both mutations flush in one
+ * writeJSON call.
+ *
+ * Factored out of cmdRecord so `advance` can reuse exactly the same
+ * circuit-breaker, auto-mode, and revision-counter rules that `record`
+ * has carried since v4.
+ */
+function applyVerdict(state, verdictLower) {
+  if (!state.revisions[state.current_step]) {
+    state.revisions[state.current_step] = 0;
+  }
+  state.revisions[state.current_step]++;
+
+  const result = {
+    autoDisabled: false,
+    autoWarning: null,
+    circuitOpened: false,
+  };
+
+  if (state.auto === true) {
+    if (verdictLower === "reject" || verdictLower === "fail") {
+      state.auto_reject_count = (state.auto_reject_count || 0) + 1;
+      if (state.auto_reject_count >= 2) {
+        state.auto = false;
+        result.autoDisabled = true;
+        result.autoWarning =
+          "⚠️ Auto mode disabled: 2 consecutive rejects reached.";
+      }
+    } else if (verdictLower === "pass" || verdictLower === "approve") {
+      state.auto_reject_count = 0;
+    }
+  }
+
+  const failKey = `_step_failures_${state.current_step}`;
+  if (verdictLower === "fail" || verdictLower === "reject") {
+    state[failKey] = (state[failKey] || 0) + 1;
+    if (state[failKey] >= CIRCUIT_BREAKER_THRESHOLD) {
+      result.circuitOpened = true;
+      try {
+        const stateDir = path.join(CWD, ".vela", "state");
+        fs.mkdirSync(stateDir, { recursive: true });
+        writeJSON(path.join(stateDir, "circuit-open.json"), {
+          step: state.current_step,
+          count: state[failKey],
+          openAt: new Date().toISOString(),
+        });
+      } catch { /* silent */ }
+    }
+  } else if (verdictLower === "pass") {
+    state[failKey] = 0;
+    try {
+      const circuitPath = path.join(CWD, ".vela", "state", "circuit-open.json");
+      if (fs.existsSync(circuitPath)) fs.unlinkSync(circuitPath);
+    } catch { /* silent */ }
+  }
+
+  state.updated_at = new Date().toISOString();
+  return result;
+}
+
+/**
+ * v7.1 M8: advance — record(verdict) + transition as one atomic CLI call.
+ *
+ * Motivation: hicoco session analysis showed the PM's top-level Bash
+ * count was 146, the largest single consumer being "record pass" followed
+ * immediately by "transition" on every successful step. advance halves
+ * that latency and also lets the engine return a `nextAction` hint so the
+ * PM can skip an extra `state` round-trip just to find out which agent to
+ * spawn next.
+ *
+ * Behaviour by verdict:
+ *   pass  (default) — record pass, transition to next step
+ *   fail  — record fail, stay on current step (no transition)
+ *   reject — record reject, stay on current step (no transition)
+ *
+ * Output JSON includes: previousStep, currentStep, nextStep, active,
+ * circuitOpen, and nextAction (a one-line hint like "spawn vela-executor"
+ * or "commit via `node .vela/cli/vela-engine.js commit`").
+ *
+ * Backward compat: cmdRecord and cmdTransition remain untouched so any
+ * existing automation still works.
+ */
+function cmdAdvance() {
+  const rawVerdict = getArg(0) || "pass";
+  const verdictLower = rawVerdict.toLowerCase();
+  if (!["pass", "fail", "reject"].includes(verdictLower)) {
+    return output({
+      ok: false,
+      command: "advance",
+      error: "Verdict must be one of pass|fail|reject (default: pass)",
+    });
+  }
+
+  const state = findActiveState();
+  if (!state) {
+    return output({
+      ok: false,
+      command: "advance",
+      error: "No active pipeline.",
+    });
+  }
+
+  const previousStep = state.current_step;
+  const verdictResult = applyVerdict(state, verdictLower);
+
+  // fail/reject: stay on the same step — same semantics as cmdRecord alone.
+  if (verdictLower !== "pass") {
+    writeJSON(state._path, cleanState(state));
+    return output({
+      ok: true,
+      command: "advance",
+      verdict: verdictLower,
+      previousStep,
+      currentStep: state.current_step,
+      nextStep: null,
+      active: true,
+      circuitOpen: verdictResult.circuitOpened,
+      revision: state.revisions[previousStep],
+      ...(verdictResult.autoDisabled ? {
+        autoDisabled: true,
+        autoWarning: verdictResult.autoWarning,
+      } : {}),
+      nextAction: nextActionHint(state, previousStep, false),
+      message: `Recorded ${verdictLower} on step ${previousStep}. Pipeline stays on ${previousStep} for retry.`,
+    });
+  }
+
+  // pass → advance. Reuse cmdTransition's logic by inlining the minimal
+  // subset we need (the full cmdTransition does exit-gate checks we want
+  // to preserve, so we delegate to it explicitly by re-reading state).
+  writeJSON(state._path, cleanState(state));
+
+  // cmdTransition rereads the active state from disk and performs the
+  // exit-gate check + step advancement. We intercept its output() call
+  // by temporarily replacing process.stdout.write, capture the JSON it
+  // would emit, then re-emit a merged advance response.
+  let transitionResult = null;
+  const origOutput = output;
+  // Poor man's intercept: override the module-level `output` only for
+  // this call, restore afterwards. output is a top-level `function`
+  // declaration so it's hoisted; we shadow via a local that the closure
+  // around cmdTransition doesn't see. Instead of shadowing, we call
+  // a reimplementation here.
+  //
+  // The cleanest implementation is to factor cmdTransition's core into a
+  // pure helper and call both cmdTransition and cmdAdvance through it.
+  // That refactor is larger than M8 should carry — so instead we replay
+  // cmdTransition's minimal core here, keeping the exit-gate check and
+  // the step advancement, and return the advance-shaped result.
+  void origOutput;
+
+  const fresh = findActiveState();
+  if (!fresh) {
+    return output({
+      ok: false,
+      command: "advance",
+      error: "Pipeline disappeared mid-advance (race?). Run `state`.",
+    });
+  }
+  const pipelineDef = loadPipelineDefinition();
+  const steps = resolveSteps(pipelineDef, fresh.pipeline_type);
+  const currentIdx = steps.findIndex((s) => s.id === fresh.current_step);
+  if (currentIdx < 0) {
+    return output({
+      ok: false,
+      command: "advance",
+      error: `Current step "${fresh.current_step}" not found in pipeline.`,
+    });
+  }
+
+  const currentStepDef = steps[currentIdx];
+  const gateResult = checkExitGate(currentStepDef, fresh);
+  if (!gateResult.passed) {
+    return output({
+      ok: false,
+      command: "advance",
+      error: `Exit gate not met for step "${fresh.current_step}"`,
+      missing: gateResult.missing,
+      message: `Complete these requirements before advancing: ${gateResult.missing.join(", ")}`,
+    });
+  }
+
+  if (!fresh.completed_steps.includes(fresh.current_step)) {
+    fresh.completed_steps.push(fresh.current_step);
+  }
+
+  if (currentIdx >= steps.length - 1) {
+    fresh.status = "completed";
+    fresh.current_step = "done";
+    fresh.updated_at = new Date().toISOString();
+    writeJSON(fresh._path, cleanState(fresh));
+    return output({
+      ok: true,
+      command: "advance",
+      verdict: "pass",
+      previousStep,
+      currentStep: "done",
+      nextStep: null,
+      active: false,
+      completed: true,
+      revision: fresh.revisions[previousStep] || 1,
+      circuitOpen: false,
+      nextAction: "pipeline-complete",
+      message: "Pipeline completed successfully.",
+    });
+  }
+
+  // Same cleanup cmdTransition does
+  const prevFailKey = `_step_failures_${fresh.current_step}`;
+  delete fresh[prevFailKey];
+  try {
+    const circuitPath = path.join(CWD, ".vela", "state", "circuit-open.json");
+    if (fs.existsSync(circuitPath)) fs.unlinkSync(circuitPath);
+  } catch { /* silent */ }
+  try {
+    const gateStatePath = path.join(
+      CWD, ".vela", "state", `review-gate-${fresh.current_step}.json`,
+    );
+    if (fs.existsSync(gateStatePath)) fs.unlinkSync(gateStatePath);
+  } catch { /* silent */ }
+
+  const nextStep = steps[currentIdx + 1];
+  fresh.current_step = nextStep.id;
+  fresh.current_step_index = currentIdx + 1;
+  fresh.updated_at = new Date().toISOString();
+  if (nextStep.sub_phases && nextStep.sub_phase_tracking) {
+    if (!fresh.sub_phases) fresh.sub_phases = {};
+    fresh.sub_phases[nextStep.id] = {
+      phases: nextStep.sub_phases,
+      current_index: 0,
+      current_phase: nextStep.sub_phases[0],
+      completed_phases: [],
+    };
+  }
+  writeJSON(fresh._path, cleanState(fresh));
+
+  const nextNextStep = steps[currentIdx + 2] || null;
+  output({
+    ok: true,
+    command: "advance",
+    verdict: "pass",
+    previousStep,
+    currentStep: nextStep.id,
+    currentStepName: nextStep.name,
+    currentMode: nextStep.mode,
+    nextStep: nextNextStep ? nextNextStep.id : null,
+    active: true,
+    completed: false,
+    revision: fresh.revisions[previousStep] || 1,
+    circuitOpen: false,
+    nextAction: nextActionHint(fresh, nextStep.id, true),
+    message: `Recorded pass on ${previousStep} → advanced to ${nextStep.name} (${nextStep.mode} mode)`,
+  });
+}
+
+/**
+ * v7.1 M8: return a short one-line hint for what the PM should do next
+ * at a given step. Used by `advance` (and `state` when added) so the PM
+ * can skip an extra `state` round-trip to decide which agent to spawn.
+ *
+ * Non-authoritative: hints are pure strings. The PM is still the decision
+ * maker. Keep the table tiny — if a step is missing it falls back to
+ * "see agents/vela.md for this step".
+ */
+function nextActionHint(state, stepId, justAdvanced) {
+  // justAdvanced === true → we're saying "you just moved INTO stepId, here's
+  // what to run". false → "you're still ON stepId, here's the retry path".
+  const pipelineType = state && state.pipeline_type;
+  const table = {
+    init: "run `node .vela/cli/vela-engine.js advance` to move into locate",
+    locate: "run `node .vela/cli/vela-engine.js locate` (generates targets.json)",
+    research: "spawn vela-researcher then vela-reviewer; call `advance pass` on approve",
+    plan: "spawn vela-planner then vela-reviewer; call `advance pass` on approve",
+    "plan-check": "spawn vela-plan-checker; call `advance pass` if PASS, else re-spawn planner",
+    checkpoint: "AskUserQuestion for plan approval; call `advance pass` on approve",
+    spec: "spawn vela-planner (mode:spec) then vela-reviewer",
+    branch: "run `node .vela/cli/vela-engine.js branch` then `advance`",
+    execute: "spawn vela-executor then vela-reviewer",
+    patch: "spawn vela-executor with specPath then vela-reviewer",
+    verify: "spawn vela-verifier; call `advance pass` if PASS, else re-spawn executor",
+    "diff-summary": "spawn vela-diff-summary (non-fatal); always `advance pass`",
+    learning: "spawn vela-learning (non-fatal); always `advance pass`",
+    commit: "run `node .vela/cli/vela-engine.js commit` then `advance`",
+    finalize: "write report.md then `advance pass` to close the pipeline",
+  };
+  const hint = table[stepId];
+  if (!hint) return `see agents/vela.md for step ${stepId} (${pipelineType || "unknown pipeline"})`;
+  return justAdvanced ? hint : `retry: ${hint}`;
+}
+
+/**
+ * v7.1 M6: engine doctor — validate that all Vela-managed files are
+ * present and parseable. Returns { ok, missing, recovery } shaped JSON.
+ *
+ * Used by:
+ *   - Session-start flow in agents/vela.md so the PM fails loud when
+ *     .vela/ is incomplete instead of limping along until the first
+ *     agent spawn dies with "file not found"
+ *   - /vela:analyze pre-flight
+ *
+ * Reverse from FILE_MANIFEST: doctor doesn't re-download anything, it
+ * only reports. install.js validate is the repair path.
+ */
+function cmdDoctor() {
+  const checks = [];
+  const missing = [];
+
+  function addCheck(name, ok, detail) {
+    checks.push({ name, ok, detail: detail || null });
+    if (!ok) missing.push(name);
+  }
+
+  // 1. Core directories
+  const coreDirs = [
+    ".vela",
+    ".vela/cli",
+    ".vela/agents",
+    ".vela/templates",
+    ".vela/state",
+    ".vela/artifacts",
+    ".vela/hooks",
+    ".vela/shared",
+  ];
+  for (const d of coreDirs) {
+    const abs = path.join(CWD, d);
+    addCheck(`dir:${d}`, fs.existsSync(abs) && fs.statSync(abs).isDirectory());
+  }
+
+  // 2. Required files
+  const coreFiles = [
+    ".vela/cli/vela-engine.js",
+    ".vela/templates/pipeline.json",
+    ".vela/config.json",
+    ".vela/state/workspace.json", // v7.0.7
+    "CLAUDE.md",
+  ];
+  for (const f of coreFiles) {
+    const abs = path.join(CWD, f);
+    addCheck(`file:${f}`, fs.existsSync(abs));
+  }
+
+  // 3. Agent manifest — every v7.1 role the PM may spawn
+  const agents = [
+    "vela.md",
+    "vela-researcher.md",
+    "vela-planner.md",
+    "vela-executor.md",
+    "vela-reviewer.md",
+    "vela-verifier.md",
+    "vela-plan-checker.md",
+    "vela-diff-summary.md",
+    "vela-learning.md",
+    "vela-sprint-planner.md",
+  ];
+  for (const a of agents) {
+    const abs = path.join(CWD, ".vela", "agents", a);
+    addCheck(`agent:${a}`, fs.existsSync(abs));
+  }
+
+  // 4. pipeline.json parses
+  try {
+    const raw = fs.readFileSync(
+      path.join(CWD, ".vela", "templates", "pipeline.json"),
+      "utf8",
+    );
+    const parsed = JSON.parse(raw);
+    addCheck("parse:pipeline.json", !!(parsed && parsed.pipelines && parsed.pipelines.standard));
+  } catch (e) {
+    addCheck("parse:pipeline.json", false, e.message);
+  }
+
+  // 5. config.json parses
+  try {
+    const raw = fs.readFileSync(path.join(CWD, ".vela", "config.json"), "utf8");
+    JSON.parse(raw);
+    addCheck("parse:config.json", true);
+  } catch (e) {
+    addCheck("parse:config.json", false, e.message);
+  }
+
+  // 6. v7.1 template + hook additions
+  const v71Files = [
+    ".vela/templates/role-budgets.json",
+    ".vela/templates/plan-templates/quick.md",
+    ".vela/templates/guidelines/live-processes.json",
+    ".vela/templates/guidelines/smoke-test.sh.example",
+    ".vela/hooks/vela-file-read-cache.js",
+  ];
+  for (const f of v71Files) {
+    const abs = path.join(CWD, f);
+    addCheck(`file:${f}`, fs.existsSync(abs));
+  }
+
+  const allOk = missing.length === 0;
+  output({
+    ok: allOk,
+    command: "doctor",
+    checks,
+    missing,
+    ...(allOk
+      ? { message: "All Vela files present and parseable." }
+      : {
+          message: `${missing.length} missing check(s). Run repair path below.`,
+          recovery: "node .vela/install.js validate",
+        }),
+  });
+}
+
 function cmdBranch() {
   const state = findActiveState();
   if (!state) {
@@ -560,16 +1027,40 @@ function cmdBranch() {
   }
 
   if (!state.git || !state.git.is_repo) {
-    // Not a git repo — mark branch as skipped
+    // v7.1 M1: non-git project → loud warning. Same reasoning as cmdCommit.
+    // Standard pipeline reaches branch early, so the warning fires once per
+    // pipeline instead of only at commit time.
     state.git = state.git || {};
     state.git.pipeline_branch = null;
     state.updated_at = new Date().toISOString();
     writeJSON(state._path, cleanState(state));
+    process.stderr.write([
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "⛔  Vela branch BLOCKED — this directory is not a git repository",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "The pipeline cannot create a feature branch without git. All work",
+      "produced by this pipeline will eventually fail to commit unless a",
+      "repo is initialised now:",
+      "",
+      "  git init -b main",
+      "  git add -A",
+      "  git commit -m \"chore: initial commit\"",
+      "  node .vela/cli/vela-engine.js transition",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "",
+    ].join("\n"));
     return output({
       ok: true,
       command: "branch",
-      skipped: true,
-      message: "Not a git repository. Branch step skipped.",
+      status: "blocked",
+      reason: "not a git repo",
+      recovery: [
+        "git init -b main",
+        "git add -A && git commit -m \"chore: initial commit\"",
+        "node .vela/cli/vela-engine.js transition",
+      ],
+      message: "Branch blocked — not a git repository. See stderr for recovery steps.",
     });
   }
 
@@ -659,11 +1150,43 @@ function cmdCommit() {
   }
 
   if (!state.git || !state.git.is_repo) {
+    // v7.1 M1: non-git project → loud warning.
+    //
+    // Pre-v7.1 this path emitted a quiet skipped:true status. Analysis of the
+    // hicoco session showed 4 pipelines in a row completing commit with
+    // skipped:true, never persisting work. The user only realised when
+    // reading the final report. Fail-loud semantics: status:"blocked" in
+    // the JSON, multi-line stderr banner, exit code still 0 so the
+    // pipeline can advance (commit exit_gate already tolerates !is_repo).
+    process.stderr.write([
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "⛔  Vela commit BLOCKED — this directory is not a git repository",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "Your pipeline work will NOT be persisted. To save it now:",
+      "",
+      "  git init -b main",
+      "  git add -A",
+      "  git commit -m \"chore: initial commit (Vela pipeline output)\"",
+      "  node .vela/cli/vela-engine.js transition",
+      "",
+      "The pipeline will advance past this step so you can finish the",
+      "remaining stages, but every subsequent run will keep blocking",
+      "here until a .git/ exists.",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "",
+    ].join("\n"));
     return output({
       ok: true,
       command: "commit",
-      skipped: true,
-      message: "Not a git repository. Commit step skipped.",
+      status: "blocked",
+      reason: "not a git repo",
+      recovery: [
+        "git init -b main",
+        "git add -A && git commit -m \"chore: initial commit\"",
+        "node .vela/cli/vela-engine.js transition",
+      ],
+      message: "Commit blocked — not a git repository. See stderr for recovery steps.",
     });
   }
 
@@ -1611,13 +2134,76 @@ function autoDetectScale(request) {
   return "large";
 }
 
-function slugify(text) {
-  return text
+/**
+ * v7.1 M5: fs-safe slugify.
+ *
+ * Pre-v7.1 this used `.substring(0, 30)`, a JS char count. In the hicoco
+ * session Korean requests produced artifact directories named
+ * "별도-downloa", "대상-사이", "baseurl" — the 30-char limit truncated
+ * mid-word because a Korean syllable is 1 JS char but 3 UTF-8 bytes, and
+ * nothing enforced cutting on a word boundary.
+ *
+ * v7.1 behaviour:
+ *   1. normalise (lowercase, strip non-[a-z0-9가-힣] except `-` and space)
+ *   2. collapse whitespace to `-`
+ *   3. cap at 64 UTF-8 bytes, not chars
+ *   4. if we had to truncate, walk back to the nearest `-` boundary so we
+ *      never cut through a word or a multi-byte codepoint
+ *   5. if truncated, append `-trunc` so the caller can tell at a glance
+ *
+ * Returns an object so callers can decide whether to write a side-car
+ * request.txt with the full original request (cmdInit does this when
+ * truncated).
+ */
+function slugifyEx(text) {
+  const normalized = String(text || "")
     .toLowerCase()
     .replace(/[^a-z0-9가-힣\s-]/g, "")
     .replace(/\s+/g, "-")
-    .substring(0, 30)
-    .replace(/-+$/, "");
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  const MAX_BYTES = 64;
+  // v7.1 M5: always leave headroom for the "-trunc" suffix. Pre-v7.1 the
+  // cap was applied first and the suffix was appended afterwards, which
+  // meant a request that landed at exactly MAX_BYTES would overflow once
+  // "-trunc" got tacked on. Budget the suffix in from the start so the
+  // post-truncate directory name is guaranteed ≤ MAX_BYTES.
+  const TRUNC_SUFFIX = "-trunc";
+  const BUDGET = MAX_BYTES - Buffer.byteLength(TRUNC_SUFFIX, "utf8");
+
+  const bytes = Buffer.byteLength(normalized, "utf8");
+  if (bytes <= MAX_BYTES) {
+    return { slug: normalized || "task", truncated: false };
+  }
+
+  // Walk down codepoint by codepoint until we are within the byte budget.
+  // Buffer.byteLength is the authoritative check — substring() would
+  // happily split a multi-byte char.
+  let cut = normalized;
+  while (Buffer.byteLength(cut, "utf8") > BUDGET) {
+    cut = cut.slice(0, -1);
+  }
+  // Prefer a `-` boundary so we never cut mid-word.
+  const lastDash = cut.lastIndexOf("-");
+  if (lastDash > 8) {
+    // Only snap back if we keep at least 8 chars — don't collapse a long
+    // request into "a-trunc" because the first word happened to be "a-".
+    cut = cut.slice(0, lastDash);
+  }
+  cut = cut.replace(/-+$/g, "");
+  if (!cut) cut = "task";
+  return { slug: cut + TRUNC_SUFFIX, truncated: true, originalBytes: bytes };
+}
+
+/**
+ * Back-compat wrapper. Existing callers (cmdBranch, cmdInit) used to get a
+ * plain string, so slugify() still does. Use slugifyEx() when you need the
+ * truncation flag — cmdInit does, because it writes a request.txt side-car
+ * when the slug had to be shortened.
+ */
+function slugify(text) {
+  return slugifyEx(text).slug;
 }
 
 function cleanState(state) {

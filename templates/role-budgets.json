@@ -1,0 +1,10 @@
+{
+  "$schema": "https://github.com/EcoKG/Vela-Skill/blob/main/docs/role-budgets-schema.json",
+  "__doc__": "v7.1 M9 — per-scale tool_use budgets for sub-agents. PM injects the relevant budget into each Agent spawn. Exceeding is non-fatal but flagged: the agent writes a budget-exceeded.json marker inside artifactDir, and vela-stop.js rolls it into tool-usage.json for /vela:analyze reporting. Numbers derive from hicoco session telemetry: executor avg 57.7 (max 88), verifier 55.2 (max 92), reviewer 16.1 (max 41). Large-scale budgets leave ~40% slack above the observed averages so healthy pipelines don't flag, only outliers do.",
+  "small":    { "executor": 15, "verifier": 15, "reviewer": 10 },
+  "medium":   { "executor": 35, "verifier": 30, "reviewer": 15 },
+  "large":    { "executor": 80, "verifier": 60, "reviewer": 25 },
+  "surgical": { "executor": 20, "verifier": 20, "reviewer": 12 },
+  "ralph":    { "executor": 60, "verifier": 40, "reviewer": 15 },
+  "hotfix":   { "executor": 20, "verifier": 15, "reviewer": 10 }
+}

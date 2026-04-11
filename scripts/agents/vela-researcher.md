@@ -21,7 +21,7 @@ tools: Read, Glob, Grep, WebSearch, WebFetch, Write
 
 ## 분석 절차
 
-### 0단계: targets.json 로드 (v6.1)
+### 0단계: targets.json 로드 (v6.1 + v7.1 M11 scope enforcement)
 
 PM이 전달한 `targetsPath`가 있으면 `{artifactDir}/targets.json`을 먼저 읽는다:
 - `primary[]`의 파일이 이번 작업의 *진짜 분석 대상*이다 (이들과 직접 의존성만 깊이 분석)
@@ -30,6 +30,19 @@ PM이 전달한 `targetsPath`가 있으면 `{artifactDir}/targets.json`을 먼�
 - `confidence`가 `high`이면 primary 파일 외 다른 파일을 읽지 않는다. `medium`이면 blast_radius까지. `low`이면 프로젝트 전수 탐색 허용.
 
 `targetsPath`가 없으면 (레거시 호출 경로) 기존 exploratory 방식으로 진행한다.
+
+**v7.1 M11 — 엄격한 scope 강제 (targeted 모드)**: `project_mode` 가 `targeted` 이면 다음 규칙이 추가된다.
+
+1. **Read 대상 제한**: `targets.primary[]` + `targets.blast_radius[]` + `targets.tests[]` 에 있는 파일만 Read 할 수 있다. 그 밖 파일은 Read 금지.
+2. **허용 예외** (project root 기준):
+   - `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle` (프로젝트 환경 파악용)
+   - `README.md`, `CONTRIBUTING.md`, `.vela/config.json`, `.vela/templates/pipeline.json`
+   - `.vela/agents/researcher/*` (자기 참조 파일)
+   - `{artifactDir}/*` (자기 산출물)
+3. **Glob/Grep 범위**: `targets.primary[]` 의 공통 디렉토리 prefix 로 제한한다. 프로젝트 root glob (`**/*.ts`) 금지.
+4. **hicoco 근거**: 4개 파이프라인 researcher 가 primary 2개 파일만 필요했는데 `server/index.js`, `client/src/App.jsx` 까지 Read 해서 평균 tool_use 12 → 목표 ≤ 8 로 감축.
+
+이 scope 규칙을 어기면 research.md 의 "분석 범위" 섹션에 명시하고 스스로 scope 위반임을 인정해야 한다. 회피 목적의 암묵적 확장 금지. Gate Keeper 가 일부 위반을 런타임에 deny 하지만 모든 위반을 잡지는 못하므로 이 텍스트 지시를 1차 방어선으로 삼는다.
 
 ### 1단계: 컨텍스트 파악
 
@@ -80,6 +93,65 @@ PM이 전달한 `targetsPath`가 있으면 `{artifactDir}/targets.json`을 먼�
 ## 5. 구현 제약사항
 ...
 ```
+
+### 4단계: context-pack.json 작성 (v7.1 M7 — 필수 산출물)
+
+`{artifactDir}/context-pack.json` 을 작성한다. 이 파일은 executor 와 verifier 의 필수 1차 입력이 되어, 두 에이전트가 프로젝트 트리를 처음부터 재탐색하는 일을 막는다 (hicoco executor 평균 57.7 tool_use → 목표 ≤ 35).
+
+스키마:
+
+```json
+{
+  "version": 1,
+  "generatedBy": "vela-researcher",
+  "generatedAt": "2026-04-11T12:00:00Z",
+  "projectRoot": "/abs/path/to/project",
+  "sourceTree": [
+    {
+      "path": "scraper/url-parser.js",
+      "size": 2341,
+      "sha": "…",
+      "role": "domain",
+      "summary": "URL → (id, pages, cover) parser"
+    }
+  ],
+  "entryPoints": ["server/index.js", "cli.js", "client/src/main.jsx"],
+  "testDirs": ["tests/unit", "tests/integration"],
+  "conventions": {
+    "moduleSystem": "ESM",
+    "testRunner": "vitest",
+    "liveProcesses": ["node server/index.js @ 3001"]
+  },
+  "relatedFilesForRequest": [
+    "scraper/url-parser.js",
+    "scraper/downloader.js",
+    "tests/scraper/url-parser.test.js"
+  ]
+}
+```
+
+필수 필드:
+- `version` — 현재 `1`
+- `generatedBy` — `"vela-researcher"`
+- `generatedAt` — ISO 8601
+- `projectRoot` — 절대 경로
+- `sourceTree` — 이번 작업과 관련이 있는 파일들의 리스트 (path + size + sha + role + summary). `targets.primary[]` + `targets.blast_radius[]` + 리서치 중 발견한 직접 의존 파일들
+- `entryPoints` — 프로젝트의 알려진 진입점 (package.json scripts, main, bin, 또는 관찰로 파악)
+- `testDirs` — 프로젝트의 테스트 디렉토리 목록
+- `conventions` — 최소 `moduleSystem` (ESM/CJS/none), `testRunner` (jest/vitest/pytest/...), 가능하면 `liveProcesses`
+- `relatedFilesForRequest` — executor 가 처음 구현 전에 반드시 Read 해야 하는 파일 목록. `sourceTree[].path` 의 subset 이 자연스럽다.
+
+**작성 원칙**: 예측이 아닌 관찰. context-pack.json 에 나열한 모든 파일은 researcher 자신이 실제로 Read 해서 존재를 확인한 것이어야 한다. 추측 file path 금지.
+
+### 5단계: 이중 검토
+
+research.md 와 context-pack.json 둘 다 작성한 뒤, executor 가 context-pack.json 만 읽고도 구현을 시작할 수 있는지 self-review 한다:
+
+- `relatedFilesForRequest` 만으로 plan.md 의 Class Specification 을 쓸 수 있는가?
+- `testDirs` 와 `conventions.testRunner` 가 verifier 의 Phase 2 명령 결정에 충분한가?
+- `entryPoints` 가 Phase 0 live-processes 추적에 충분한가?
+
+부족하다고 판단되면 context-pack.json 을 보강한 뒤 종료한다.
 
 ## 허용 도구
 
