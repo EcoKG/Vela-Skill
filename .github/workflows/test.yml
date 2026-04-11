@@ -298,6 +298,34 @@ jobs:
           bash scripts/tests/test-engine-walk-up.sh 2>&1 | tee /tmp/engine-walk-up.log
           exit ${PIPESTATUS[0]}
 
+      - name: Commit/branch non-git guard (v7.1 M1)
+        id: s_cng
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-commit-not-a-repo.sh 2>&1 | tee /tmp/commit-not-a-repo.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Slug fs-safe truncation (v7.1 M5)
+        id: s_slug
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-slug-truncate.sh 2>&1 | tee /tmp/slug-truncate.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Engine advance command (v7.1 M8)
+        id: s_adv
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-engine-advance.sh 2>&1 | tee /tmp/engine-advance.log
+          exit ${PIPESTATUS[0]}
+
+      - name: CLAUDE.md cd-rule injection on upgrade (v7.1 M12)
+        id: s_cmd
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-claudemd-cd-rule-injection.sh 2>&1 | tee /tmp/claudemd-cd-rule.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -334,6 +362,10 @@ jobs:
           R_PMC: ${{ steps.s_pmc.outcome }}
           R_UPD: ${{ steps.s_upd.outcome }}
           R_EWU: ${{ steps.s_ewu.outcome }}
+          R_CNG: ${{ steps.s_cng.outcome }}
+          R_SLUG: ${{ steps.s_slug.outcome }}
+          R_ADV: ${{ steps.s_adv.outcome }}
+          R_CMD: ${{ steps.s_cmd.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -367,6 +399,10 @@ jobs:
           Static: PM coverage (v7.0.1)	${R_PMC}	/tmp/pm-coverage.log
           Runtime: update.sh integration (v7.0.3)	${R_UPD}	/tmp/update-runtime.log
           Unit: engine walk-up project root (v7.0.6)	${R_EWU}	/tmp/engine-walk-up.log
+          Unit: commit/branch non-git guard (v7.1 M1)	${R_CNG}	/tmp/commit-not-a-repo.log
+          Unit: slug fs-safe truncation (v7.1 M5)	${R_SLUG}	/tmp/slug-truncate.log
+          Unit: engine advance command (v7.1 M8)	${R_ADV}	/tmp/engine-advance.log
+          Unit: CLAUDE.md cd-rule injection (v7.1 M12)	${R_CMD}	/tmp/claudemd-cd-rule.log
           EOF
 
           PASS=0

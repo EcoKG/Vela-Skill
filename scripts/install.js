@@ -1092,6 +1092,62 @@ function upgrade() {
   // users get the pin on their next `node .vela/install.js upgrade`.
   writeWorkspaceRecord(PROJECT_ROOT);
 
+  // ─── v7.1 M12: CLAUDE.md — inject the `cd` rule on upgrade ───
+  //
+  // The "Bash tool — never use bare `cd`" section was added to the
+  // template in v7.0.7 via install() only. Projects that were first
+  // initialised before v7.0.7 have a CLAUDE.md that was never touched
+  // by upgrade() (upgrade skips CLAUDE.md precisely because user may
+  // have customised it), so they never get the rule and continue
+  // hitting the subshell-cd footgun on every session.
+  //
+  // v7.1 closes that loophole: upgrade() reads the existing CLAUDE.md,
+  // checks for the marker text, and appends the section if absent.
+  // Idempotent — re-running upgrade after the first injection is a
+  // no-op because the marker is already present.
+  try {
+    const claudeMdPath = path.join(PROJECT_ROOT, "CLAUDE.md");
+    if (fs.existsSync(claudeMdPath)) {
+      const existing = fs.readFileSync(claudeMdPath, "utf8");
+      const MARKER = "Bash tool — never use bare `cd`";
+      if (!existing.includes(MARKER)) {
+        const appendage = `
+## ${MARKER} inside a single invocation
+
+Claude Code's Bash tool has a persistent working directory that survives
+between tool calls. A bare \`cd subdir\` inside one Bash invocation will
+cause every subsequent Bash call (including the PM's
+\`node .vela/cli/vela-engine.js ...\` invocations) to run from that
+subdirectory, and Node's module loader will fail with \`Cannot find
+module\` before the engine ever runs.
+
+- **Wrong**: \`cd server/data && node build.js\` (leaks the cwd change)
+- **Right**: \`( cd server/data && node build.js )\` (subshell isolates it)
+- **Also right**: pass absolute paths — \`node /abs/path/to/build.js\`
+
+Vela v7.0.7+ records the true project root in
+\`.vela/state/workspace.json\` at install time and the engine will
+\`chdir\` back on every invocation if cwd has drifted, printing a
+warning to stderr. Treat that warning as a bug in the calling code
+(usually a stray \`cd\` inside a Bash tool) and fix it rather than
+relying on the auto-recovery.
+`;
+        fs.appendFileSync(claudeMdPath, appendage);
+        results.claudeMdInjected = true;
+      } else {
+        results.claudeMdInjected = false;
+      }
+    } else {
+      // No CLAUDE.md at all — install() handles first-time creation,
+      // so upgrade() should not create one from scratch. Users who
+      // deleted their CLAUDE.md intentionally stay deleted.
+      results.claudeMdInjected = false;
+    }
+  } catch (e) {
+    results.errors.push(`CLAUDE.md injection: ${e.message}`);
+    results.claudeMdInjected = false;
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -1102,6 +1158,7 @@ function upgrade() {
         skipped: results.skipped.length,
         orphansRemoved: results.orphansRemoved.length,
         configMigration: results.configMigration,
+        claudeMdInjected: !!results.claudeMdInjected,
         errors: results.errors,
         details: results,
       },
