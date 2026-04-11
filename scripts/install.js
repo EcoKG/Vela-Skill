@@ -1629,9 +1629,48 @@ function registerGlobalHooks(hooksSourceDir) {
         fs.copyFileSync(src, path.join(GLOBAL_VELA_HOOKS_DIR, file));
       }
     }
-    const sharedSrc = path.join(hooksSourceDir, "shared", "constants.js");
-    if (fs.existsSync(sharedSrc)) {
-      fs.copyFileSync(sharedSrc, path.join(GLOBAL_VELA_HOOKS_DIR, "shared", "constants.js"));
+
+    // v7.1.4 — shared/constants.js: deploy the REAL source, not the wrapper.
+    //
+    // scripts/hooks/shared/constants.js is a 3-line re-export wrapper:
+    //     module.exports = require("../../shared/constants");
+    //
+    // That `../../shared/constants` resolves to scripts/shared/constants.js
+    // which works fine INSIDE the skill repository, but breaks the moment
+    // the wrapper file is copied to ~/.vela/hooks/shared/constants.js:
+    // now the parent lookup points at ~/.vela/shared/constants.js — which
+    // does not exist, because the global hook dir only ships hooks/, not
+    // the whole scripts/shared/ tree. Any hook that require()s
+    // ./shared/constants (gate-keeper, gate-guard, stop, review-gate)
+    // then throws:
+    //
+    //     Error: Cannot find module '../../shared/constants'
+    //     at /home/USER/.vela/hooks/shared/constants.js:7:18
+    //
+    // Pre-v7.1.4 this didn't surface in day-to-day use because
+    // ~/.claude/settings.json happened to reference the repo path
+    // (~/.claude/skills/vela/scripts/hooks/vela-*.js), where the wrapper
+    // resolves correctly. But v7.1.3's addGlobalHook guard made the
+    // ~/.vela/hooks/ path a legitimate fallback, and anyone whose
+    // settings.json lost the repo-path entry would flip to the broken
+    // wrapper chain and start seeing loader:1386 on every tool call.
+    //
+    // v7.1.4 deploys the *actual* scripts/shared/constants.js content
+    // (resolved from skillBase = the repo root, via __dirname), so the
+    // hook-dir file is self-contained and no parent lookup is needed.
+    // The wrapper in scripts/hooks/shared/constants.js still ships inside
+    // the repo for any code that expects to require it from there.
+    const skillBase = path.resolve(__dirname, "..");
+    const realConstantsSrc = path.join(skillBase, "scripts", "shared", "constants.js");
+    const wrapperSrc = path.join(hooksSourceDir, "shared", "constants.js");
+    const sharedSrcToUse = fs.existsSync(realConstantsSrc)
+      ? realConstantsSrc
+      : wrapperSrc;
+    if (fs.existsSync(sharedSrcToUse)) {
+      fs.copyFileSync(
+        sharedSrcToUse,
+        path.join(GLOBAL_VELA_HOOKS_DIR, "shared", "constants.js"),
+      );
     }
   } catch { /* silent — hooks may already be deployed */ }
 
