@@ -42,10 +42,12 @@ EOF
 cleanup() { rm -rf "$TMPDIR_ROOT" 2>/dev/null || true; }
 trap cleanup EXIT
 
-# Trigger VK-08 (chain operator)
-EXIT_CODE=0
+# Trigger VK-08 (chain operator). We don't care about the exit code here
+# — the gate-keeper is expected to exit 2 — we care about the telemetry
+# side effect (gate-events.jsonl must be written), which the assertions
+# below verify.
 echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls && pwd\"},\"cwd\":\"$PROJECT\"}" \
-  | node "$GATE_KEEPER" >/dev/null 2>&1 || EXIT_CODE=$?
+  | node "$GATE_KEEPER" >/dev/null 2>&1 || true
 
 EVENTS="$PROJECT/.vela/state/gate-events.jsonl"
 
