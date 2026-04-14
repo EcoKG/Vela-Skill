@@ -28,7 +28,99 @@
 
 const fs = require("fs");
 const path = require("path");
-const { SAFE_BASH_READ } = require("./shared/constants");
+const {
+  SAFE_BASH_READ,
+  formatBlockStderr,
+  writeGateEvent,
+} = require("./shared/constants");
+
+/**
+ * Block the tool call with educational stderr + telemetry + exit 2.
+ * This replaces bare `process.exit(2)` so Claude Code sees the VK/VG
+ * code and recovery hint when deciding what to do next.
+ *
+ * For HARD_BLOCK_CODES (VG-13/14/CORRUPT_INPUT), formatBlockStderr
+ * returns "" — the hook exits silently to avoid leaking info.
+ */
+function blockWithReason(cwd, { code, tool, step, mode, extra, summary }) {
+  const msg = formatBlockStderr(code, extra);
+  if (msg) {
+    try {
+      process.stderr.write(msg + "\n");
+    } catch {
+      /* stderr closed — irrelevant, still exit 2 */
+    }
+  }
+  writeGateEvent(cwd, {
+    code,
+    tool,
+    step,
+    mode,
+    decision: "deny",
+    summary: summary || extra || "",
+  });
+  process.exit(2);
+}
+
+/**
+ * Policy-driven soft block. Used when a rule is configurable via
+ * `.vela/config.json#gate_policy`. Behavior matrix:
+ *
+ *   policy === "block" (default) → same as blockWithReason — exit 2
+ *   policy === "ask"              → stdout {decision:"ask", reason} + exit 0
+ *   policy === "allow"            → log a warn event, exit 0 (allow)
+ *
+ * `ask` surfaces a confirmation UI to the user rather than silently
+ * killing the tool call. This is the "harness-engineered" middle
+ * path: enforce by default, let operators dial it back per project.
+ */
+function policyBlock(cwd, policy, { code, tool, step, mode, extra }) {
+  if (policy === "allow") {
+    writeGateEvent(cwd, { code, tool, step, mode, decision: "warn", summary: extra || "" });
+    process.exit(0);
+  }
+  if (policy === "ask") {
+    const entry = formatBlockStderr(code, extra) || `[${code}] blocked`;
+    try {
+      process.stdout.write(
+        JSON.stringify({
+          decision: "ask",
+          reason: entry,
+        }),
+      );
+    } catch {
+      /* best-effort */
+    }
+    writeGateEvent(cwd, { code, tool, step, mode, decision: "ask", summary: extra || "" });
+    process.exit(0);
+  }
+  // Default: block
+  blockWithReason(cwd, { code, tool, step, mode, extra });
+}
+
+/**
+ * Read .vela/config.json#gate_policy with defaults preserving
+ * current behavior (everything = "block").
+ */
+function readGatePolicy(cwd) {
+  const defaults = {
+    chain_operator: "block",
+    web_in_write: "block",
+    researcher_scope: "block",
+    event_log: true,
+  };
+  try {
+    const p = path.join(cwd, ".vela", "config.json");
+    if (!fs.existsSync(p)) return defaults;
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const gp = parsed && parsed.gate_policy;
+    if (!gp || typeof gp !== "object") return defaults;
+    return { ...defaults, ...gp };
+  } catch {
+    return defaults;
+  }
+}
 
 // VK-08: Chain operator regex — matches &&, ||, ;, | (pipe)
 const CHAIN_OPERATOR_RE = /&&|\|\||;|\|/;
@@ -231,12 +323,12 @@ function getCurrentMode(pipelineState, pipelineDef) {
 async function main() {
   const raw = await readStdin();
 
-  // Fail-closed: empty stdin → block
+  // Fail-closed: empty stdin → silent hard block (no cwd → no telemetry)
   if (!raw || !raw.trim()) {
     process.exit(2);
   }
 
-  // Fail-closed: corrupt JSON → block
+  // Fail-closed: corrupt JSON → silent hard block
   const input = parseJsonSafe(raw);
   if (!input) {
     process.exit(2);
@@ -257,6 +349,8 @@ async function main() {
   // Find pipeline definition and current mode
   const pipelineDef = readPipelineDefinition(cwd);
   const mode = getCurrentMode(pipelineState, pipelineDef);
+  const step = pipelineState && pipelineState.current_step;
+  const gatePolicy = readGatePolicy(cwd);
 
   // ─── VK-01/VK-02/VK-08: Bash enforcement ───
   if (toolName === "Bash") {
@@ -273,9 +367,16 @@ async function main() {
       process.exit(0);
     }
 
-    // VK-08: Block chain operators even in safe commands
+    // VK-08: Block chain operators even in safe commands.
+    // Policy-driven: chain_operator = block (default) | ask | allow.
     if (CHAIN_OPERATOR_RE.test(cmd)) {
-      process.exit(2);
+      policyBlock(cwd, gatePolicy.chain_operator, {
+        code: "VK-08",
+        tool: "Bash",
+        step,
+        mode,
+        extra: cmd.slice(0, 80),
+      });
     }
 
     if (mode === "read") {
@@ -283,7 +384,13 @@ async function main() {
       if (SAFE_BASH_READ.test(cmd)) {
         process.exit(0);
       }
-      process.exit(2);
+      blockWithReason(cwd, {
+        code: "VK-01",
+        tool: "Bash",
+        step,
+        mode,
+        extra: cmd.slice(0, 80),
+      });
     }
 
     if (mode === "write") {
@@ -292,7 +399,13 @@ async function main() {
         process.exit(0);
       }
       // All other Bash blocked in write mode (VK-02)
-      process.exit(2);
+      blockWithReason(cwd, {
+        code: "VK-02",
+        tool: "Bash",
+        step,
+        mode,
+        extra: cmd.slice(0, 80),
+      });
     }
 
     // readwrite: allow all bash (chain already checked above)
@@ -316,15 +429,28 @@ async function main() {
       }
 
       // All other writes blocked in read mode
-      process.exit(2);
+      blockWithReason(cwd, {
+        code: "VK-04",
+        tool: toolName,
+        step,
+        mode,
+        extra: normalized,
+      });
     }
   }
 
   // ─── VK-10: write mode — WebFetch/WebSearch blocked ───────────
   // In write mode, only Write/Edit file operations are appropriate.
   // Network operations are inconsistent with isolated write-only mode.
+  // Policy-driven: web_in_write = block (default) | ask.
   if (mode === "write" && (toolName === "WebFetch" || toolName === "WebSearch")) {
-    process.exit(2);
+    policyBlock(cwd, gatePolicy.web_in_write, {
+      code: "VK-10",
+      tool: toolName,
+      step,
+      mode,
+      extra: toolName,
+    });
   }
 
   // ─── v7.1 M11: researcher targeted-scope Read enforcement ───
@@ -356,7 +482,15 @@ async function main() {
     if (filePath) {
       const denied = isResearcherReadOutOfScope(cwd, pipelineState, filePath);
       if (denied) {
-        process.exit(2);
+        // Policy-driven: researcher_scope = block (default) | ask | warn.
+        // "warn" logs a telemetry event but lets the Read through.
+        policyBlock(cwd, gatePolicy.researcher_scope, {
+          code: "M11",
+          tool: "Read",
+          step,
+          mode,
+          extra: filePath,
+        });
       }
     }
   }

@@ -19,9 +19,37 @@
 
 > **NOTE (V6)**: VK-09 제거됨. V6에서 PM은 `Agent(subagent_type=...)` 도구로 역할 에이전트를 직접 소환한다. Agent 도구 차단은 파이프라인 실행을 막으므로 VK-09는 불필요.
 
-### Fail-Closed 모델
+### Fail-Closed 모델 (3계층)
 
-Gate Keeper 콜백의 모든 오류 경로(잘못된 입력, 미처리 예외)는 `exit 2`(차단)를 반환한다. 정상 허용만 `exit 0`(통과)를 반환한다.
+Gate Keeper/Guard는 차단 시 다음 3가지 계층 중 하나를 사용한다. Fail-closed는 공통 — 오류/위반은 모두 차단된다.
+
+| 계층 | 출력 | 예시 | 사용 시점 |
+|------|------|------|----------|
+| **Structured deny** | stderr `[VK-XX] 사유 — 복구: …` + `exit 2` | VK-01/02/04/08/10, M11, VG-03/15 | 일반 정책 위반 — Claude가 코드와 복구 힌트를 읽고 다음 행동을 결정 |
+| **Silent hard-block** | stderr 없음 + `exit 2` | VG-13, VG-14, 빈/corrupt stdin | 정보 누설이 위험한 위반 (config 변조, 시크릿 탐지). 이유를 공개하지 않음 |
+| **Ask (opt-in)** | stdout `{decision:"ask", reason:...}` + `exit 0` | `gate_policy`에서 `ask`로 설정된 규칙 | 사용자 확인 UI 노출 — 완전 차단 대신 인터랙티브 검증 |
+
+모든 차단 이벤트는 `.vela/state/gate-events.jsonl`에 한 줄 JSON으로 기록된다 (`code/tool/step/mode/decision/summary/ts`). `node .vela/cli/vela-analyze.js friction` 으로 집계 가능.
+
+### gate_policy (정책 설정)
+
+`.vela/config.json`의 `gate_policy` 섹션으로 일부 규칙의 강도를 조절할 수 있다:
+
+```json
+"gate_policy": {
+  "chain_operator":   "block",  // block(기본) | ask | allow — VK-08
+  "web_in_write":     "block",  // block(기본) | ask         — VK-10
+  "researcher_scope": "block",  // block(기본) | ask | warn  — M11
+  "event_log":        true      // (예약)
+}
+```
+
+- `block` — 기존 동작 (structured deny + exit 2)
+- `ask`   — stdout JSON `{decision:"ask"}` 로 사용자 확인 UI 노출 + exit 0
+- `allow` — 차단하지 않고 텔레메트리(`decision:"warn"`)만 기록 (VK-08만 지원)
+- `warn`  — M11 전용: scope 밖이어도 Read 허용하되 텔레메트리에 기록
+
+기본값은 현재(v7.1) 동작과 동일. 프로젝트별로 friction이 과도하면 `ask`로 조절하여 **완전차단 없는 강제**를 달성할 수 있다.
 
 ### 모드별 허용 도구
 

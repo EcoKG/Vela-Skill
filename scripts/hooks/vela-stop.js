@@ -23,6 +23,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { writeGateEvent } = require("./shared/constants");
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -232,6 +233,14 @@ async function main() {
       decision: "block",
       reason: `Auto-mode pipeline is active (step: ${pipelineState.current_step || "unknown"}). Continue until pipeline completes.`,
     };
+    writeGateEvent(cwd, {
+      code: "STOP_AUTO",
+      tool: "Stop",
+      step: pipelineState.current_step || null,
+      mode: null,
+      decision: "deny",
+      summary: "auto-mode active",
+    });
     process.stdout.write(JSON.stringify(output));
     process.exit(0);
   }
@@ -242,6 +251,14 @@ async function main() {
       decision: "block",
       reason: `⚠️ 활성 파이프라인에 미커밋 변경사항이 있습니다 (${changes.summary}). 커밋하거나 stash한 후 종료하세요. 강제 종료하려면 다시 stop을 실행하세요.`,
     };
+    writeGateEvent(cwd, {
+      code: "STOP_DIRTY",
+      tool: "Stop",
+      step: pipelineState.current_step || null,
+      mode: null,
+      decision: "warn",
+      summary: changes.summary,
+    });
     process.stdout.write(JSON.stringify(output));
     // Reset dirty flag so second stop attempt passes through
     // (we can't track "second stop" in a stateless hook, so we allow once warned)

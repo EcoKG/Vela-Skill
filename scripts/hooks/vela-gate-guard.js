@@ -28,7 +28,39 @@
 
 const fs = require("fs");
 const path = require("path");
-const { SECRET_PATTERNS } = require("./shared/constants");
+const {
+  SECRET_PATTERNS,
+  formatBlockStderr,
+  writeGateEvent,
+} = require("./shared/constants");
+
+/**
+ * Block the tool call with educational stderr + telemetry + exit 2.
+ *
+ * VG-13/14 are registered as HARD_BLOCK_CODES in constants.js, so
+ * formatBlockStderr returns empty string for them — they still exit 2
+ * but without a stderr reason. This is deliberate: config-tamper and
+ * secret-leak blocks should not advertise *why* they tripped.
+ */
+function blockWithReason(cwd, { code, tool, step, extra }) {
+  const msg = formatBlockStderr(code, extra);
+  if (msg) {
+    try {
+      process.stderr.write(msg + "\n");
+    } catch {
+      /* stderr closed — still exit 2 */
+    }
+  }
+  writeGateEvent(cwd, {
+    code,
+    tool,
+    step: step || null,
+    mode: null,
+    decision: "deny",
+    summary: extra || "",
+  });
+  process.exit(2);
+}
 
 // ─── VG-15: Circuit breaker threshold ─────────────────────────
 const CIRCUIT_BREAKER_THRESHOLD = 5;
@@ -183,36 +215,56 @@ async function main() {
     process.exit(0); // No active Vela pipeline — allow all tools
   }
 
+  const activeStep =
+    pipelineResult && pipelineResult.state && pipelineResult.state.current_step;
+
   // ─── VG-03: Corrupt signals file blocks git commit ───
   if (toolName === "Bash") {
     const cmd = (typeof toolInput.command === "string" && toolInput.command) || "";
     if (/\bgit\s+commit\b/.test(cmd)) {
       const signalsStatus = checkSignalsFile(cwd);
       if (signalsStatus === "corrupt") {
-        // VG-03: corrupt signals file — block git commit with recovery guidance
-        process.exit(2);
+        // VG-03: corrupt signals file — educational stderr + telemetry + exit 2
+        blockWithReason(cwd, {
+          code: "VG-03",
+          tool: "Bash",
+          step: activeStep,
+          extra: "git commit",
+        });
       }
     }
   }
 
   // ─── VG-13: Protected config file write ───────────────────────
   // Blocks direct writes to .vela/templates/pipeline.json (config tampering).
+  // HARD — silent stderr (no reason leaked) but telemetry still recorded.
   if (toolName === "Write" || toolName === "Edit" || toolName === "NotebookEdit") {
     const filePath =
       (typeof toolInput.file_path === "string" && toolInput.file_path) ||
       (typeof toolInput.path === "string" && toolInput.path) ||
       "";
     if (filePath && isProtectedConfig(filePath, cwd)) {
-      process.exit(2);
+      blockWithReason(cwd, {
+        code: "VG-13",
+        tool: toolName,
+        step: activeStep,
+        extra: filePath,
+      });
     }
   }
 
   // ─── VG-14: Secret pattern detection in Write tool content ────
   // Blocks Write calls whose content contains API keys, tokens, etc.
+  // HARD — silent stderr, telemetry only.
   if (toolName === "Write") {
     const content = typeof toolInput.content === "string" ? toolInput.content : "";
     if (contentHasSecret(content)) {
-      process.exit(2);
+      blockWithReason(cwd, {
+        code: "VG-14",
+        tool: "Write",
+        step: activeStep,
+        extra: "", // never leak content excerpt for secrets
+      });
     }
   }
 
@@ -220,7 +272,12 @@ async function main() {
   // Blocks tool execution when consecutive failure count >= threshold.
   // Only enforced when a pipeline is active.
   if (pipelineResult && isCircuitOpen(cwd)) {
-    process.exit(2);
+    blockWithReason(cwd, {
+      code: "VG-15",
+      tool: toolName,
+      step: activeStep,
+      extra: "circuit-open",
+    });
   }
 
   // Default: allow
