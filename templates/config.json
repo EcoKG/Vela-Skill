@@ -8,6 +8,12 @@
   "gate_guard": {
     "enabled": true
   },
+  "gate_policy": {
+    "chain_operator": "block",
+    "web_in_write": "block",
+    "researcher_scope": "block",
+    "event_log": true
+  },
   "review_gate": {
     "enabled": true,
     "validation_rounds": 1,

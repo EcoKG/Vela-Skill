@@ -34,6 +34,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { writeGateEvent } = require("./shared/constants");
 
 // ─── Defaults ────────────────────────────────────────────────
 // Conservative defaults: one confirming re-validation on the execute step only.
@@ -219,6 +220,15 @@ async function main() {
       : step === "plan"
       ? "vela-planner"
       : `vela-${step}`;
+
+  writeGateEvent(cwd, {
+    code: "REVIEW_GATE",
+    tool: "Stop",
+    step,
+    mode: null,
+    decision: "deny",
+    summary: `round ${newCount}/${rounds}`,
+  });
 
   process.stdout.write(
     JSON.stringify({

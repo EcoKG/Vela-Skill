@@ -49,13 +49,152 @@ function printUsage() {
   node vela-analyze.js report --input <file> [--output <file>]  — Generate PDF report
   node vela-analyze.js run --perspectives <list>  — V6: use Agent(subagent_type='vela-analyzer') instead
   node vela-analyze.js full --items <list> [--output <file>]  — Run combined analysis + PDF
+  node vela-analyze.js friction [--limit N]          — Summarize .vela/state/gate-events.jsonl (hook friction report)
 
   run options:
     --perspectives  Comma-separated list of: security,bugs,performance,code-quality,architecture (required)
 
   full options:
     --items         Comma-separated list of: deps,security,bugs,performance,code-quality,architecture (required)
-    --output        Output PDF path (default: ./vela-report-{timestamp}.pdf)`);
+    --output        Output PDF path (default: ./vela-report-{timestamp}.pdf)
+
+  friction options:
+    --limit N       Only consider last N events (default: 500)
+    --json          Emit machine-readable JSON instead of pretty text`);
+}
+
+// ─── Friction Report (gate-events.jsonl aggregate) ───
+//
+// Every block/ask/warn from the gate hooks appends one JSON line to
+// .vela/state/gate-events.jsonl. This subcommand rolls it up so
+// operators can see which VK-/VG- codes are firing most often, where
+// in the pipeline they fire, and whether the default policy is
+// producing too much friction for their project.
+//
+// Output is intentionally compact — the goal is "one glance, know
+// where to relax or harden" — not a full trace.
+function runFrictionReport({ cwd, limit, asJson }) {
+  const p = path.join(cwd, ".vela", "state", "gate-events.jsonl");
+  if (!fs.existsSync(p)) {
+    const msg = "No gate events recorded yet (.vela/state/gate-events.jsonl missing).";
+    if (asJson) {
+      console.log(JSON.stringify({ ok: true, events: 0, note: msg }, null, 2));
+    } else {
+      console.log(msg);
+    }
+    return 0;
+  }
+
+  const raw = fs.readFileSync(p, "utf8");
+  const all = raw
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      try {
+        return JSON.parse(s);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  // Tail the most recent `limit` events — old logs are preserved on
+  // disk but would skew current friction measurements.
+  const events = all.slice(-limit);
+  const byCode = new Map();
+  const byStepCode = new Map();
+  const byDecision = new Map();
+  for (const e of events) {
+    const code = e.code || "UNKNOWN";
+    const step = e.step || "(none)";
+    const decision = e.decision || "deny";
+    byCode.set(code, (byCode.get(code) || 0) + 1);
+    byDecision.set(decision, (byDecision.get(decision) || 0) + 1);
+    const key = `${step}|${code}`;
+    byStepCode.set(key, (byStepCode.get(key) || 0) + 1);
+  }
+
+  const topCodes = [...byCode.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+  const topStepCode = [...byStepCode.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([key, count]) => {
+      const [step, code] = key.split("|");
+      return { step, code, count };
+    });
+
+  // Surface a tiny set of actionable suggestions based on patterns.
+  // Hard-coded heuristics — extending this table is cheap and data-driven.
+  const suggestions = [];
+  const vk08 = byCode.get("VK-08") || 0;
+  const vk10 = byCode.get("VK-10") || 0;
+  const m11 = byCode.get("M11") || 0;
+  if (vk08 >= 10) {
+    suggestions.push(
+      `VK-08 (체인 연산자) ${vk08}회 — .vela/config.json의 gate_policy.chain_operator를 "ask"로 설정 고려`,
+    );
+  }
+  if (vk10 >= 5) {
+    suggestions.push(
+      `VK-10 (write 모드 WebFetch) ${vk10}회 — gate_policy.web_in_write를 "ask"로 설정하거나 research 단계에서 조회하도록 PM 재조정`,
+    );
+  }
+  if (m11 >= 5) {
+    suggestions.push(
+      `M11 (researcher scope) ${m11}회 — locate 단계의 targets.json이 실제 범위보다 좁음. gate_policy.researcher_scope="warn"으로 완화 고려`,
+    );
+  }
+
+  if (asJson) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          events: events.length,
+          total: all.length,
+          byCode: Object.fromEntries(topCodes),
+          byDecision: Object.fromEntries(byDecision),
+          topStepCode,
+          suggestions,
+        },
+        null,
+        2,
+      ),
+    );
+    return 0;
+  }
+
+  console.log(`⛵ Vela Gate Friction Report`);
+  console.log(`─────────────────────────────`);
+  console.log(`총 이벤트: ${events.length} (전체 ${all.length}개 중 최근 ${limit} 분석)`);
+  console.log(``);
+  console.log(`결정 분포:`);
+  for (const [decision, count] of byDecision.entries()) {
+    console.log(`  ${decision.padEnd(8)} ${count}`);
+  }
+  console.log(``);
+  console.log(`상위 코드:`);
+  for (const [code, count] of topCodes) {
+    console.log(`  ${code.padEnd(8)} ${count}`);
+  }
+  console.log(``);
+  console.log(`상위 (step × code):`);
+  for (const { step, code, count } of topStepCode) {
+    console.log(`  ${step.padEnd(14)} ${code.padEnd(8)} ${count}`);
+  }
+  console.log(``);
+  if (suggestions.length === 0) {
+    console.log(`제안: 현재 friction 수준이 낮음 — 정책 조정 불필요.`);
+  } else {
+    console.log(`제안:`);
+    for (const s of suggestions) {
+      console.log(`  - ${s}`);
+    }
+  }
+  return 0;
 }
 
 // ─── HTML Report Builder ───
@@ -646,6 +785,16 @@ async function main() {
         console.error(`Error: PDF generation failed: ${fullPdfResult.error}`);
         process.exit(1);
       }
+      break;
+    }
+
+    case "friction": {
+      const limitRaw = getFlag("--limit");
+      const limit =
+        limitRaw && /^\d+$/.test(limitRaw) ? parseInt(limitRaw, 10) : 500;
+      const asJson = process.argv.includes("--json");
+      const code = runFrictionReport({ cwd: process.cwd(), limit, asJson });
+      process.exit(code);
       break;
     }
 
