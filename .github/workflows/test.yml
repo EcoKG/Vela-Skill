@@ -444,6 +444,27 @@ jobs:
           bash scripts/tests/test-gate-policy.sh 2>&1 | tee /tmp/gate-policy.log
           exit ${PIPESTATUS[0]}
 
+      - name: Engine state v7.2 fields (M1/M2/M13)
+        id: s_v72ef
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-v72-engine-fields.sh 2>&1 | tee /tmp/v72-engine-fields.log
+          exit ${PIPESTATUS[0]}
+
+      - name: v7.2 observational hooks (M8)
+        id: s_v72hk
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-v72-hooks.sh 2>&1 | tee /tmp/v72-hooks.log
+          exit ${PIPESTATUS[0]}
+
+      - name: v7.2 nightly + managed entry (M14/M15)
+        id: s_v72nm
+        continue-on-error: true
+        run: |
+          bash scripts/tests/test-v72-nightly-managed.sh 2>&1 | tee /tmp/v72-nightly-managed.log
+          exit ${PIPESTATUS[0]}
+
       # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
@@ -499,6 +520,9 @@ jobs:
           R_GSE: ${{ steps.s_gse.outcome }}
           R_GTL: ${{ steps.s_gtl.outcome }}
           R_GPO: ${{ steps.s_gpo.outcome }}
+          R_V72EF: ${{ steps.s_v72ef.outcome }}
+          R_V72HK: ${{ steps.s_v72hk.outcome }}
+          R_V72NM: ${{ steps.s_v72nm.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -551,6 +575,9 @@ jobs:
           Unit: gate structured stderr (v7.2)	${R_GSE}	/tmp/gate-stderr.log
           Unit: gate telemetry jsonl (v7.2)	${R_GTL}	/tmp/gate-telemetry.log
           Unit: gate policy ask/allow (v7.2)	${R_GPO}	/tmp/gate-policy.log
+          Unit: engine state v7.2 fields (M1/M2/M13)	${R_V72EF}	/tmp/v72-engine-fields.log
+          Unit: v7.2 observational hooks (M8)	${R_V72HK}	/tmp/v72-hooks.log
+          Unit: v7.2 nightly + managed entry (M14/M15)	${R_V72NM}	/tmp/v72-nightly-managed.log
           EOF
 
           PASS=0
