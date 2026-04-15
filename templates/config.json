@@ -49,10 +49,17 @@
     }
   },
   "execution": {
-    "__doc__": "v7.2 Phase B — Parallelism & isolation for agent spawns. Defaults keep V7 serial behavior. parallelism=true enables reviewer+verifier parallel (M4) and research 3-perspective parallel (M5). isolation='worktree' runs executor in a .vela/worktrees/{slug}/ git worktree (M6). background_post_steps=true runs learning/diff-summary with run_in_background:true (M7).",
+    "__doc__": "v7.2 Phase B/C — Parallelism, isolation, and autonomous loop flags. Defaults keep V7 serial behavior. parallelism=true enables M4 (reviewer+verifier parallel) and M5 (research 3-perspective parallel). isolation='worktree' enables M6. background_post_steps=true enables M7. ralph_sentinel=true enables M12 (ScheduleWakeup-based autonomous ralph loop).",
     "parallelism": false,
     "isolation": "inline",
-    "background_post_steps": false
+    "background_post_steps": false,
+    "ralph_sentinel": false
+  },
+  "mcp": {
+    "__doc__": "v7.2 M11 — MCP server integration flags. context7 powers vela-researcher's version-accurate docs lookup for external libraries.",
+    "context7": {
+      "enabled": true
+    }
   },
   "models": {
     "__doc__": "v7.2 M2 — Per-role model routing. PM reads `recommended_model` from `vela-engine state` and passes it as the `model` field to Agent() spawns. 'default' applies when a step has no explicit mapping. Valid values: 'sonnet' | 'opus' | 'haiku' | 'inherit'.",

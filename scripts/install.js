@@ -253,6 +253,10 @@ const FILE_MANIFEST = [
   // every call). Logs Read calls to <artifactDir>/read-cache.jsonl
   // so vela-stop.js and /vela:analyze can aggregate duplicates.
   { src: "scripts/hooks/vela-file-read-cache.js", dst: "hooks/vela-file-read-cache.js" },
+  // v7.2 M8 — learning journal (PostToolUse Write/Edit) + telemetry
+  // rollup (SubagentStop). Both purely observational, exit 0 on error.
+  { src: "scripts/hooks/vela-post-tool-learning.js", dst: "hooks/vela-post-tool-learning.js" },
+  { src: "scripts/hooks/vela-subagent-stop.js",      dst: "hooks/vela-subagent-stop.js"      },
   { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
 
@@ -1623,7 +1627,7 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js", "vela-file-read-cache.js"];
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js", "vela-file-read-cache.js", "vela-post-tool-learning.js", "vela-subagent-stop.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1745,6 +1749,8 @@ function registerGlobalHooks(hooksSourceDir) {
     "vela-stop.js",
     "vela-review-gate.js",
     "vela-file-read-cache.js",
+    "vela-post-tool-learning.js",  // v7.2 M8 — PostToolUse
+    "vela-subagent-stop.js",       // v7.2 M8 — SubagentStop
   ];
   function dedupVelaHooks(event) {
     const list = globalSettings.hooks[event];
@@ -1770,7 +1776,9 @@ function registerGlobalHooks(hooksSourceDir) {
     return removed;
   }
   dedupVelaHooks("PreToolUse");
+  dedupVelaHooks("PostToolUse");   // v7.2 M8
   dedupVelaHooks("Stop");
+  dedupVelaHooks("SubagentStop");  // v7.2 M8
 
   // ── v7.1.3: self-heal for dangling Vela hook entries ──
   //
@@ -1827,7 +1835,9 @@ function registerGlobalHooks(hooksSourceDir) {
     return removed;
   }
   pruneDanglingVelaHooks("PreToolUse");
+  pruneDanglingVelaHooks("PostToolUse");   // v7.2 M8
   pruneDanglingVelaHooks("Stop");
+  pruneDanglingVelaHooks("SubagentStop");  // v7.2 M8
 
   // Idempotent hook registration. `id` must be a substring of the
   // stringified hook entry (we match against the hook filename). Previously
@@ -1873,6 +1883,14 @@ function registerGlobalHooks(hooksSourceDir) {
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
   addGlobalHook("Stop", "vela-review-gate",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 10);
+
+  // v7.2 M8 — PostToolUse Write/Edit journal for vela-learning consumer.
+  // Purely observational; always exits 0; cannot block a tool call.
+  addGlobalHook("PostToolUse", "vela-post-tool-learning",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-post-tool-learning.js")}`, 5);
+  // v7.2 M8 — SubagentStop per-agent telemetry rollup for vela-cost.
+  addGlobalHook("SubagentStop", "vela-subagent-stop",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-subagent-stop.js")}`, 5);
 
   writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
 }

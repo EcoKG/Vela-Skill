@@ -321,3 +321,40 @@ node .vela/cli/vela-engine.js commit
 ## UI 템플릿
 
 모든 AskUserQuestion은 `.vela/references/interactive-ui.md`에서 읽어라.
+
+---
+
+## v7.2 Phase C — 2026 Claude Code 정합 패턴
+
+### M9 — `/recap` 통합 (세션 재개)
+
+Claude Code 2.1.108+ 의 `/recap`은 세션 복귀 시 컨텍스트 요약을 제공한다. `vela-session-start.js`가 활성 파이프라인을 자체 포맷으로 이미 주입하므로, 사용자가 긴 공백 후 돌아와서 `/recap`을 직접 호출하면 파이프라인 상태(current_step/artifactDir/최근 review)가 recap 결과에 자연스럽게 포함된다. PM이 할 일은 없다 — 문서로만 안내한다 (`references/interactive-ui.md` 참조).
+
+### M10 — Skill 도구 빌트인 커맨드 호출
+
+- `vela-analyzer` security 분석: `/security-review` 우선 호출 후 보완
+- `vela-reviewer` execute step + PR 존재 시: `/review` 보조 호출
+
+세부 절차는 각 에이전트 파일 참조. PM은 개입하지 않는다.
+
+### M11 — Context7 MCP docs 조회
+
+`vela-researcher`가 외부 라이브러리 API 언급 시 MCP를 우선 호출. PM은 `config.mcp.context7.enabled`만 참조하면 된다 (기본 true).
+
+### M12 — Ralph Sentinel-prompt 자율 루프
+
+`ralph` 파이프라인(execute ↔ verify 최대 10회)은 PM tight-loop 대신 ScheduleWakeup의 autonomous-loop-dynamic sentinel을 사용할 수 있다:
+
+```
+# ralph 진입 시 (execute ↔ verify 루프 시작 전)
+ScheduleWakeup({
+  delaySeconds: 270,                      # 캐시 유지 안전 구간
+  prompt: "<<autonomous-loop-dynamic>>",  # 런타임이 ralph 재진입으로 해석
+  reason: "ralph loop iter 1/10 — waiting for verifier"
+})
+```
+
+- verify PASS 시 즉시 `CronDelete` 혹은 후속 wake 생략으로 루프 종료
+- max_revisions(10) 도달 시 `AskUserQuestion`으로 에스컬레이션
+
+기본값은 V7 tight-loop (`config.execution.ralph_sentinel: false`). opt-in일 때만 sentinel 경로로 전환.
