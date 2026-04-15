@@ -53,6 +53,32 @@ node .vela/cli/vela-engine.js state
 
 ---
 
+## v7.2 Phase B — 병렬화 & 격리 패턴
+
+**단일 메시지에 여러 Agent() 호출**을 담으면 Claude Code는 병렬로 실행한다. 아래 네 패턴은 config에 따라 켜지며, 기본값(`config.execution.parallelism: false`)은 V7 직렬 동작과 동일하다.
+
+### 1. Research 3관점 병렬 spawn (M5)
+`research` 단계에서 PM은 architecture/security/quality 관점을 **병렬 3개 Agent()** 로 소환한 후 `vela-researcher-merge` 에이전트(Haiku 권장)가 결과를 `research.md` 하나로 통합한다.
+- 각 관점 에이전트 출력: `research-{perspective}.md`
+- 머지 결과: `research.md` (exit_gate가 검증하는 정식 산출물)
+
+### 2. Reviewer + Verifier 병렬 (M4)
+`execute` 이후 단일 메시지에 Agent(reviewer) + Agent(verifier) 2개를 동시 호출. 둘 다 APPROVE/PASS면 `node .vela/cli/vela-engine.js transition --through verify`로 두 단계를 한 번에 넘긴다.
+- reviewer REJECT: verifier 결과와 무관하게 executor 재호출
+- verifier FAIL: reviewer 결과와 무관하게 executor 재호출 (ralph 모드라면 loop 카운터 증가)
+- `transition --through verify`는 execute의 exit_gate와 verify의 exit_gate를 **둘 다** 통과해야 성공
+
+### 3. Executor Worktree Isolation (M6) — opt-in
+`config.execution.isolation: "worktree"`일 때만 활성. `execute`/`patch` 단계에서 `Agent(subagent_type="vela-executor", isolation="worktree", ...)`로 호출한다.
+- worktree 경로: `.vela/worktrees/{slug}/`
+- 실패 시 main working tree 무변경 — `commit` 단계에서 worktree → 현재 브랜치 병합
+- 기본값은 `"inline"`(V7 동작 유지)
+
+### 4. Learning + Diff-summary 백그라운드 (M7)
+두 단계 모두 non-fatal이므로 `run_in_background: true`로 호출한 후 파이프라인은 즉시 `commit`으로 진행한다. `finalize`에서 TaskList로 상태를 점검하고 미완료면 `report.md`에 "deferred" 표기.
+
+---
+
 ## 단계별 Agent 소환 패턴
 
 각 단계에서 PM은 해당 역할의 에이전트를 Agent 도구로 소환한다.
@@ -75,6 +101,7 @@ node .vela/cli/vela-engine.js locate
 
 ### research
 
+**직렬 모드 (기본, `config.execution.parallelism != true`)**:
 ```
 Agent(subagent_type="vela-researcher", prompt={
   request, artifactDir,
@@ -86,6 +113,22 @@ Agent(subagent_type="vela-researcher", prompt={
 → 리뷰 판정 확인 (APPROVE: 점수 20+/25 && CRITICAL 0)
 → node .vela/cli/vela-engine.js record pass (또는 reject)
 → node .vela/cli/vela-engine.js transition
+```
+
+**병렬 3관점 모드 (v7.2 M5, `config.execution.parallelism: true`)**:
+```
+# 단일 메시지에 3개 Agent() 병렬 호출
+Agent(subagent_type="vela-researcher", prompt={..., perspective:"architecture"})
+Agent(subagent_type="vela-researcher", prompt={..., perspective:"security"})
+Agent(subagent_type="vela-researcher", prompt={..., perspective:"quality"})
+→ 각각 research-{perspective}.md 생성
+→ Agent(subagent_type="vela-researcher-merge", prompt={
+    artifactDir,
+    inputs:["research-architecture.md","research-security.md","research-quality.md"]
+  })
+→ research.md 생성 (exit_gate 검증 대상)
+→ Agent(subagent_type="vela-reviewer", prompt={step:"research", artifactDir})
+→ record + transition
 ```
 
 REJECT 시: `review-research.md`의 피드백을 추출하여 researcher 재호출 (최대 `max_revisions`회)
@@ -130,6 +173,7 @@ node .vela/cli/vela-engine.js branch
 
 ### execute
 
+**직렬 모드 (기본)**:
 ```
 Agent(subagent_type="vela-executor", prompt={
   request, artifactDir,
@@ -142,6 +186,24 @@ Agent(subagent_type="vela-executor", prompt={
 → REJECT: review-execute.md의 CRITICAL/HIGH를 reviewFeedback으로 추출 → executor 재호출
 → max_revisions(5) 소진 시 AskUserQuestion
 ```
+
+**병렬 reviewer+verifier 모드 (v7.2 M4, `config.execution.parallelism: true`)**:
+```
+# executor 완료 후
+Agent(subagent_type="vela-executor", prompt={..., [isolation:"worktree" if M6]})
+→ # 단일 메시지에 두 개 병렬 호출:
+  Agent(subagent_type="vela-reviewer", prompt={step:"execute", artifactDir})
+  Agent(subagent_type="vela-verifier", prompt={artifactDir, projectEnv, ...})
+→ 둘 다 통과:
+  node .vela/cli/vela-engine.js advance pass        # execute 단계
+  node .vela/cli/vela-engine.js advance pass        # verify 단계 (exit_gate 이미 PASS)
+→ 어느 하나라도 실패: REJECT 측을 executor에게 reviewFeedback으로 주입 후 재호출
+```
+
+**Worktree isolation (v7.2 M6, `config.execution.isolation: "worktree"`)**:
+- executor Agent()에 `isolation: "worktree"` 추가
+- executor 실패/취소 시 main working tree 무변경
+- `commit` 단계가 worktree 변경사항을 현재 브랜치로 병합 후 worktree 정리
 
 ### spec (v7.0 surgical 파이프라인 전용)
 
@@ -196,18 +258,34 @@ Agent(subagent_type="vela-verifier", prompt={artifactDir, projectEnv,
 
 ### diff-summary (standard 파이프라인만)
 
+**직렬 모드 (기본)**:
 ```
 Agent(subagent_type="vela-diff-summary", prompt={artifactDir, branchName, baseBranch})
 → non-fatal: 실패해도 경고만 남기고 진행
 → transition
 ```
 
+**백그라운드 모드 (v7.2 M7, `config.execution.background_post_steps: true`)**:
+```
+Agent(subagent_type="vela-diff-summary", run_in_background:true, prompt={...})
+→ 즉시 transition (에이전트는 뒤에서 계속)
+→ finalize 단계에서 TaskList로 상태 점검 (미완료면 report.md에 "deferred: diff-summary")
+```
+
 ### learning (standard 파이프라인만)
 
+**직렬 모드 (기본)**:
 ```
 Agent(subagent_type="vela-learning", prompt={artifactDir, request, pipelineType})
 → non-fatal: 실패해도 경고만 남기고 진행
 → transition
+```
+
+**백그라운드 모드 (v7.2 M7, `config.execution.background_post_steps: true`)**:
+```
+Agent(subagent_type="vela-learning", run_in_background:true, prompt={...})
+→ 즉시 transition
+→ finalize 단계에서 TaskList로 상태 점검
 ```
 
 ### commit
