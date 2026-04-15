@@ -1,4 +1,4 @@
-# ⛵ Vela Engine v6.0 — Sandbox Development System
+# ⛵ Vela Engine v7.2 — Sandbox Development System
 
 **Vela**(돛자리)는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 Claude Code는 독자적으로 작동할 수 없으며, 모든 행위는 Vela의 파이프라인을 통해서만 진행된다.
@@ -211,20 +211,26 @@ V6에서 PM은 Claude Code 네이티브 Agent 도구로 각 역할 에이전트�
 ```
 PM (vela.md agent)
   ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI 호출
-  ├── Agent(vela-researcher)    → research.md
-  ├── Agent(vela-planner)       → plan.md
-  ├── Agent(vela-plan-checker)  → plan-check.md
-  ├── Agent(vela-executor)      → 코드 구현 (TDD)
-  ├── Agent(vela-reviewer)      → review-{step}.md
-  ├── Agent(vela-verifier)      → verification.md
-  ├── Agent(vela-diff-summary)  → diff-summary.md
-  └── Agent(vela-learning)      → learning.md
+  ├── Agent(vela-researcher)       → research.md (단일 또는 v7.2 병렬 3관점)
+  ├── Agent(vela-researcher-merge) → research.md 통합 (v7.2 M5, 병렬 모드)
+  ├── Agent(vela-planner)          → plan.md (또는 mode:spec → patch-spec.md)
+  ├── Agent(vela-plan-checker)     → plan-check.md
+  ├── Agent(vela-executor)         → 코드 구현 (TDD; v7.2 M6 worktree opt-in)
+  ├── Agent(vela-reviewer)         → review-{step}.md
+  ├── Agent(vela-verifier)         → verification.md
+  ├── Agent(vela-diff-summary)     → diff-summary.md (v7.2 M7 background opt-in)
+  ├── Agent(vela-learning)         → learning.md    (v7.2 M7 background opt-in)
+  ├── Agent(vela-sprint-planner)   → sprint-plan.json (다중 슬라이스 분해)
+  └── Agent(vela-analyzer)         → analysis.md (`/vela:analyze`)
 
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
-  ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]
-  ├── vela-gate-guard.js   (VG-03~15: 단계 순서 강제)     [PreToolUse]
-  ├── vela-stop.js          (auto 모드 중 중단 방지)       [Stop]
-  └── vela-review-gate.js  (APPROVE 후 N회 재검증 강제)   [Stop]
+  ├── vela-gate-keeper.js        (VK-01~08: 모드별 도구 제한)      [PreToolUse]
+  ├── vela-gate-guard.js         (VG-03~15: 단계 순서 강제)        [PreToolUse]
+  ├── vela-file-read-cache.js    (v7.1 M10: 중복 Read 측정)         [PreToolUse]
+  ├── vela-post-tool-learning.js (v7.2 M8: Write/Edit 저널)          [PostToolUse]
+  ├── vela-stop.js               (auto 모드 중 중단 방지)           [Stop]
+  ├── vela-review-gate.js        (APPROVE 후 N회 재검증 강제)       [Stop]
+  └── vela-subagent-stop.js      (v7.2 M8: 에이전트별 텔레메트리)   [SubagentStop]
 ```
 
 ### 핵심 설계 결정
@@ -586,6 +592,102 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 | v6.0.1 | M026 | **품질-중립 성능·비용 최적화** — 10개 에이전트 frontmatter에 `model:`/`tools:`/`effort:` 명시(Sonnet 품질 크리티컬 + Haiku 기계 검사), review-gate 기본 `validation_rounds: 3 → 1` & `steps: ["execute"]`만 재검증, 에이전트별 도구 정의 로드 축소. 모든 품질 게이트(5차원 20/25, CRITICAL 검출, plan 섹션 검증, ref_integrity, TDD 3단계) 무손상. 기존 사용자 config는 `skipOnUpgrade`로 보호. |
 | v6.1.0 | M027 | **v6.1 Precision & Locate** — Universal Locate 단계를 모든 5개 scale에 도입(`init → locate → ...`). `scripts/shared/locate.js` 결정론적 모듈(ripgrep + git grep + git ls-files, LLM 0). `vela-engine locate` 신규 CLI + `targets_json_exists` exit gate. PM/researcher/planner/executor 프롬프트에 `targetsPath` 주입. Slash command 재구성: `/vela:start` deprecated, `/vela:{small,medium,large,ralph,hotfix}` 신규. Scale Mismatch Guard (heuristic 제안, 자동 변경 금지). `autoDetectScale()` deprecated, `--scale` 누락 시 medium 폴백. 벤치마크 **15/15 recall 100%**(scripts/tests/test-locate-bench.sh). research(targeted) mode 자동 활성화로 기존 67k+ research 토큰 대폭 절감 예상. v7.0 surgical pipeline과 완전 호환. |
 | v7.0.0 | M028 | **v7.0 Surgical Pipeline** — Target-First 패러다임 구현. 신규 `surgical` 파이프라인(8단계: init → locate → research → spec → patch → verify → commit → finalize). `vela-planner`가 `mode: spec` 분기를 지원하여 기존 추상 plan.md 대신 결정론적 `patch-spec.md`(file:line Before/After + Explicitly out of scope)를 작성한다. `vela-verifier`에 out-of-scope 위반 검사 추가 — patch-spec에 명시된 범위를 벗어난 변경은 test 통과해도 FAIL. `vela-engine`에 `patch_spec_complete` exit gate + `implementation_complete` gate의 approval 파일 이름 동적 해석. 신규 `/vela:fix` 명령 (일상 작업의 새 기본 추천). `templates/pipeline.json` v1.4: `standard.steps_only` 명시, `spec`/`patch` step 정의, `surgical` 파이프라인 + `scales: fix → surgical`. E2E 테스트 `test-surgical-pipeline.sh` 35/35 PASS. v6.1 위에서 추가만 — 기존 파이프라인 동작 무손상. |
+| v7.1.0 | M029–M040 | **v7.1 hicoco hardening** — 실전 운영 피드백 기반 12개 마일스톤. M1 commit/branch non-git guard, M2 verify bash safelist (`npm test | tee` 등 허용), M3 verifier Phase 3 smoke test, M4 plan-checker sanity heuristics + Architecture Guardrails (forbidden imports), M5 slug fs-safe truncation + request.txt side-car, M6 `vela-engine doctor` health check, M7 context-pack.json (primary 파일 프리로드, 중복 Read 감소), M8 `advance` one-shot record+transition, M9 role budgets (per-scale tool_use 가이드라인, non-fatal), M10 vela-file-read-cache.js observational hook, M11 researcher targeted scope enforcement, M12 CLAUDE.md cd-rule injection on upgrade. |
+| v7.1.1 | — | deploy-common.sh sync_local_project 드리프트 수정 — 새 파일(M10 hook 등)이 로컬 `.vela/`에 복사 안 되던 회귀 픽스. |
+| v7.1.2 | — | CI-enforced FILE_MANIFEST ↔ sync_local_project 패리티 테스트 — 두 경로가 다시 벌어지는 것을 CI에서 자동 차단. |
+| v7.1.3 | — | install.js 훅 self-heal — settings.json에 남은 dangling hook entry (파일 없는데 등록된 것) 자동 정리. |
+| v7.1.4 | — | 글로벌 훅 constants.js wrapper → real source 전환 — `~/.vela/hooks/shared/constants.js`가 wrapper일 때 MODULE_NOT_FOUND 이슈 해결. |
+| v7.1.5 | — | install.js constants.js 후보 검색 범위 확장 — 프로젝트 로컬 `.vela/shared/constants.js` 발견 가능하도록 4단계 fallback. |
+| v7.2.0 | Harness | **v7.2 harness engineering** — 구조화된 stderr (VK/VG 코드 명시), gate-events.jsonl 텔레메트리, config.gate_policy (chain_operator/web_in_write/researcher_scope ask/allow/block 3-way 정책). `/vela:analyze friction`에서 훅 마찰 hotspot 표면화 가능. |
+| v7.2.0 | M1–M15 | **v7.2 V8 Strengthening (Phase A–D)** — 2026 Claude Code (2.1.107–109) 아키텍처 정합. **Phase A** (M1 프롬프트 캐싱 1h TTL 설정 surface, M2 역할별 모델 라우팅 `recommended_model` per step, M3 cache config 노출). **Phase B** (M4 reviewer+verifier 병렬, M5 research 3관점 병렬 + vela-researcher-merge 경량 통합 에이전트, M6 executor worktree isolation opt-in, M7 learning/diff-summary `run_in_background`). **Phase C** (M8 vela-post-tool-learning + vela-subagent-stop 두 관찰용 훅 추가 — PostToolUse / SubagentStop 이벤트 지원, M9 `/recap` 문서, M10 Skill 도구 빌트인 `/security-review` `/review` auto-invoke, M11 Context7 MCP researcher docs lookup, M12 ralph sentinel autonomous loop). **Phase D** (M13 엔진 `state` 출력에 `tasks[]` 추가 — Claude Code session task-list 도구로 파이프라인 진행 노출, M14 `vela-nightly.js` 학습 집계 CLI, M15 Managed Agents 외부 트리거 엔트리 + docs/managed-agents.md). 모든 변경 opt-in 플래그 — V7 호환 기본값. CI 커버리지 `test-v72-{engine-fields,hooks,nightly-managed}.sh` 26/26 PASS. |
+
+---
+
+## v7.2 Configuration
+
+v7.2에서 `.vela/config.json`에 4개 신규 섹션이 추가됐다. **모든 플래그 기본값은 V7 호환 동작**이므로 업데이트만으로 바뀌는 것은 없다. 아래는 선택 활성화 가이드.
+
+### `cache` — 프롬프트 캐싱 정책 (M1/M3)
+
+```json
+"cache": {
+  "enabled": true,
+  "ttl": "1h",
+  "read_cache": { "enabled": true, "warn_threshold": 4 }
+}
+```
+
+- `ttl: "1h" | "5m" | "off"` — 1h는 long-running 파이프라인에 최적. **env 필수**: Claude Code 실행 전에 `export ENABLE_PROMPT_CACHING_1H=1`. 미설정 시 `vela-session-start.js`가 경고만 출력.
+- `read_cache` — `vela-file-read-cache.js`(v7.1 M10)의 임계값. `warn_threshold` 이상 같은 파일을 읽으면 stderr 경고.
+
+### `models` — 역할별 모델 라우팅 (M2)
+
+```json
+"models": {
+  "default": "sonnet",
+  "research": "opus",
+  "plan": "opus",
+  "plan_check": "haiku",
+  "execute": "sonnet",
+  "verify": "haiku",
+  "review": "sonnet",
+  "learning": "haiku",
+  "diff_summary": "haiku",
+  "analyze": "sonnet"
+}
+```
+
+엔진 `state` 명령이 현재 단계 기준 `recommended_model` 필드를 반환. PM이 `Agent()` 호출 시 `model` 파라미터로 전달. 미정의 단계는 `default`로 폴백.
+
+### `execution` — 병렬화 & 격리 (M4/M5/M6/M7/M12)
+
+```json
+"execution": {
+  "parallelism": false,
+  "isolation": "inline",
+  "background_post_steps": false,
+  "ralph_sentinel": false
+}
+```
+
+- `parallelism: true` — execute 후 reviewer+verifier 병렬 호출, research 단계에서 architecture/security/quality 3관점 병렬 spawn 후 `vela-researcher-merge`로 통합.
+- `isolation: "worktree"` — executor를 `.vela/worktrees/{slug}/` git worktree에서 실행. 실패해도 main working tree 무변경.
+- `background_post_steps: true` — learning/diff-summary를 `run_in_background`로 호출, 즉시 commit으로 진행.
+- `ralph_sentinel: true` — ralph 루프를 `ScheduleWakeup` sentinel prompt (`<<autonomous-loop-dynamic>>`)로 자율화.
+
+### `mcp.context7` — Docs 조회 (M11)
+
+```json
+"mcp": {
+  "context7": { "enabled": true }
+}
+```
+
+`vela-researcher`가 외부 라이브러리 API 언급 시 `mcp__claude_ai_Context7__resolve-library-id` → `query-docs`로 버전별 정확한 docs를 먼저 조회. 미지원 환경에서는 WebSearch 폴백.
+
+### `gate_policy` — 게이트 3-way 정책 (v7.2 harness)
+
+```json
+"gate_policy": {
+  "chain_operator": "block",
+  "web_in_write": "block",
+  "researcher_scope": "block",
+  "event_log": true
+}
+```
+
+각 키 값: `"block" | "ask" | "allow"`. `event_log: true`면 모든 결정이 `.vela/state/gate-events.jsonl`에 append되어 `/vela:analyze friction`에서 훅 마찰 지점 분석에 사용.
+
+### 선택 활성화 체크리스트
+
+업데이트 후 실제로 v7.2 기능을 켜려면:
+
+- [ ] `export ENABLE_PROMPT_CACHING_1H=1` 을 shell rc(.bashrc/.zshrc)에 추가
+- [ ] `.vela/config.json`의 `cache.ttl`을 `"1h"`로 유지 (기본값)
+- [ ] 병렬화를 원하면 `execution.parallelism: true` (단, 체감 효과는 large 파이프라인에서 가장 큼)
+- [ ] 실험적 기능은 **한 번에 하나씩** 켜고 vela-cost로 차이 측정 권장
+- [ ] 외부 CI에서 파이프라인 트리거하려면 `docs/managed-agents.md` 참조 (M15)
+- [ ] nightly learning 집계를 원하면 `CronCreate("0 2 * * *", "<<autonomous-loop>> node .vela/cli/vela-nightly.js")` 등록 (M14)
 
 ---
 
