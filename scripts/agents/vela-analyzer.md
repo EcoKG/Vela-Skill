@@ -22,6 +22,12 @@ tools: Read, Glob, Grep, Bash, Write
 
 ### Security 분석 (`security` 포함 시)
 
+**v7.2 M10 — Claude Code 빌트인 스킬 우선 호출**:
+- 가능하면 먼저 Skill 도구로 `/security-review`를 호출하여 Claude Code 내장 보안 리뷰 결과를 수집한다.
+- 내장 결과를 바탕 프레임으로 삼고, 아래 항목은 **내장이 놓친 범위만 보완**한다.
+- 내장 스킬 사용 불가 환경(구버전 Claude Code, 오프라인 등)이면 아래를 직접 수행한다.
+
+직접 수행 시 점검 항목:
 - 인증/권한 취약점 (JWT 검증, 세션 관리)
 - 인젝션 취약점 (SQL, XSS, Command)
 - 자격증명 노출 (하드코딩된 시크릿, .env 파일)

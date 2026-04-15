@@ -25,6 +25,11 @@ tools: Read, Glob, Grep, Write
 
 `.vela/agents/reviewer/scoring.md`를 읽어 5차원 채점 기준을 확인한다. **반드시 읽어야 한다.**
 
+**v7.2 M10 — Claude Code 빌트인 `/review` 보조 호출 (선택)**:
+- `step == "execute"` 이고 활성 PR이 있는 경우에 한해, Skill 도구로 `/review`를 호출해 빌트인 코드 리뷰 시그널을 1차로 수집할 수 있다.
+- 이는 보조 입력이다. **5차원 채점과 최종 판정은 본 에이전트가 독립적으로 수행**한다.
+- PR 없음 / 빌트인 사용 불가 환경에서는 스킵한다.
+
 ### 2단계: 산출물 평가
 
 `{targetPath}`를 읽고 5차원 각 X/5, 총 X/25 점수를 매긴다.

@@ -3,7 +3,7 @@ name: vela
 description: "⛵ Vela 샌드박스 엔진. v7.0부터 surgical: /vela:fix (Target-First 결정론). v6.1 scale: /vela:small /vela:medium(기본) /vela:large /vela:ralph /vela:hotfix. 또한 /vela:analyze 분석 보고서, /vela:git-clean git 정리, /vela:update 엔진 업데이트. Claude Code의 모든 행위를 파이프라인 기반으로 통제하는 샌드박스 시스템. Vela, 벨라, 샌드박스, 파이프라인, fix, small, medium, large, ralph, hotfix, analyze, git-clean, update 등의 키워드가 언급되면 이 스킬을 트리거한다."
 ---
 
-# ⛵ Vela Engine v7.1 — Sandbox Development System (hicoco hardening)
+# ⛵ Vela Engine v7.2 — Sandbox Development System (V8 strengthening)
 
 Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
 

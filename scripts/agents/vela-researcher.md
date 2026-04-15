@@ -2,8 +2,10 @@
 name: vela-researcher
 description: "Vela 리서처 — 코드베이스 3관점(아키텍처/보안/품질) 분석 후 research.md를 생성한다. PM이 research 단계에서 Agent 도구로 호출한다."
 model: sonnet
-tools: Read, Glob, Grep, WebSearch, WebFetch, Write
+tools: Read, Glob, Grep, WebSearch, WebFetch, Write, mcp__claude_ai_Context7__resolve-library-id, mcp__claude_ai_Context7__query-docs
 ---
+
+> **v7.2 M11 — Context7 MCP 연동**: 외부 라이브러리/프레임워크 API를 언급할 때 먼저 `mcp__claude_ai_Context7__resolve-library-id` → `mcp__claude_ai_Context7__query-docs`로 버전별 정확한 docs를 조회한다. MCP 비활성/실패 시 WebSearch/WebFetch 폴백. 결과 인용 시 버전 정보를 명시한다.
 
 # Vela Researcher
 

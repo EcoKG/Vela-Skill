@@ -53,6 +53,32 @@ node .vela/cli/vela-engine.js state
 
 ---
 
+## v7.2 Phase B — 병렬화 & 격리 패턴
+
+**단일 메시지에 여러 Agent() 호출**을 담으면 Claude Code는 병렬로 실행한다. 아래 네 패턴은 config에 따라 켜지며, 기본값(`config.execution.parallelism: false`)은 V7 직렬 동작과 동일하다.
+
+### 1. Research 3관점 병렬 spawn (M5)
+`research` 단계에서 PM은 architecture/security/quality 관점을 **병렬 3개 Agent()** 로 소환한 후 `vela-researcher-merge` 에이전트(Haiku 권장)가 결과를 `research.md` 하나로 통합한다.
+- 각 관점 에이전트 출력: `research-{perspective}.md`
+- 머지 결과: `research.md` (exit_gate가 검증하는 정식 산출물)
+
+### 2. Reviewer + Verifier 병렬 (M4)
+`execute` 이후 단일 메시지에 Agent(reviewer) + Agent(verifier) 2개를 동시 호출. 둘 다 APPROVE/PASS면 `node .vela/cli/vela-engine.js transition --through verify`로 두 단계를 한 번에 넘긴다.
+- reviewer REJECT: verifier 결과와 무관하게 executor 재호출
+- verifier FAIL: reviewer 결과와 무관하게 executor 재호출 (ralph 모드라면 loop 카운터 증가)
+- `transition --through verify`는 execute의 exit_gate와 verify의 exit_gate를 **둘 다** 통과해야 성공
+
+### 3. Executor Worktree Isolation (M6) — opt-in
+`config.execution.isolation: "worktree"`일 때만 활성. `execute`/`patch` 단계에서 `Agent(subagent_type="vela-executor", isolation="worktree", ...)`로 호출한다.
+- worktree 경로: `.vela/worktrees/{slug}/`
+- 실패 시 main working tree 무변경 — `commit` 단계에서 worktree → 현재 브랜치 병합
+- 기본값은 `"inline"`(V7 동작 유지)
+
+### 4. Learning + Diff-summary 백그라운드 (M7)
+두 단계 모두 non-fatal이므로 `run_in_background: true`로 호출한 후 파이프라인은 즉시 `commit`으로 진행한다. `finalize`에서 TaskList로 상태를 점검하고 미완료면 `report.md`에 "deferred" 표기.
+
+---
+
 ## 단계별 Agent 소환 패턴
 
 각 단계에서 PM은 해당 역할의 에이전트를 Agent 도구로 소환한다.
@@ -75,6 +101,7 @@ node .vela/cli/vela-engine.js locate
 
 ### research
 
+**직렬 모드 (기본, `config.execution.parallelism != true`)**:
 ```
 Agent(subagent_type="vela-researcher", prompt={
   request, artifactDir,
@@ -86,6 +113,22 @@ Agent(subagent_type="vela-researcher", prompt={
 → 리뷰 판정 확인 (APPROVE: 점수 20+/25 && CRITICAL 0)
 → node .vela/cli/vela-engine.js record pass (또는 reject)
 → node .vela/cli/vela-engine.js transition
+```
+
+**병렬 3관점 모드 (v7.2 M5, `config.execution.parallelism: true`)**:
+```
+# 단일 메시지에 3개 Agent() 병렬 호출
+Agent(subagent_type="vela-researcher", prompt={..., perspective:"architecture"})
+Agent(subagent_type="vela-researcher", prompt={..., perspective:"security"})
+Agent(subagent_type="vela-researcher", prompt={..., perspective:"quality"})
+→ 각각 research-{perspective}.md 생성
+→ Agent(subagent_type="vela-researcher-merge", prompt={
+    artifactDir,
+    inputs:["research-architecture.md","research-security.md","research-quality.md"]
+  })
+→ research.md 생성 (exit_gate 검증 대상)
+→ Agent(subagent_type="vela-reviewer", prompt={step:"research", artifactDir})
+→ record + transition
 ```
 
 REJECT 시: `review-research.md`의 피드백을 추출하여 researcher 재호출 (최대 `max_revisions`회)
@@ -130,6 +173,7 @@ node .vela/cli/vela-engine.js branch
 
 ### execute
 
+**직렬 모드 (기본)**:
 ```
 Agent(subagent_type="vela-executor", prompt={
   request, artifactDir,
@@ -142,6 +186,24 @@ Agent(subagent_type="vela-executor", prompt={
 → REJECT: review-execute.md의 CRITICAL/HIGH를 reviewFeedback으로 추출 → executor 재호출
 → max_revisions(5) 소진 시 AskUserQuestion
 ```
+
+**병렬 reviewer+verifier 모드 (v7.2 M4, `config.execution.parallelism: true`)**:
+```
+# executor 완료 후
+Agent(subagent_type="vela-executor", prompt={..., [isolation:"worktree" if M6]})
+→ # 단일 메시지에 두 개 병렬 호출:
+  Agent(subagent_type="vela-reviewer", prompt={step:"execute", artifactDir})
+  Agent(subagent_type="vela-verifier", prompt={artifactDir, projectEnv, ...})
+→ 둘 다 통과:
+  node .vela/cli/vela-engine.js advance pass        # execute 단계
+  node .vela/cli/vela-engine.js advance pass        # verify 단계 (exit_gate 이미 PASS)
+→ 어느 하나라도 실패: REJECT 측을 executor에게 reviewFeedback으로 주입 후 재호출
+```
+
+**Worktree isolation (v7.2 M6, `config.execution.isolation: "worktree"`)**:
+- executor Agent()에 `isolation: "worktree"` 추가
+- executor 실패/취소 시 main working tree 무변경
+- `commit` 단계가 worktree 변경사항을 현재 브랜치로 병합 후 worktree 정리
 
 ### spec (v7.0 surgical 파이프라인 전용)
 
@@ -196,18 +258,34 @@ Agent(subagent_type="vela-verifier", prompt={artifactDir, projectEnv,
 
 ### diff-summary (standard 파이프라인만)
 
+**직렬 모드 (기본)**:
 ```
 Agent(subagent_type="vela-diff-summary", prompt={artifactDir, branchName, baseBranch})
 → non-fatal: 실패해도 경고만 남기고 진행
 → transition
 ```
 
+**백그라운드 모드 (v7.2 M7, `config.execution.background_post_steps: true`)**:
+```
+Agent(subagent_type="vela-diff-summary", run_in_background:true, prompt={...})
+→ 즉시 transition (에이전트는 뒤에서 계속)
+→ finalize 단계에서 TaskList로 상태 점검 (미완료면 report.md에 "deferred: diff-summary")
+```
+
 ### learning (standard 파이프라인만)
 
+**직렬 모드 (기본)**:
 ```
 Agent(subagent_type="vela-learning", prompt={artifactDir, request, pipelineType})
 → non-fatal: 실패해도 경고만 남기고 진행
 → transition
+```
+
+**백그라운드 모드 (v7.2 M7, `config.execution.background_post_steps: true`)**:
+```
+Agent(subagent_type="vela-learning", run_in_background:true, prompt={...})
+→ 즉시 transition
+→ finalize 단계에서 TaskList로 상태 점검
 ```
 
 ### commit
@@ -243,3 +321,67 @@ node .vela/cli/vela-engine.js commit
 ## UI 템플릿
 
 모든 AskUserQuestion은 `.vela/references/interactive-ui.md`에서 읽어라.
+
+---
+
+## v7.2 Phase C — 2026 Claude Code 정합 패턴
+
+### M9 — `/recap` 통합 (세션 재개)
+
+Claude Code 2.1.108+ 의 `/recap`은 세션 복귀 시 컨텍스트 요약을 제공한다. `vela-session-start.js`가 활성 파이프라인을 자체 포맷으로 이미 주입하므로, 사용자가 긴 공백 후 돌아와서 `/recap`을 직접 호출하면 파이프라인 상태(current_step/artifactDir/최근 review)가 recap 결과에 자연스럽게 포함된다. PM이 할 일은 없다 — 문서로만 안내한다 (`references/interactive-ui.md` 참조).
+
+### M10 — Skill 도구 빌트인 커맨드 호출
+
+- `vela-analyzer` security 분석: `/security-review` 우선 호출 후 보완
+- `vela-reviewer` execute step + PR 존재 시: `/review` 보조 호출
+
+세부 절차는 각 에이전트 파일 참조. PM은 개입하지 않는다.
+
+### M11 — Context7 MCP docs 조회
+
+`vela-researcher`가 외부 라이브러리 API 언급 시 MCP를 우선 호출. PM은 `config.mcp.context7.enabled`만 참조하면 된다 (기본 true).
+
+### M13 — 파이프라인 단계를 Claude Code task UI로 노출 (v7.2 Phase D)
+
+`vela-engine state` 명령은 이제 `tasks` 배열을 반환한다 (파이프라인 단계 → task 1:1 매핑, `status ∈ {pending, in_progress, completed}`). PM은 Claude Code의 task 관련 내장 도구(세션에서 제공되는 task-list 계열 도구)를 사용해 다음을 수행한다:
+
+- **파이프라인 `init` 직후**: 엔진이 반환한 `tasks` 배열 전체를 세션의 task 도구로 일괄 등록
+- **`transition` 직후**: 이전 단계를 `completed`, 새 단계를 `in_progress`로 갱신
+
+사용자는 claude.ai 앱/웹에서 task UI로 파이프라인 진행을 실시간 관찰할 수 있다. 해당 도구 호출 실패는 non-fatal — 파이프라인은 계속 진행한다.
+
+### M14 — Nightly Learning Aggregation (opt-in)
+
+`scripts/cli/vela-nightly.js`는 `.vela/learnings/learnings.json`을 읽어 카테고리별(weakness/strength/recurring_issue)로 패턴을 집계한 `.vela/reports/nightly-{YYYY-MM-DD}.md`를 생성한다. 한 번만 CronCreate로 등록하면 된다:
+
+```
+CronCreate({
+  cron: "0 2 * * *",
+  prompt: "<<autonomous-loop>> node .vela/cli/vela-nightly.js",
+  reason: "Vela nightly learning digest"
+})
+```
+
+`--dry-run`으로 먼저 결과를 확인하고 등록 여부를 결정하라.
+
+### M15 — Managed Agents 외부 트리거 (실험)
+
+`scripts/managed/vela-managed-entry.js`와 `docs/managed-agents.md`. GitHub Actions / 외부 curl에서 파이프라인을 시작할 수 있다. 세부는 해당 문서 참조.
+
+### M12 — Ralph Sentinel-prompt 자율 루프
+
+`ralph` 파이프라인(execute ↔ verify 최대 10회)은 PM tight-loop 대신 ScheduleWakeup의 autonomous-loop-dynamic sentinel을 사용할 수 있다:
+
+```
+# ralph 진입 시 (execute ↔ verify 루프 시작 전)
+ScheduleWakeup({
+  delaySeconds: 270,                      # 캐시 유지 안전 구간
+  prompt: "<<autonomous-loop-dynamic>>",  # 런타임이 ralph 재진입으로 해석
+  reason: "ralph loop iter 1/10 — waiting for verifier"
+})
+```
+
+- verify PASS 시 즉시 `CronDelete` 혹은 후속 wake 생략으로 루프 종료
+- max_revisions(10) 도달 시 `AskUserQuestion`으로 에스컬레이션
+
+기본값은 V7 tight-loop (`config.execution.ralph_sentinel: false`). opt-in일 때만 sentinel 경로로 전환.

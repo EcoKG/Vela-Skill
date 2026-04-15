@@ -38,5 +38,40 @@
       "pnpm-lock.yaml"
     ],
     "minTokenLength": 3
+  },
+  "cache": {
+    "__doc__": "v7.2 M1/M3 — Prompt caching policy. ttl='1h' requires ENABLE_PROMPT_CACHING_1H=1 env var to be exported before launching claude; session-start hook warns when the env var is missing. read_cache is observational (PreToolUse measurement hook) — set enabled=false to disable the read-cache.jsonl logging.",
+    "enabled": true,
+    "ttl": "1h",
+    "read_cache": {
+      "enabled": true,
+      "warn_threshold": 4
+    }
+  },
+  "execution": {
+    "__doc__": "v7.2 Phase B/C — Parallelism, isolation, and autonomous loop flags. Defaults keep V7 serial behavior. parallelism=true enables M4 (reviewer+verifier parallel) and M5 (research 3-perspective parallel). isolation='worktree' enables M6. background_post_steps=true enables M7. ralph_sentinel=true enables M12 (ScheduleWakeup-based autonomous ralph loop).",
+    "parallelism": false,
+    "isolation": "inline",
+    "background_post_steps": false,
+    "ralph_sentinel": false
+  },
+  "mcp": {
+    "__doc__": "v7.2 M11 — MCP server integration flags. context7 powers vela-researcher's version-accurate docs lookup for external libraries.",
+    "context7": {
+      "enabled": true
+    }
+  },
+  "models": {
+    "__doc__": "v7.2 M2 — Per-role model routing. PM reads `recommended_model` from `vela-engine state` and passes it as the `model` field to Agent() spawns. 'default' applies when a step has no explicit mapping. Valid values: 'sonnet' | 'opus' | 'haiku' | 'inherit'.",
+    "default": "sonnet",
+    "research": "opus",
+    "plan": "opus",
+    "plan_check": "haiku",
+    "execute": "sonnet",
+    "verify": "haiku",
+    "review": "sonnet",
+    "learning": "haiku",
+    "diff_summary": "haiku",
+    "analyze": "sonnet"
   }
 }
