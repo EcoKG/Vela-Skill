@@ -341,14 +341,14 @@ Claude Code 2.1.108+ 의 `/recap`은 세션 복귀 시 컨텍스트 요약을 �
 
 `vela-researcher`가 외부 라이브러리 API 언급 시 MCP를 우선 호출. PM은 `config.mcp.context7.enabled`만 참조하면 된다 (기본 true).
 
-### M13 — TaskCreate/TaskUpdate로 단계 노출 (v7.2 Phase D)
+### M13 — 파이프라인 단계를 Claude Code task UI로 노출 (v7.2 Phase D)
 
-`vela-engine state` 명령은 이제 `tasks` 배열을 반환한다 (파이프라인 단계 → task 1:1 매핑, `status ∈ {pending, in_progress, completed}`). PM은 다음을 수행한다:
+`vela-engine state` 명령은 이제 `tasks` 배열을 반환한다 (파이프라인 단계 → task 1:1 매핑, `status ∈ {pending, in_progress, completed}`). PM은 Claude Code의 task 관련 내장 도구(세션에서 제공되는 task-list 계열 도구)를 사용해 다음을 수행한다:
 
-- **파이프라인 `init` 직후**: 한 번에 TaskCreate로 모든 단계를 일괄 등록
-- **`transition` 직후**: TaskUpdate로 이전 단계를 `completed`, 새 단계를 `in_progress`로 변경
+- **파이프라인 `init` 직후**: 엔진이 반환한 `tasks` 배열 전체를 세션의 task 도구로 일괄 등록
+- **`transition` 직후**: 이전 단계를 `completed`, 새 단계를 `in_progress`로 갱신
 
-사용자는 claude.ai 앱/웹에서 task UI로 파이프라인 진행을 실시간 관찰할 수 있다. TaskCreate/TaskUpdate 실패는 non-fatal — 파이프라인은 계속 진행한다.
+사용자는 claude.ai 앱/웹에서 task UI로 파이프라인 진행을 실시간 관찰할 수 있다. 해당 도구 호출 실패는 non-fatal — 파이프라인은 계속 진행한다.
 
 ### M14 — Nightly Learning Aggregation (opt-in)
 

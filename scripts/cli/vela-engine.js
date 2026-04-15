@@ -437,9 +437,9 @@ function cmdState() {
     recommended_model: recommendedModel,
     cache_config: cacheConfig,
     // v7.2 M13 — Pipeline steps as task records, suitable for the PM
-    // to pass to TaskCreate (on init) / TaskUpdate (on transition).
-    // Engine cannot call Claude Code tools itself; this is the structured
-    // input it hands to the PM.
+    // to hand to Claude Code's session-level task-list tool on init and
+    // to update on each transition. Engine cannot call Claude Code tools
+    // itself; this is the structured input it hands to the PM.
     tasks: Array.isArray(state.steps) ? state.steps.map((id, idx) => {
       const def = steps.find((s) => s.id === id);
       const isDone = Array.isArray(state.completed_steps) && state.completed_steps.includes(id);
