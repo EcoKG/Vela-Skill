@@ -38,5 +38,27 @@
       "pnpm-lock.yaml"
     ],
     "minTokenLength": 3
+  },
+  "cache": {
+    "__doc__": "v7.2 M1/M3 — Prompt caching policy. ttl='1h' requires ENABLE_PROMPT_CACHING_1H=1 env var to be exported before launching claude; session-start hook warns when the env var is missing. read_cache is observational (PreToolUse measurement hook) — set enabled=false to disable the read-cache.jsonl logging.",
+    "enabled": true,
+    "ttl": "1h",
+    "read_cache": {
+      "enabled": true,
+      "warn_threshold": 4
+    }
+  },
+  "models": {
+    "__doc__": "v7.2 M2 — Per-role model routing. PM reads `recommended_model` from `vela-engine state` and passes it as the `model` field to Agent() spawns. 'default' applies when a step has no explicit mapping. Valid values: 'sonnet' | 'opus' | 'haiku' | 'inherit'.",
+    "default": "sonnet",
+    "research": "opus",
+    "plan": "opus",
+    "plan_check": "haiku",
+    "execute": "sonnet",
+    "verify": "haiku",
+    "review": "sonnet",
+    "learning": "haiku",
+    "diff_summary": "haiku",
+    "analyze": "sonnet"
   }
 }

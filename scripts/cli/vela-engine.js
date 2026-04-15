@@ -390,6 +390,27 @@ function cmdState() {
   const steps = resolveSteps(pipelineDef, state.pipeline_type);
   const currentStepDef = steps.find((s) => s.id === state.current_step);
 
+  // v7.2 M1/M2 — Derive per-role model recommendation + cache policy
+  // from .vela/config.json. PM passes recommended_model into Agent()
+  // spawns; missing config → null (PM inherits session model).
+  let recommendedModel = null;
+  let cacheConfig = null;
+  try {
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(VELA_DIR, "config.json"), "utf8"),
+    );
+    if (cfg && typeof cfg === "object") {
+      const models = cfg.models;
+      if (models && typeof models === "object") {
+        const stepKey = String(state.current_step || "").replace(/-/g, "_");
+        recommendedModel = models[stepKey] || models.default || null;
+      }
+      cacheConfig = cfg.cache || null;
+    }
+  } catch {
+    /* config missing or malformed — non-fatal, defaults to null */
+  }
+
   output({
     ok: true,
     command: "state",
@@ -413,6 +434,8 @@ function cmdState() {
       : null,
     git: state.git || null,
     artifact_dir: state._artifactDir,
+    recommended_model: recommendedModel,
+    cache_config: cacheConfig,
     // v7.1 M7: surface context-pack path so the PM can hand it to
     // executor/verifier spawns without having to check the filesystem
     // itself. Also exposes budget-exceeded.json if it was dropped.

@@ -180,6 +180,27 @@ async function main() {
   // Collect context sections
   const sections = [];
 
+  // ── Prompt Cache TTL Check (v7.2 M1) ─────────────────────
+  // The 1h TTL env var must be set in the user's shell before launching
+  // `claude`; hooks cannot mutate the parent process env. If config asks
+  // for 1h caching but the env var is missing, emit a one-line nudge so
+  // the user can export it next session. Silent when already set.
+  try {
+    const cacheCfg = config && config.cache;
+    const wantsOneHour = cacheCfg && cacheCfg.ttl === "1h";
+    const envOn = process.env.ENABLE_PROMPT_CACHING_1H === "1" ||
+                  process.env.ENABLE_PROMPT_CACHING_1H === "true";
+    if (wantsOneHour && !envOn) {
+      sections.push({
+        header: "프롬프트 캐시 경고 (v7.2 M1)",
+        lines: [
+          "  config.cache.ttl=1h 인데 ENABLE_PROMPT_CACHING_1H 미설정.",
+          "  → 다음 세션 전에 `export ENABLE_PROMPT_CACHING_1H=1` 추가 권장.",
+        ],
+      });
+    }
+  } catch { /* non-fatal */ }
+
   // ── Active Pipeline ──────────────────────────────────────
   const pipelineResult = findActivePipeline(velaDir);
   if (pipelineResult) {
