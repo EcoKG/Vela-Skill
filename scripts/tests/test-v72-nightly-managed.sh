@@ -86,8 +86,9 @@ else
   assert "recurring dedupe: ×2 same bug twice" "miss" "ok"
 fi
 
-# Non-dry-run writes the report file
-OUT_JSON="$(node "$NIGHTLY")"
+# Non-dry-run writes the report file. We don't inspect the stdout JSON
+# here (the file existence check below is what matters), so discard it.
+node "$NIGHTLY" >/dev/null
 TODAY=$(date +%F)
 if [ -f ".vela/reports/nightly-$TODAY.md" ]; then
   assert "nightly-YYYY-MM-DD.md written" "yes" "yes"
