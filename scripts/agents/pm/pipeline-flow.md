@@ -341,6 +341,33 @@ Claude Code 2.1.108+ 의 `/recap`은 세션 복귀 시 컨텍스트 요약을 �
 
 `vela-researcher`가 외부 라이브러리 API 언급 시 MCP를 우선 호출. PM은 `config.mcp.context7.enabled`만 참조하면 된다 (기본 true).
 
+### M13 — TaskCreate/TaskUpdate로 단계 노출 (v7.2 Phase D)
+
+`vela-engine state` 명령은 이제 `tasks` 배열을 반환한다 (파이프라인 단계 → task 1:1 매핑, `status ∈ {pending, in_progress, completed}`). PM은 다음을 수행한다:
+
+- **파이프라인 `init` 직후**: 한 번에 TaskCreate로 모든 단계를 일괄 등록
+- **`transition` 직후**: TaskUpdate로 이전 단계를 `completed`, 새 단계를 `in_progress`로 변경
+
+사용자는 claude.ai 앱/웹에서 task UI로 파이프라인 진행을 실시간 관찰할 수 있다. TaskCreate/TaskUpdate 실패는 non-fatal — 파이프라인은 계속 진행한다.
+
+### M14 — Nightly Learning Aggregation (opt-in)
+
+`scripts/cli/vela-nightly.js`는 `.vela/learnings/learnings.json`을 읽어 카테고리별(weakness/strength/recurring_issue)로 패턴을 집계한 `.vela/reports/nightly-{YYYY-MM-DD}.md`를 생성한다. 한 번만 CronCreate로 등록하면 된다:
+
+```
+CronCreate({
+  cron: "0 2 * * *",
+  prompt: "<<autonomous-loop>> node .vela/cli/vela-nightly.js",
+  reason: "Vela nightly learning digest"
+})
+```
+
+`--dry-run`으로 먼저 결과를 확인하고 등록 여부를 결정하라.
+
+### M15 — Managed Agents 외부 트리거 (실험)
+
+`scripts/managed/vela-managed-entry.js`와 `docs/managed-agents.md`. GitHub Actions / 외부 curl에서 파이프라인을 시작할 수 있다. 세부는 해당 문서 참조.
+
 ### M12 — Ralph Sentinel-prompt 자율 루프
 
 `ralph` 파이프라인(execute ↔ verify 최대 10회)은 PM tight-loop 대신 ScheduleWakeup의 autonomous-loop-dynamic sentinel을 사용할 수 있다:

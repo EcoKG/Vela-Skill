@@ -436,6 +436,20 @@ function cmdState() {
     artifact_dir: state._artifactDir,
     recommended_model: recommendedModel,
     cache_config: cacheConfig,
+    // v7.2 M13 — Pipeline steps as task records, suitable for the PM
+    // to pass to TaskCreate (on init) / TaskUpdate (on transition).
+    // Engine cannot call Claude Code tools itself; this is the structured
+    // input it hands to the PM.
+    tasks: Array.isArray(state.steps) ? state.steps.map((id, idx) => {
+      const def = steps.find((s) => s.id === id);
+      const isDone = Array.isArray(state.completed_steps) && state.completed_steps.includes(id);
+      const isCurrent = id === state.current_step;
+      return {
+        id: `vela-${state.pipeline_type || "pipeline"}-${idx}-${id}`,
+        content: def ? def.name || id : id,
+        status: isDone ? "completed" : (isCurrent ? "in_progress" : "pending"),
+      };
+    }) : [],
     // v7.1 M7: surface context-pack path so the PM can hand it to
     // executor/verifier spawns without having to check the filesystem
     // itself. Also exposes budget-exceeded.json if it was dropped.

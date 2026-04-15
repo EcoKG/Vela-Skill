@@ -100,6 +100,7 @@ const FILE_MANIFEST = [
   { src: "scripts/cli/vela-analyze.js", dst: "cli/vela-analyze.js" },
   { src: "scripts/cli/vela-cost.js", dst: "cli/vela-cost.js" },
   { src: "scripts/cli/vela-report.js", dst: "cli/vela-report.js" },
+  { src: "scripts/cli/vela-nightly.js", dst: "cli/vela-nightly.js" },  // v7.2 M14
   // Cache
   { src: "scripts/cache/treenode.js", dst: "cache/treenode.js" },
   // Root-level managed files
