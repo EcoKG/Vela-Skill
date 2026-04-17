@@ -15,10 +15,27 @@
 
 ## 빠른 시작
 
-### 설치 (1회)
+### 설치
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
+Claude Code 2.1.107+ 에서 한 줄로 설치:
+
+```
+/plugin install vela@EcoKG/Vela-Skill
+```
+
+프로젝트 최초 사용 시 한 번만 초기화:
+
+```
+/vela:install
+```
+
+이 명령이 `.vela/config.json`, `.vela/templates/`, `.vela/state/` 등 프로젝트별 구조를 생성한다. 기존 v7.x curl 설치 사용자는 `/vela:install`이 자동으로 레거시 `~/.vela/hooks/`, `~/.claude/skills/vela*/`, `settings.json`의 `_velaId: vela-*` 엔트리를 정리한다(backup 생성).
+
+업데이트:
+
+```
+/plugin update vela          # 플러그인 재빌드
+/vela:install --resync       # 프로젝트 템플릿 재동기화
 ```
 
 ### 3개 슬래시 명령 (v8.0)
@@ -40,18 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | 
 /vela status       # 현재 파이프라인 상태
 ```
 
-### 업데이트
-
-```bash
-# Claude Code 내부에서 (권장)
-/vela:update
-
-# 터미널에서 직접
-curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash          # 글로벌
-curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | bash -s -- --local  # + 현재 프로젝트
-```
-
-Vela는 `SessionStart` 훅으로 24h 캐시 버전 체크를 수행한다. 새 버전이 있으면 Claude가 "지금 업데이트할까요?"라고 묻는다.
+Vela는 `SessionStart` 훅으로 24h 캐시 버전 체크를 수행한다. 새 버전이 있으면 Claude가 "지금 업데이트할까요?"라고 묻는다. `curl install.sh/update.sh` 방식은 v8.0부터 deprecated이며 v8.2에서 제거 예정이다.
 
 ---
 

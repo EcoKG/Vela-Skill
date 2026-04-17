@@ -2,9 +2,25 @@
 
 전체 릴리스 이력. v7.3부터는 git log + 커밋 메시지가 1차 기록이므로 이 파일은 과거 마일스톤 요약 용도.
 
-## v7.3 (v8.0 전환 — 진행 중)
+## v8.0 (2026-04-17 — Plugin conversion + slim engine)
 
-대규모 슬림화 스프린트. Opus 4.7(2026-04-16 릴리스) 기준 최신 Claude Code 베스트 프랙티스에 맞춰 "엔진"에서 "거버넌스 스킬"로 회귀. 자세한 커밋 이력은 `git log v7.2.0..HEAD`.
+### Breaking
+
+- **설치 방식 변경**: `curl | bash install.sh` → `/plugin install vela@EcoKG/Vela-Skill`. 기존 curl 설치 사용자는 `/vela:install`이 자동으로 레거시(`~/.vela/hooks/`, `~/.claude/skills/vela*/`, `settings.json`의 `_velaId: vela-*`)를 정리(backup 생성). `install.sh`/`update.sh`는 1릴리스 deprecation shim.
+- **`scripts/install.js` 제거**(1,905 LOC). 프로젝트 `.vela/` 부트스트랩은 `/vela:install` (엔진의 `init-project` 서브커맨드)가 담당.
+- **훅 등록 방식 변경**: `~/.claude/settings.json` 수동 편집 → 플러그인 `hooks/hooks.json` 선언적 등록. `registerGlobalHooks`/`addGlobalHook`/`pruneDanglingVelaHooks`/`dedupVelaHooks` 모두 제거.
+- **루트 `SKILL.md` 제거**: 플러그인 매니페스트(`.claude-plugin/plugin.json`)가 역할 대체. `/vela:ship|fix|hotfix`는 `commands/*.md`에서 flat 네임스페이스로 노출.
+
+### 플러그인 전환 마일스톤
+
+- **M1** `d65ab07` — 플러그인 스켈레톤 (`.claude-plugin/plugin.json` + `commands/` + `agents/` + `hooks/` + `bin/vela-engine`)
+- **M2** `c3c95a9` — 60개 엔진 경로 참조(`node .vela/cli/vela-engine.js` → `vela-engine`) 일괄 치환
+- **M3** `6fd3d55` — `init-project` + `/vela:install` 구현 (프로젝트 `.vela/` 부트스트랩 + `--cleanup-legacy` 자동화)
+- **M4** `0c51d43` — `vela-session.js` 레거시 감지 + `/vela:install --cleanup-legacy` 안내 배너
+- **M5** `c7e0f80` — `install.js` + `deploy-common.sh` + 루트 `SKILL.md` 삭제, `install.sh`/`update.sh` shim 축소 (−2,587 LOC)
+- **M6** `94d4371` — 테스트 스위트 재배선: 5개 삭제(`test-install-flow`, `test-deploy-sync-parity`, `test-update-runtime`, `test-pm-coverage`, `test-global-hook-loadable`) + `test-engine-doctor` 재작성 + `helpers/setup-plugin-env.sh` (−2,580 LOC)
+
+### v7.3 엔진 슬림 (v8.0 번들, 누적 -9,000 LOC)
 
 - **M1a** `1ffa870` — V4.1 ARCHIVED 루트 MD 5개 삭제 (-399 LOC)
 - **M1b** `18faa65` — /vela:analyze PDF 파이프라인 제거 + vela-friction.js 분리 (-880 LOC)
@@ -13,9 +29,25 @@
 - **M5a** `ae55ca2` — Archival RFC/release docs 6개 삭제 (-2,334 LOC)
 - **M3** `4f84a9d` — 파이프라인 13→6 + 에이전트 8→4 + 명령 6→3 (-3,152 LOC)
 - **M4a** `bc7adbc` — 관찰 훅 2개 제거 (file-read-cache, post-tool-learning, -878 LOC)
-- **M5b** (진행 중) — README/SKILL 슬림 재작성
+- **M5b** `eb65efd` `de308e7` — SKILL/README 슬림 재작성
+- **M4b** `de14da9` — session 훅 2→1 병합
+- **M4c** `8444946` — gate 훅 2→1 병합 (v8.0 훅 목표 3개 달성)
+- **M4d** `5e15eea` — stop 훅 3→1 병합
+- **M4e-p1~p6** `6bd5327` `1ae726a` `a11ec86` `5f05566` `4562685` `6b4006a` — 엔진 2,412→425 LOC (−82%), 4 core 모듈 + 9 command 모듈로 분해
 
-누적 감소: 약 -9,000 LOC, -20+ 파일.
+### 전체 달성 지표
+
+| 항목 | v7.2 | v8.0 | 변화 |
+|---|---|---|---|
+| 훅 | 9 | 3 | −6 |
+| 파이프라인 단계 | 13 | 6 | −7 |
+| 에이전트 | 10+ | 4 | −6 |
+| 슬래시 명령 | 6 | 3 | −3 |
+| 엔진 파일(최대) | 2,412 LOC | 425 LOC | −82% |
+| 설치 레이어 | 3 | 2 | −1 |
+| 설치 명령 | `curl \| bash` + auto bootstrap | `/plugin install` + `/vela:install` | 단순화 |
+
+자세한 커밋 이력은 `git log v7.2.0..v8.0.0`.
 
 ## v7.2 (2026)
 

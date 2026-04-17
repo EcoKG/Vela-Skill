@@ -1,5 +1,7 @@
 {
-  "version": "7.2.0-dev",
+  "name": "vela",
+  "version": "8.0.0",
+  "description": "Vela Engine — 6-step sandbox development pipeline for Claude Code (plugin)",
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "playwright": "^1.52.0",
