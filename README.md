@@ -532,45 +532,9 @@ bash scripts/tests/test-change-surface.sh   # 17 assertions — 참조 무결성
 
 ## 버전 이력
 
-| 버전 | 마일스톤 | 주요 변경 |
-|------|---------|----------|
-| v1.0 | — | Gate Keeper + Gate Guard + Orchestrator + Tracker 기본 4 hook, 5종 파이프라인 |
-| v2.0 | M001 | 비용 최적화(Opus→Sonnet), Auto 모드, PM 속독, Bash 완화, persona.md |
-| v2.5 | M002 | Hook 4→18개, Stop/SubagentStop/Permission/Failure/Prompt/Async/Notification |
-| v3.0 | M003 | Agent SDK 통합, 5개 SDK 모듈, SDK 리뷰, PM 코드 작성 구조 차단 |
-| v3.1 | M004 | 분석 보고서, dep-analyzer + sdk-analyzer, vela-analyze CLI, PDF 생성, `/vela analyze` |
-| v3.1 | M005 | UI 세계관 고도화 — statusline 컬러 그라데이션+유니코드 프로그레스 바, Orchestrator 박스 드로잉 |
-| v3.1 | M006 | 글로벌 오염 정리 — ~/.claude/ 잔여물 회수, 서브스킬 플랫 복사 제거, install.js 자기 치유 가드 |
-| v3.1 | M007 | 프로젝트 전수 검수 — 코드베이스 ~14,500줄 정밀 감사. AUDIT-001~059 (High 8, Medium 24, Low 27) |
-| v3.2 | M008 | 전수 수정 — Fail-closed 게이트, 체인 연산자 차단(VK-08), 파이프라인 완화(trivial/hotfix exit_gate:[]), execFileSync 전환(35+ callers), SQL parameterization, SDK null guards. 21개 테스트 스위트 230/230 PASS |
-| v3.2 | M009 | 배포 고도화 — FILE_MANIFEST 단일화, orphan cleanup, 버전 일원화, config migration |
-| v3.3 | M010 | **SDK 오케스트레이터 전환** — 18개 훅 → SDK query() 기반 vela-pipeline.js 오케스트레이터. 훅 전면 제거, SDK callbacks로 Gate Keeper/Guard 구현. 파이프라인 밖 훅 오버헤드 0 |
-| v3.3 | M011 | README + GitHub 문서 최신화 — SDK 오케스트레이터 전환 이후 문서-코드 불일치 전면 해소 |
-| v3.3 | M012 | 전수 조사 + 발전 방향 수립 — UPGRADE-REPORT.md (P0~P5 우선순위 매트릭스, M013~M016 마일스톤 제안) |
-| v4.0 | M013 | **v4.0 전면 고도화** — sdk-custom-tools.js MCP 서버 팩토리, vela-wave.js PoC, SDK structured output 이중 추출, 레거시 훅 잔재 전면 제거, SDK mock 안정화, install.js 14개 감사 지적 반영. 18개 테스트 스위트 PASS |
-| v4.0 | M014 | .md 전수 최신화 — M010~M013 변경 사항을 README/SKILL/next-step 등에 전수 반영, vela-analyze.js stale 경로 버그 수정, dead 정리 후 push |
-| v4.0 | M015 | CSA 참조 무결성 자동 검증 — change-surface.js 순수 모듈로 exit_gate 자동 차단, 사라진 토큰 교차 참조 감지 |
-| v4.0 | M016 | 개발 환경 정리 — Vela 설치 잔재(.vela/, .claude/) 및 홈 디렉토리 오염 완전 제거, GSD 전용 환경 확립 |
-| v4.0 | M017 | SDK/모델/예산 버그픽스 — 8건 SDK 관련 버그픽스 전수 자동화 검증 |
-| v4.0 | M018 | change-surface.js 범용 토큰 확장 — JS/TS 전용 → 범용 식별자 변경 교차 참조 감지 |
-| v4.0 | M019 | PDF 한글 + config 경로 + 글로벌 설치 — PDF 한글 깨짐 해결, config.json 경로 불일치 수정, npm 글로벌 설치 전환 |
-| v4.0 | M020 | 퍼미션 마찰 제거 — PM GSD식 이해 확인, 읽기 도구 퍼미션 프롬프트 제거, 파이프라인 시작 시 퍼미션 안내 |
-| v4.0 | M021 | PM 오케스트레이터 지시 단절 수정 — vela.md·pipeline-flow.md가 vela-pipeline.js run을 유일한 실행 인터페이스로 지시, SDK Guard 콜백·도구 추적·비용/시간 추적 전면 활성화 |
-| v4.0 | M022 | 리뷰 시스템 + 오케스트레이터 복원력 강화 — 단계별 채점 기준 분기, ESM globalImport 수정, escalate_to_pm graceful 종료, approval _source provenance, report_md_exists 게이트, sub_phase 추적 |
-| v4.0 | M023 | SDK 오케스트레이터 Research 실패 복구 + 관찰 가능성 강화 — rw-artifact mode + artifactDir-scoped Write guard, project_mode 주입(bootstrap/targeted/exploratory), cost 보존 + denied-tools.json artifact + Turns used 로그, sdk-failure-recovery.md, pipeline-consistency invariant 테스트 |
-| v4.1 | M024 | maxTurns 상한 제거 — SDK 에이전트 자율 턴 소비, turn-config.js 삭제, 6개 SDK 모듈에서 maxTurns 코드 21곳 제거 |
-| v6.0 | M025 | **SDK 완전 제거 — 네이티브 Agent 도구 기반 재구성** — @anthropic-ai/claude-agent-sdk 의존성 제거. vela-pipeline.js/vela-sprint.js/sdk-*.js 삭제. PM(vela.md)이 Agent(subagent_type=...) 직접 오케스트레이션. 10개 역할 에이전트 파일 생성 (vela-researcher/planner/plan-checker/executor/reviewer/verifier/diff-summary/learning/sprint-planner/analyzer). VK-09 제거. install.js가 11개 에이전트를 .claude/agents/에 배포. |
-| v6.0.1 | M026 | **품질-중립 성능·비용 최적화** — 10개 에이전트 frontmatter에 `model:`/`tools:`/`effort:` 명시(Sonnet 품질 크리티컬 + Haiku 기계 검사), review-gate 기본 `validation_rounds: 3 → 1` & `steps: ["execute"]`만 재검증, 에이전트별 도구 정의 로드 축소. 모든 품질 게이트(5차원 20/25, CRITICAL 검출, plan 섹션 검증, ref_integrity, TDD 3단계) 무손상. 기존 사용자 config는 `skipOnUpgrade`로 보호. |
-| v6.1.0 | M027 | **v6.1 Precision & Locate** — Universal Locate 단계를 모든 5개 scale에 도입(`init → locate → ...`). `scripts/shared/locate.js` 결정론적 모듈(ripgrep + git grep + git ls-files, LLM 0). `vela-engine locate` 신규 CLI + `targets_json_exists` exit gate. PM/researcher/planner/executor 프롬프트에 `targetsPath` 주입. Slash command 재구성: `/vela:start` deprecated, `/vela:{small,medium,large,ralph,hotfix}` 신규. Scale Mismatch Guard (heuristic 제안, 자동 변경 금지). `autoDetectScale()` deprecated, `--scale` 누락 시 medium 폴백. 벤치마크 **15/15 recall 100%**(scripts/tests/test-locate-bench.sh). research(targeted) mode 자동 활성화로 기존 67k+ research 토큰 대폭 절감 예상. v7.0 surgical pipeline과 완전 호환. |
-| v7.0.0 | M028 | **v7.0 Surgical Pipeline** — Target-First 패러다임 구현. 신규 `surgical` 파이프라인(8단계: init → locate → research → spec → patch → verify → commit → finalize). `vela-planner`가 `mode: spec` 분기를 지원하여 기존 추상 plan.md 대신 결정론적 `patch-spec.md`(file:line Before/After + Explicitly out of scope)를 작성한다. `vela-verifier`에 out-of-scope 위반 검사 추가 — patch-spec에 명시된 범위를 벗어난 변경은 test 통과해도 FAIL. `vela-engine`에 `patch_spec_complete` exit gate + `implementation_complete` gate의 approval 파일 이름 동적 해석. 신규 `/vela:fix` 명령 (일상 작업의 새 기본 추천). `templates/pipeline.json` v1.4: `standard.steps_only` 명시, `spec`/`patch` step 정의, `surgical` 파이프라인 + `scales: fix → surgical`. E2E 테스트 `test-surgical-pipeline.sh` 35/35 PASS. v6.1 위에서 추가만 — 기존 파이프라인 동작 무손상. |
-| v7.1.0 | M029–M040 | **v7.1 hicoco hardening** — 실전 운영 피드백 기반 12개 마일스톤. M1 commit/branch non-git guard, M2 verify bash safelist (`npm test | tee` 등 허용), M3 verifier Phase 3 smoke test, M4 plan-checker sanity heuristics + Architecture Guardrails (forbidden imports), M5 slug fs-safe truncation + request.txt side-car, M6 `vela-engine doctor` health check, M7 context-pack.json (primary 파일 프리로드, 중복 Read 감소), M8 `advance` one-shot record+transition, M9 role budgets (per-scale tool_use 가이드라인, non-fatal), M10 vela-file-read-cache.js observational hook, M11 researcher targeted scope enforcement, M12 CLAUDE.md cd-rule injection on upgrade. |
-| v7.1.1 | — | deploy-common.sh sync_local_project 드리프트 수정 — 새 파일(M10 hook 등)이 로컬 `.vela/`에 복사 안 되던 회귀 픽스. |
-| v7.1.2 | — | CI-enforced FILE_MANIFEST ↔ sync_local_project 패리티 테스트 — 두 경로가 다시 벌어지는 것을 CI에서 자동 차단. |
-| v7.1.3 | — | install.js 훅 self-heal — settings.json에 남은 dangling hook entry (파일 없는데 등록된 것) 자동 정리. |
-| v7.1.4 | — | 글로벌 훅 constants.js wrapper → real source 전환 — `~/.vela/hooks/shared/constants.js`가 wrapper일 때 MODULE_NOT_FOUND 이슈 해결. |
-| v7.1.5 | — | install.js constants.js 후보 검색 범위 확장 — 프로젝트 로컬 `.vela/shared/constants.js` 발견 가능하도록 4단계 fallback. |
-| v7.2.0 | Harness | **v7.2 harness engineering** — 구조화된 stderr (VK/VG 코드 명시), gate-events.jsonl 텔레메트리, config.gate_policy (chain_operator/web_in_write/researcher_scope ask/allow/block 3-way 정책). `/vela:analyze friction`에서 훅 마찰 hotspot 표면화 가능. |
-| v7.2.0 | M1–M15 | **v7.2 V8 Strengthening (Phase A–D)** — 2026 Claude Code (2.1.107–109) 아키텍처 정합. **Phase A** (M1 프롬프트 캐싱 1h TTL 설정 surface, M2 역할별 모델 라우팅 `recommended_model` per step, M3 cache config 노출). **Phase B** (M4 reviewer+verifier 병렬, M5 research 3관점 병렬 + vela-researcher-merge 경량 통합 에이전트, M6 executor worktree isolation opt-in, M7 learning/diff-summary `run_in_background`). **Phase C** (M8 vela-post-tool-learning + vela-subagent-stop 두 관찰용 훅 추가 — PostToolUse / SubagentStop 이벤트 지원, M9 `/recap` 문서, M10 Skill 도구 빌트인 `/security-review` `/review` auto-invoke, M11 Context7 MCP researcher docs lookup, M12 ralph sentinel autonomous loop). **Phase D** (M13 엔진 `state` 출력에 `tasks[]` 추가 — Claude Code session task-list 도구로 파이프라인 진행 노출, M14 `vela-nightly.js` 학습 집계 CLI, M15 Managed Agents 외부 트리거 엔트리 + docs/managed-agents.md). 모든 변경 opt-in 플래그 — V7 호환 기본값. CI 커버리지 `test-v72-{engine-fields,hooks,nightly-managed}.sh` 26/26 PASS. |
+전체 마일스톤 이력은 **[CHANGELOG.md](CHANGELOG.md)**를 참조. 커밋별 상세는 `git log`.
+
+**현재 — v7.3 (v8.0 전환)**: Opus 4.7 기준 슬림화. 파이프라인 13→6, 에이전트 10+→4, 명령 6→3, 총 -9,000 LOC.
 
 ---
 
