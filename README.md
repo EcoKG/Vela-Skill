@@ -216,8 +216,6 @@ PM (vela.md agent)
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
   ├── vela-gate-keeper.js        (VK-01~08: 모드별 도구 제한)      [PreToolUse]
   ├── vela-gate-guard.js         (VG-03~15: 단계 순서 강제)        [PreToolUse]
-  ├── vela-file-read-cache.js    (v7.1 M10: 중복 Read 측정)         [PreToolUse]
-  ├── vela-post-tool-learning.js (v7.2 M8: Write/Edit 저널)          [PostToolUse]
   ├── vela-stop.js               (auto 모드 중 중단 방지)           [Stop]
   ├── vela-review-gate.js        (APPROVE 후 N회 재검증 강제)       [Stop]
   └── vela-subagent-stop.js      (v7.2 M8: 에이전트별 텔레메트리)   [SubagentStop]
@@ -591,7 +589,7 @@ v7.2에서 `.vela/config.json`에 4개 신규 섹션이 추가됐다. **모든 �
 ```
 
 - `ttl: "1h" | "5m" | "off"` — 1h는 long-running 파이프라인에 최적. **env 필수**: Claude Code 실행 전에 `export ENABLE_PROMPT_CACHING_1H=1`. 미설정 시 `vela-session-start.js`가 경고만 출력.
-- `read_cache` — `vela-file-read-cache.js`(v7.1 M10)의 임계값. `warn_threshold` 이상 같은 파일을 읽으면 stderr 경고.
+- `read_cache` — ~~`vela-file-read-cache.js`~~ v7.3-M4에서 훅 제거됨. Claude Code v2026 내장 파일 캐시가 역할 대체 (config.read_cache는 레거시 설정으로 남았으나 기능 없음).
 
 ### `models` — 역할별 모델 라우팅 (M2)
 

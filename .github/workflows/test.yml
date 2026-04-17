@@ -329,13 +329,6 @@ jobs:
           bash scripts/tests/test-researcher-targeted-scope.sh 2>&1 | tee /tmp/researcher-targeted-scope.log
           exit ${PIPESTATUS[0]}
 
-      - name: File read cache hook (v7.1 M10)
-        id: s_frc
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-file-read-cache.sh 2>&1 | tee /tmp/file-read-cache.log
-          exit ${PIPESTATUS[0]}
-
       - name: Engine doctor health check (v7.1 M6)
         id: s_doc
         continue-on-error: true
@@ -348,13 +341,6 @@ jobs:
         continue-on-error: true
         run: |
           bash scripts/tests/test-deploy-sync-parity.sh 2>&1 | tee /tmp/deploy-sync-parity.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Hook self-heal (v7.1.3 — dangling entry prune)
-        id: s_shl
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-hook-selfheal.sh 2>&1 | tee /tmp/hook-selfheal.log
           exit ${PIPESTATUS[0]}
 
       - name: Global hook loadability (v7.1.4 — MODULE_NOT_FOUND guard)
@@ -452,10 +438,8 @@ jobs:
           R_CMD: ${{ steps.s_cmd.outcome }}
           R_VBA: ${{ steps.s_vba.outcome }}
           R_RTS: ${{ steps.s_rts.outcome }}
-          R_FRC: ${{ steps.s_frc.outcome }}
           R_DOC: ${{ steps.s_doc.outcome }}
           R_DSP: ${{ steps.s_dsp.outcome }}
-          R_SHL: ${{ steps.s_shl.outcome }}
           R_GHL: ${{ steps.s_ghl.outcome }}
           R_GSE: ${{ steps.s_gse.outcome }}
           R_GTL: ${{ steps.s_gtl.outcome }}
@@ -499,10 +483,8 @@ jobs:
           Unit: CLAUDE.md cd-rule injection (v7.1 M12)	${R_CMD}	/tmp/claudemd-cd-rule.log
           Unit: verify bash safelist (v7.1 M2)	${R_VBA}	/tmp/verify-bash-allowed.log
           Unit: researcher targeted scope (v7.1 M11)	${R_RTS}	/tmp/researcher-targeted-scope.log
-          Unit: file read cache (v7.1 M10)	${R_FRC}	/tmp/file-read-cache.log
           Unit: engine doctor (v7.1 M6)	${R_DOC}	/tmp/engine-doctor.log
           Unit: deploy sync parity (v7.1.2)	${R_DSP}	/tmp/deploy-sync-parity.log
-          Unit: hook self-heal (v7.1.3)	${R_SHL}	/tmp/hook-selfheal.log
           Unit: global hook loadable (v7.1.4)	${R_GHL}	/tmp/global-hook-loadable.log
           Unit: gate structured stderr (v7.2)	${R_GSE}	/tmp/gate-stderr.log
           Unit: gate telemetry jsonl (v7.2)	${R_GTL}	/tmp/gate-telemetry.log

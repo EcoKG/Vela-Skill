@@ -14,8 +14,7 @@ _VELA_DEPLOY_COMMON_LOADED=1
 # v7.1.1 drift fix:
 #   Pre-v7.1.1 this function enumerated individual hook filenames and
 #   hard-coded `templates/pipeline.json` as the only template to copy.
-#   v7.1 added:
-#     - scripts/hooks/vela-file-read-cache.js (M10)
+#   v7.1 added (v7.3-M4: vela-file-read-cache.js 제거됨):
 #     - templates/role-budgets.json (M9)
 #     - templates/guidelines/* (M3)
 #     - templates/plan-templates/* (M4)
@@ -44,8 +43,8 @@ sync_local_project() {
   cp "$SRC/scripts/shared/"*.js .vela/shared/ 2>/dev/null
 
   # Hooks — v7.1.1: glob over scripts/hooks/*.js so any hook added to the
-  # repo (M10's vela-file-read-cache, any future hook) is automatically
-  # deployed. session-start-version-check.js and vela-session-start.js
+  # repo (v7.3-M4: vela-file-read-cache/post-tool-learning 제거됨) is
+  # automatically deployed. session-start-version-check.js and vela-session-start.js
   # live under hooks/ too and are meant for the global install path, not
   # the project — filter them out explicitly so the project .vela/hooks/
   # stays clean.

@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# test-v72-hooks.sh — v7.2 M8
+# test-v72-hooks.sh — v7.2 M8 (v7.3-M4 트림됨)
 #
-# Two new observational hooks were added this phase:
-#   vela-post-tool-learning.js  (PostToolUse on Write/Edit)
-#     → appends to <artifactDir>/edit-journal.jsonl
-#   vela-subagent-stop.js       (SubagentStop)
-#     → appends to <artifactDir>/agent-telemetry.jsonl
-#
-# Both must always exit 0 (non-fatal / observational) and both
-# must be no-ops when no active pipeline exists.
+# vela-post-tool-learning.js 관련 테스트 블록은 v7.3-M4에서 훅이
+# 제거되면서 삭제됨. SubagentStop 훅(vela-subagent-stop.js) 검증만 남김.
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_EDIT="$SCRIPT_DIR/../hooks/vela-post-tool-learning.js"
 HOOK_SUB="$SCRIPT_DIR/../hooks/vela-subagent-stop.js"
 
 PASS=0
@@ -29,47 +22,15 @@ assert() {
 }
 
 TMPROOT="$(mktemp -d)"
+trap "rm -rf $TMPROOT" EXIT
+
 PROJECT="$TMPROOT/project"
 AD="$PROJECT/.vela/artifacts/20260415T120000-test"
 mkdir -p "$AD"
 cat > "$AD/pipeline-state.json" <<'EOF'
-{ "status": "active", "pipeline_type": "standard", "current_step": "execute" }
+{ "status": "active", "pipeline_type": "ship", "current_step": "execute" }
 EOF
 
-echo "=== v7.2 M8 — vela-post-tool-learning hook ==="
-
-# Write event → edit-journal.jsonl line
-echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/demo.txt\"},\"cwd\":\"$PROJECT\",\"session_id\":\"sess1\"}" \
-  | node "$HOOK_EDIT" >/dev/null 2>&1
-EXIT1=$?
-assert "post-tool-learning exit 0 on Write" "$EXIT1" "0"
-
-JOURNAL="$AD/edit-journal.jsonl"
-if [ -f "$JOURNAL" ]; then
-  assert "edit-journal.jsonl created" "yes" "yes"
-  LINE_COUNT=$(wc -l < "$JOURNAL" | tr -d ' ')
-  assert "edit-journal.jsonl has 1 line" "$LINE_COUNT" "1"
-  TOOL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$JOURNAL','utf8').trim()).tool)")
-  assert "journal entry tool=Write" "$TOOL" "Write"
-  OP=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$JOURNAL','utf8').trim()).op)")
-  assert "journal entry op=write" "$OP" "write"
-else
-  assert "edit-journal.jsonl created" "no" "yes"
-fi
-
-# Non-Write/Edit tool must be a no-op (no new line)
-echo "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/tmp/x\"},\"cwd\":\"$PROJECT\"}" \
-  | node "$HOOK_EDIT" >/dev/null 2>&1
-LINE_COUNT2=$(wc -l < "$JOURNAL" | tr -d ' ')
-assert "Read is no-op (journal still 1 line)" "$LINE_COUNT2" "1"
-
-# Edit with replace_all=true → op=edit-replace-all
-echo "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/tmp/demo.txt\",\"replace_all\":true},\"cwd\":\"$PROJECT\"}" \
-  | node "$HOOK_EDIT" >/dev/null 2>&1
-LAST_OP=$(tail -1 "$JOURNAL" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8').trim()).op)")
-assert "Edit replace_all → op=edit-replace-all" "$LAST_OP" "edit-replace-all"
-
-echo ""
 echo "=== v7.2 M8 — vela-subagent-stop hook ==="
 
 # Subagent stop with usage → agent-telemetry.jsonl line
@@ -91,19 +52,15 @@ else
 fi
 
 echo ""
-echo "=== No active pipeline → both hooks are no-ops ==="
+echo "=== No active pipeline → hook is a no-op ==="
 
 EMPTY="$TMPROOT/empty"
 mkdir -p "$EMPTY"
-echo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/x\"},\"cwd\":\"$EMPTY\"}" \
-  | node "$HOOK_EDIT" >/dev/null 2>&1
-assert "post-tool-learning is no-op outside a pipeline (exit 0)" "$?" "0"
-
-echo "{\"subagent_type\":\"x\",\"cwd\":\"$EMPTY\"}" | node "$HOOK_SUB" >/dev/null 2>&1
+echo '{"subagent_type":"vela-researcher","cwd":"'$EMPTY'","usage":{"input_tokens":10,"output_tokens":5}}' \
+  | node "$HOOK_SUB" >/dev/null 2>&1
 assert "subagent-stop is no-op outside a pipeline (exit 0)" "$?" "0"
 
-rm -rf "$TMPROOT"
-
 echo ""
-echo "📊 Summary: $PASS/$TOTAL passed, $FAIL failed"
-[ $FAIL -eq 0 ]
+echo "────────────────────────────────────────"
+echo "Total: $TOTAL, Pass: $PASS, Fail: $FAIL"
+[ "$FAIL" = "0" ]

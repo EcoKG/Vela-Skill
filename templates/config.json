@@ -40,7 +40,7 @@
     "minTokenLength": 3
   },
   "cache": {
-    "__doc__": "v7.2 M1/M3 — Prompt caching policy. ttl='1h' requires ENABLE_PROMPT_CACHING_1H=1 env var to be exported before launching claude; session-start hook warns when the env var is missing. read_cache is observational (PreToolUse measurement hook) — set enabled=false to disable the read-cache.jsonl logging.",
+    "__doc__": "v7.2 M1/M3 — Prompt caching policy. ttl='1h' requires ENABLE_PROMPT_CACHING_1H=1 env var. v7.3-M4: read_cache 관측 훅 제거됨 (Claude Code v2026 내장 캐시 사용). 하위 read_cache 섹션은 레거시 설정이며 동작하지 않는다.",
     "enabled": true,
     "ttl": "1h",
     "read_cache": {

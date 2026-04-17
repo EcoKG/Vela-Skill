@@ -64,7 +64,7 @@ function checkUncommittedChanges(cwd) {
 }
 
 /**
- * v7.1 M9/M10 — roll up budget-exceeded.json + read-cache.jsonl from the
+ * v7.1 M9 (v7.3-M4: M10 roll-up 제거) — budget-exceeded.json 집계만.
  * active pipeline's artifact dir into tool-usage.json. Called from
  * saveSessionEnd so /vela:analyze can aggregate across sessions without
  * re-walking artifact trees.
@@ -105,32 +105,8 @@ function rollupToolUsage(cwd, pipelineState) {
       } catch {/* skip */}
     }
 
-    // M10: read-cache.jsonl (written by vela-file-read-cache hook per
-    // Read tool call). Aggregate dup counts per (agent,file,sha).
-    const rcPath = path.join(activeArtifactDir, "read-cache.jsonl");
-    if (fs.existsSync(rcPath)) {
-      try {
-        const counts = new Map();
-        const raw = fs.readFileSync(rcPath, "utf8");
-        for (const line of raw.split(/\r?\n/)) {
-          const t = line.trim();
-          if (!t) continue;
-          const obj = parseJsonSafe(t);
-          if (!obj || !obj.file) continue;
-          const key = `${obj.agent || "unknown"}|${obj.file}|${obj.sha || ""}`;
-          counts.set(key, (counts.get(key) || 0) + 1);
-        }
-        const dupes = [];
-        for (const [key, n] of counts.entries()) {
-          if (n >= 2) {
-            const [agent, file, sha] = key.split("|");
-            dupes.push({ agent, file, sha, count: n });
-          }
-        }
-        dupes.sort((a, b) => b.count - a.count);
-        rollup.duplicateReads = dupes.slice(0, 20);
-      } catch {/* skip */}
-    }
+    // v7.3-M4: M10 read-cache.jsonl 처리 블록 제거 — vela-file-read-cache 훅 삭제됨.
+    // Claude Code v2026 내장 파일 읽기 캐시가 중복 Read 측정 역할 대체.
 
     // Write a consolidated tool-usage.json next to the artifacts for
     // /vela:analyze to aggregate later.

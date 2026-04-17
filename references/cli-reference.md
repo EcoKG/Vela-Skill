@@ -48,7 +48,7 @@ node .vela/cli/vela-engine.js doctor
 검사 항목: core dirs, `cli/vela-engine.js`, `templates/pipeline.json` parse,
 `config.json` parse, agent manifest, v7.1 파일들 (role-budgets.json,
 plan-templates/quick.md, guidelines/live-processes.json,
-guidelines/smoke-test.sh.example, hooks/vela-file-read-cache.js).
+guidelines/smoke-test.sh.example). v7.3-M4에서 vela-file-read-cache.js 훅은 제거됨.
 
 ### `locate` 명령 (v6.1, LLM 0)
 

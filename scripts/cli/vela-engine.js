@@ -1022,7 +1022,6 @@ function cmdDoctor() {
     ".vela/templates/plan-templates/quick.md",
     ".vela/templates/guidelines/live-processes.json",
     ".vela/templates/guidelines/smoke-test.sh.example",
-    ".vela/hooks/vela-file-read-cache.js",
   ];
   for (const f of v71Files) {
     const abs = path.join(CWD, f);

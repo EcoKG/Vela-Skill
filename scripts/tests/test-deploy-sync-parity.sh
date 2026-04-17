@@ -218,7 +218,6 @@ fi
 echo "📋 Phase 3: v7.1 drift regression guards (explicit)"
 
 for v71_file in \
-  "hooks/vela-file-read-cache.js" \
   "templates/role-budgets.json" \
   "templates/plan-templates/quick.md" \
   "templates/guidelines/live-processes.json" \

@@ -17,7 +17,7 @@
 #      on failure
 #   4. doctor checks each v7.1 new artifact (role-budgets.json,
 #      plan-templates/quick.md, guidelines/live-processes.json,
-#      guidelines/smoke-test.sh.example, vela-file-read-cache.js)
+#      guidelines/smoke-test.sh.example) — v7.3-M4에서 vela-file-read-cache 제거
 #   5. vela.md session-start snippet documents the doctor call
 # ──────────────────────────────────────────────────────────────
 set -uo pipefail
@@ -113,8 +113,7 @@ for required in \
   "file:.vela/templates/role-budgets.json" \
   "file:.vela/templates/plan-templates/quick.md" \
   "file:.vela/templates/guidelines/live-processes.json" \
-  "file:.vela/templates/guidelines/smoke-test.sh.example" \
-  "file:.vela/hooks/vela-file-read-cache.js"; do
+  "file:.vela/templates/guidelines/smoke-test.sh.example"; do
   # Use node to query the JSON directly — multi-line structure makes
   # line-wise grep unreliable (name and ok are on separate lines).
   RESULT=$(node -e "
@@ -152,15 +151,11 @@ echo "📋 Phase 4: multiple missing files all reported"
 install_sandbox
 
 rm "$PROJECT/.vela/templates/plan-templates/quick.md"
-rm "$PROJECT/.vela/hooks/vela-file-read-cache.js"
 rm "$PROJECT/.vela/templates/guidelines/smoke-test.sh.example"
 
 EXIT=$(run_doctor)
 grep -q 'quick.md' /tmp/m6-stdout
 note "doctor reports missing plan-templates/quick.md" $?
-
-grep -q 'vela-file-read-cache.js' /tmp/m6-stdout
-note "doctor reports missing vela-file-read-cache.js" $?
 
 grep -q 'smoke-test.sh.example' /tmp/m6-stdout
 note "doctor reports missing smoke-test.sh.example" $?

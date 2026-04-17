@@ -145,8 +145,7 @@ for hook_name in \
   vela-gate-keeper.js \
   vela-gate-guard.js \
   vela-stop.js \
-  vela-review-gate.js \
-  vela-file-read-cache.js; do
+  vela-review-gate.js; do
   assert_loadable "$hook_name"
 done
 

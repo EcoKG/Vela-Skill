@@ -45,15 +45,12 @@ FAKE_HOME=""
 PROJECT=""
 
 # The active hooks that must always be present after install/upgrade.
-# v7.1.1: added vela-file-read-cache.js to catch the deploy-common.sh
-# sync_local_project() drift where the v7.1 hook was never copied
-# because the function enumerated hook filenames by hand.
+# v7.3-M4: vela-file-read-cache.js + vela-post-tool-learning.js 제거됨.
 ACTIVE_HOOKS=(
   vela-gate-keeper.js
   vela-gate-guard.js
   vela-stop.js
   vela-review-gate.js
-  vela-file-read-cache.js
 )
 
 # Legacy V4.1 hooks that must NOT reappear in .vela/hooks/.
@@ -226,10 +223,9 @@ for hook in "${ACTIVE_HOOKS[@]}"; do
   assert_file "A: ~/.vela/hooks/$hook present (global)" "$FAKE_HOME/.vela/hooks/$hook"
 done
 
-# v7.1 M10: global settings.json has 3 PreToolUse (gate-keeper,
-# gate-guard, file-read-cache) + 2 Stop (vela-stop, vela-review-gate).
-# Pre-v7.1 there were only 2 PreToolUse.
-assert_eq "A: PreToolUse vela hook count"  "3" "$(count_global_hooks PreToolUse)"
+# v7.3-M4: file-read-cache 훅 제거로 PreToolUse 3 → 2 복귀 (gate-keeper, gate-guard).
+# Stop는 여전히 2 (vela-stop, vela-review-gate).
+assert_eq "A: PreToolUse vela hook count"  "2" "$(count_global_hooks PreToolUse)"
 assert_eq "A: Stop vela hook count"        "2" "$(count_global_hooks Stop)"
 
 # Hook commands point at the global hooks dir under the fake HOME
@@ -430,8 +426,8 @@ for legacy in "${LEGACY_HOOKS[@]}"; do
 done
 
 # sync_local_project internally runs install.js → global hooks registered.
-# v7.1 M10 adds vela-file-read-cache to PreToolUse bringing the count to 3.
-assert_eq "E: global PreToolUse count after sync" "3" "$(count_global_hooks PreToolUse)"
+# v7.3-M4: file-read-cache 제거로 PreToolUse 3 → 2.
+assert_eq "E: global PreToolUse count after sync" "2" "$(count_global_hooks PreToolUse)"
 assert_eq "E: global Stop count after sync"       "2" "$(count_global_hooks Stop)"
 
 # ─────────────────────────────────────────────────────────────
@@ -485,8 +481,8 @@ install_js > /dev/null 2>&1 || true
 
 PRE_UNINSTALL_PRE=$(count_global_hooks PreToolUse)
 PRE_UNINSTALL_STOP=$(count_global_hooks Stop)
-# v7.1 M10 raised PreToolUse from 2 to 3 (added vela-file-read-cache).
-assert_eq "F: baseline PreToolUse count" "3" "$PRE_UNINSTALL_PRE"
+# v7.3-M4: file-read-cache 제거로 PreToolUse 다시 2.
+assert_eq "F: baseline PreToolUse count" "2" "$PRE_UNINSTALL_PRE"
 assert_eq "F: baseline Stop count"       "2" "$PRE_UNINSTALL_STOP"
 
 UNINSTALL_OUT=$(install_js uninstall 2>&1 || true)
