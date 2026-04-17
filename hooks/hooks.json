@@ -1,0 +1,49 @@
+{
+  "_doc": "v8.0 M1 — Declarative hook registration for Claude Code plugin system. Replaces scripts/install.js registerGlobalHooks + addGlobalHook + pruneDanglingVelaHooks. ${CLAUDE_PLUGIN_ROOT} is injected at hook invocation time by Claude Code.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/vela-session.js\"",
+            "timeout": 8
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/vela-gate.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/vela-stop.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/vela-stop.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

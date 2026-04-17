@@ -70,14 +70,9 @@ echo "📋 Phase 0: slugifyEx unit behaviour"
 
 # Feed slugifyEx a battery of inputs and parse its output.
 OUT=$(node -e "
-  const path = require('path');
-  // Load the engine module functions without executing the CLI entry.
-  // slugifyEx is not exported, so we grep the function out and eval.
-  const fs = require('fs');
-  const src = fs.readFileSync('$REPO_ROOT/scripts/cli/vela-engine.js', 'utf8');
-  const m = src.match(/function slugifyEx\([\s\S]+?\n\}/);
-  if (!m) throw new Error('slugifyEx not found');
-  eval(m[0]);
+  // v7.3-M4e-p1: slugifyEx moved from scripts/cli/vela-engine.js to
+  // scripts/core/cli-utils.js. Load directly from the extracted module.
+  const { slugifyEx } = require('$REPO_ROOT/scripts/core/cli-utils.js');
   const cases = [
     ['short', 'add oauth'],
     ['long-ko', '책별로 다른 사이트에서 다운로드 대상이 되는 URL 구조 를 파싱하는 baseUrl 처리'],

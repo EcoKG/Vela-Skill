@@ -64,10 +64,7 @@ bench_run() {
         // self-match on the scenario text embedded in this file.
         'scripts/tests/test-locate-bench.sh',
         'scripts/tests/test-locate.sh',
-        // Exclude the RFC docs — they enumerate all the test scenarios
-        // in free-form prose, creating artificial matches.
-        'docs/v6.1-rfc-precision-locate.md',
-        'docs/v7.0-rfc-surgical-pipeline.md',
+        // (v7.3-M5: archival RFCs removed; no doc exclusions needed)
       ],
     });
     const first = r.primary[0] ? r.primary[0].file : '';
@@ -138,14 +135,14 @@ scenario "B1 kebab CLI tool" \
   "vela-engine init 명령의 에러 메시지 개선" \
   "scripts/cli/vela-engine.js"
 scenario "B2 kebab hook" \
-  "vela-review-gate 훅의 validation_rounds 로깅" \
-  "scripts/hooks/vela-review-gate.js"
+  "vela-stop 훅의 review gate validation_rounds 로깅" \
+  "scripts/hooks/vela-stop.js"
 scenario "B3 kebab module" \
   "change-surface 모듈의 parseDiff 경로 보정" \
   "scripts/shared/change-surface.js"
-scenario "B4 kebab hook gate-keeper" \
-  "vela-gate-keeper 훅의 VK-08 메시지 수정" \
-  "scripts/hooks/vela-gate-keeper.js"
+scenario "B4 kebab hook gate" \
+  "vela-gate 훅의 VK-08 메시지 수정" \
+  "scripts/hooks/vela-gate.js"
 
 echo ""
 echo "📋 Group C: Symbol-only (PascalCase/camelCase)"

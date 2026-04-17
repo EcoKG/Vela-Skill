@@ -228,58 +228,14 @@ auto_still_on=$(read_state_field "auto")
 assert_eq "auto still true" "true" "$auto_still_on"
 cancel_active > /dev/null
 
-# ── Test 5: checkpoint gate: auto + plan-check.md → 자동 통과 ──
-echo ""
-echo "📋 Test 5: checkpoint gate: auto + plan-check.md 존재 → 자동 통과"
-run_engine init "test gate auto pass" --auto --force > /dev/null
-ARTIFACT_DIR=$(get_artifact_dir)
-
-# Create artifacts needed to pass earlier gates and reach checkpoint
-echo "# Plan" > "$ARTIFACT_DIR/plan.md"
-echo "# Plan Check" > "$ARTIFACT_DIR/plan-check.md"
-
-# Manually advance state to checkpoint by modifying pipeline-state.json
-STATE_FILE="$ARTIFACT_DIR/pipeline-state.json"
-node -e "
-  const fs = require('fs');
-  const s = JSON.parse(fs.readFileSync('$STATE_FILE','utf-8'));
-  s.current_step = 'checkpoint';
-  s.current_step_index = 2;
-  s.completed_steps = ['init', 'plan'];
-  fs.writeFileSync('$STATE_FILE', JSON.stringify(s, null, 2));
-"
-
-# Try transition — should pass because auto + plan-check.md exists
-result=$(run_engine transition)
-assert_contains "transition passes checkpoint" '"ok": true' "$result"
-assert_contains "advanced past checkpoint" '"current_step": "execute"' "$result"
-cancel_active > /dev/null
-
-# ── Test 6: checkpoint gate: auto + plan-check.md 부재 → 차단 ──
-echo ""
-echo "📋 Test 6: checkpoint gate: auto + plan-check.md 부재 → 차단"
-run_engine init "test gate auto block" --auto --force > /dev/null
-ARTIFACT_DIR=$(get_artifact_dir)
-
-# Create plan.md but NOT plan-check.md
-echo "# Plan" > "$ARTIFACT_DIR/plan.md"
-
-# Manually advance state to checkpoint
-STATE_FILE="$ARTIFACT_DIR/pipeline-state.json"
-node -e "
-  const fs = require('fs');
-  const s = JSON.parse(fs.readFileSync('$STATE_FILE','utf-8'));
-  s.current_step = 'checkpoint';
-  s.current_step_index = 2;
-  s.completed_steps = ['init', 'plan'];
-  fs.writeFileSync('$STATE_FILE', JSON.stringify(s, null, 2));
-"
-
-# Try transition — should fail because plan-check.md missing
-result=$(run_engine transition)
-assert_contains "transition blocked at checkpoint" '"ok": false' "$result"
-assert_contains "missing user_approved" 'user_approved' "$result"
-cancel_active > /dev/null
+# ── Tests 5+6 REMOVED (v7.3-M3 pipeline collapse) ──
+# Pre-M3 versions exercised the `checkpoint` step's `plan_check_pass`
+# and `user_approved` exit gates. Both the step and the gates were
+# deleted when the pipeline collapsed from 13→6 stages — plan now
+# includes a Self-Check section that replaces plan-check, and there
+# is no separate user-approval gate (approval-{step}.json files cover
+# that role now). The checkpoint-specific auto-mode behaviour has
+# no v8.0 equivalent to test against.
 
 # ── Test 7: pass → reject 1회 → auto 유지 (연속 2회 아님) ──
 echo ""

@@ -1,13 +1,10 @@
 {
-  "version": "1.4",
+  "version": "2.0",
+  "_doc": "v8.0 — 3 pipelines × 6 steps (down from 6 variants × 13 steps). Opus 4.7 adaptive thinking + task_budget 시대에 맞춘 슬림화. v7.3-M3에서 plan-check/checkpoint/branch/diff-summary/learning/finalize 단계 삭제: plan 단계가 research+self-check 흡수, commit 단계가 branch+finalize 흡수, reviewer가 verify+diff-summary 흡수.",
   "pipelines": {
-    "standard": {
-      "description": "Full 13-step pipeline — locate → research → plan → plan-check → checkpoint → branch → execute → verify → diff-summary → learning → commit → finalize",
-      "steps_only": [
-        "init", "locate", "research", "plan", "plan-check", "checkpoint",
-        "branch", "execute", "verify", "diff-summary", "learning",
-        "commit", "finalize"
-      ],
+    "ship": {
+      "description": "Default 6-step pipeline — init → locate → plan → execute → verify → commit",
+      "steps_only": ["init", "locate", "plan", "execute", "verify", "commit"],
       "steps": [
         {
           "id": "init",
@@ -17,7 +14,8 @@
           "entry_gate": [],
           "exit_gate": ["artifact_dir_created", "mode_detected", "git_clean"],
           "artifacts": [".vela/artifacts/{YYYYMMDD}T{HHmmss}-{slug}/meta.json"],
-          "max_revisions": 1
+          "max_revisions": 1,
+          "_note": "v8.0: branch 생성 로직 흡수 — init이 vela/{slug} 브랜치도 생성한다."
         },
         {
           "id": "locate",
@@ -28,30 +26,14 @@
           "exit_gate": ["targets_json_exists"],
           "artifacts": ["targets.json"],
           "max_revisions": 1,
-          "description": "v6.1 Universal Locate — deterministic file/symbol identification via `vela-engine locate` (no LLM)"
-        },
-        {
-          "id": "research",
-          "name": "Research & Analysis",
-          "actor": "agent",
-          "mode": "rw-artifact",
-          "entry_gate": ["targets_json_exists"],
-          "exit_gate": ["research_md_exists", "approval_exists"],
-          "artifacts": ["research.md"],
-          "max_revisions": 3,
-          "treenode_cache": true,
-          "team": {
-            "worker_role": "researcher",
-            "reviewer_role": "reviewer",
-            "approver": "pm"
-          }
+          "description": "Universal Locate — deterministic file/symbol identification via vela-engine locate (no LLM)"
         },
         {
           "id": "plan",
-          "name": "Implementation Plan",
+          "name": "Research + Plan",
           "actor": "agent",
           "mode": "write",
-          "entry_gate": ["research_md_exists"],
+          "entry_gate": ["targets_json_exists"],
           "exit_gate": ["plan_md_exists", "plan_architecture_complete", "approval_exists"],
           "artifacts": ["plan.md"],
           "max_revisions": 3,
@@ -61,53 +43,17 @@
             "approver": "pm"
           },
           "architecture": {
-            "required_sections": ["## Architecture", "## Class Specification", "## Test Strategy"],
+            "required_sections": ["## Architecture", "## Class Specification", "## Test Strategy", "## Self-Check"],
             "min_section_bytes": 200
-          }
-        },
-        {
-          "id": "plan-check",
-          "name": "Plan Verification",
-          "actor": "agent",
-          "mode": "read",
-          "entry_gate": ["plan_md_exists"],
-          "exit_gate": ["plan_check_pass"],
-          "artifacts": ["plan-check.md"],
-          "max_revisions": 2
-        },
-        {
-          "id": "checkpoint",
-          "name": "User Approval",
-          "actor": "user",
-          "mode": "read",
-          "entry_gate": ["plan_check_pass"],
-          "exit_gate": ["user_approved"],
-          "artifacts": [],
-          "max_revisions": 1
-        },
-        {
-          "id": "branch",
-          "name": "Branch Creation",
-          "actor": "pm",
-          "mode": "read",
-          "entry_gate": ["user_approved"],
-          "exit_gate": ["branch_created"],
-          "artifacts": [],
-          "max_revisions": 1,
-          "skip_when": ["type in docs,analysis"],
-          "git": {
-            "modes": ["auto", "prompt", "none"],
-            "default_mode": "auto",
-            "prefix": "vela/",
-            "protected_branches": ["main", "master", "develop"]
-          }
+          },
+          "_note": "v8.0: research 단계 흡수 — planner가 파일 읽고 분석한 뒤 plan.md 작성. plan-check 흡수 — ## Self-Check 섹션에서 자체 검증."
         },
         {
           "id": "execute",
           "name": "Implementation",
           "actor": "agent",
           "mode": "readwrite",
-          "entry_gate": ["branch_created"],
+          "entry_gate": ["plan_md_exists"],
           "exit_gate": ["implementation_complete", "review_exists", "ref_integrity"],
           "artifacts": ["task-summary.md"],
           "max_revisions": 5,
@@ -120,77 +66,26 @@
           }
         },
         {
-          "id": "spec",
-          "name": "Patch Specification",
-          "actor": "agent",
-          "mode": "write",
-          "entry_gate": ["research_md_exists", "targets_json_exists"],
-          "exit_gate": ["patch_spec_complete", "approval_exists"],
-          "artifacts": ["patch-spec.md"],
-          "max_revisions": 3,
-          "team": {
-            "worker_role": "planner",
-            "reviewer_role": "reviewer",
-            "approver": "pm"
-          },
-          "description": "(v7.0 skeleton — reserved) Target-first pipeline spec stage. Planner invoked with mode: spec to produce patch-spec.md (file:line Before/After + out-of-scope). Not yet wired into any active pipeline.",
-          "v7_skeleton": true
-        },
-        {
-          "id": "patch",
-          "name": "Patch Application",
-          "actor": "agent",
-          "mode": "readwrite",
-          "entry_gate": ["patch_spec_complete"],
-          "exit_gate": ["implementation_complete", "review_exists", "ref_integrity"],
-          "artifacts": ["task-summary.md", "diff.patch"],
-          "max_revisions": 5,
-          "sub_phases": ["test-write", "implement", "refactor"],
-          "sub_phase_tracking": true,
-          "team": {
-            "worker_role": "executor",
-            "reviewer_role": "reviewer",
-            "approver": "pm"
-          },
-          "description": "(v7.0 skeleton — reserved) Target-first pipeline patch stage. Executor applies patch-spec.md strictly within targets.primary scope. Not yet wired into any active pipeline.",
-          "v7_skeleton": true
-        },
-        {
           "id": "verify",
-          "name": "Verification",
+          "name": "Verification + Review",
           "actor": "agent",
           "mode": "rw-artifact",
           "entry_gate": ["implementation_complete"],
           "exit_gate": ["verification_md_exists", "ref_integrity"],
           "artifacts": ["verification.md"],
-          "max_revisions": 3
-        },
-        {
-          "id": "diff-summary",
-          "name": "Diff Summary Review",
-          "actor": "agent",
-          "mode": "rw-artifact",
-          "entry_gate": ["verification_md_exists"],
-          "exit_gate": ["diff_summary_exists"],
-          "artifacts": ["diff-summary.md", "approval-diff-summary.json"],
-          "max_revisions": 1
-        },
-        {
-          "id": "learning",
-          "name": "Learning Extraction",
-          "actor": "agent",
-          "mode": "rw-artifact",
-          "entry_gate": ["diff_summary_exists"],
-          "exit_gate": ["learning_md_exists"],
-          "artifacts": ["learning.md"],
-          "max_revisions": 1
+          "max_revisions": 3,
+          "team": {
+            "worker_role": "reviewer",
+            "approver": "pm"
+          },
+          "_note": "v8.0: reviewer가 테스트+린트+타입체크(Bash) + diff 요약까지 한 번에 수행. 별도 verifier/diff-summary 에이전트 없음. diff >500 LOC 시 /ultrareview 번들 스킬로 에스컬레이션."
         },
         {
           "id": "commit",
-          "name": "Commit Changes",
+          "name": "Commit + Finalize",
           "actor": "pm",
           "mode": "read",
-          "entry_gate": ["learning_md_exists"],
+          "entry_gate": ["verification_md_exists"],
           "exit_gate": ["changes_committed"],
           "artifacts": ["diff.patch"],
           "max_revisions": 1,
@@ -205,86 +100,35 @@
               "analysis": "chore"
             },
             "include_pipeline_ref": true
-          }
-        },
-        {
-          "id": "finalize",
-          "name": "Finalization",
-          "actor": "pm",
-          "mode": "write",
-          "entry_gate": ["changes_committed"],
-          "exit_gate": ["report_md_exists"],
-          "artifacts": ["report.md"],
-          "max_revisions": 1,
-          "git": {
-            "pr_mode": "prompt",
-            "branch_cleanup_hint": true
-          }
+          },
+          "_note": "v8.0: finalize 흡수 — commit 시점에 git diff --stat으로 요약을 자동 생성, report.md 파일은 선택."
         }
       ]
     },
 
-    "quick": {
-      "description": "Quick 7-step pipeline — locate → plan → execute → verify → commit → finalize (no research/plan-check/checkpoint/branch/diff-summary/learning)",
-      "inherits": "standard",
-      "steps_only": ["init", "locate", "plan", "execute", "verify", "commit", "finalize"],
+    "fix": {
+      "description": "Surgical 6-step pipeline — 작은 수정(<50 LOC diff)에 최적화. plan이 mode=spec으로 patch-spec.md(file:line Before/After) 생성, executor가 범위 엄수.",
+      "inherits": "ship",
+      "steps_only": ["init", "locate", "plan", "execute", "verify", "commit"],
       "overrides": {
         "plan": {
-          "entry_gate": ["targets_json_exists"],
-          "exit_gate": ["plan_md_exists", "plan_architecture_complete"]
+          "artifacts": ["patch-spec.md"],
+          "architecture": {
+            "required_sections": ["## Target Files", "## Before/After", "## Explicitly out of scope"],
+            "min_section_bytes": 100
+          },
+          "_note": "mode=spec — planner가 patch-spec.md 작성. plan.md 대신 file:line Before/After + out-of-scope 범위."
         },
         "execute": {
-          "entry_gate": ["plan_md_exists"]
-        },
-        "commit": {
-          "entry_gate": ["verification_md_exists"]
-        }
-      }
-    },
-
-    "trivial": {
-      "description": "Trivial 5-step pipeline — locate → execute → commit → finalize (no planning, no verification gates)",
-      "inherits": "standard",
-      "steps_only": ["init", "locate", "execute", "commit", "finalize"],
-      "overrides": {
-        "execute": {
-          "entry_gate": ["targets_json_exists"],
-          "exit_gate": ["implementation_complete"],
-          "max_revisions": 3
-        },
-        "commit": {
-          "entry_gate": ["implementation_complete"]
-        }
-      }
-    },
-
-    "ralph": {
-      "description": "Ralph TDD loop — locate → execute ↔ verify repeats up to 10× until tests pass, then commit",
-      "inherits": "standard",
-      "steps_only": ["init", "locate", "execute", "verify", "commit", "finalize"],
-      "overrides": {
-        "execute": {
-          "entry_gate": ["targets_json_exists"],
-          "exit_gate": ["implementation_complete"],
-          "max_revisions": 10,
-          "sub_phases": ["test-write", "implement", "refactor"],
-          "sub_phase_tracking": true
-        },
-        "verify": {
-          "entry_gate": ["implementation_complete"],
-          "exit_gate": ["verification_md_exists"],
-          "max_revisions": 10,
-          "ralph_loop": true
-        },
-        "commit": {
-          "entry_gate": ["verification_md_exists"]
+          "max_revisions": 3,
+          "_note": "patch-spec.md의 ## Before/After 블록만 정확히 적용. ## Explicitly out of scope 영역 수정 금지."
         }
       }
     },
 
     "hotfix": {
-      "description": "Hotfix 4-step pipeline — locate → execute → commit (docs/config/README changes, no review)",
-      "inherits": "standard",
+      "description": "Minimal 4-step pipeline — docs/config 수정. plan/verify 생략.",
+      "inherits": "ship",
       "steps_only": ["init", "locate", "execute", "commit"],
       "overrides": {
         "execute": {
@@ -298,44 +142,18 @@
           "exit_gate": ["changes_committed"]
         }
       }
-    },
-
-    "surgical": {
-      "description": "(v7.0 SKELETON — RESERVED) Target-first surgical pipeline — locate → research(targeted) → spec → patch → verify → commit → finalize. Uses patch-spec.md (file:line Before/After) instead of abstract plan.md. Planner runs with mode: spec; Executor applies spec strictly within targets.primary scope. NOT YET FULLY WIRED — requires vela-planner.md mode:spec branching and vela-verifier.md out-of-scope check (v7.0 work).",
-      "inherits": "standard",
-      "steps_only": ["init", "locate", "research", "spec", "patch", "verify", "commit", "finalize"],
-      "overrides": {
-        "research": {
-          "entry_gate": ["targets_json_exists"],
-          "exit_gate": ["research_md_exists", "approval_exists"]
-        },
-        "spec": {
-          "entry_gate": ["research_md_exists", "targets_json_exists"],
-          "exit_gate": ["patch_spec_complete", "approval_exists"]
-        },
-        "patch": {
-          "entry_gate": ["patch_spec_complete"],
-          "exit_gate": ["implementation_complete", "review_exists", "ref_integrity"]
-        },
-        "verify": {
-          "entry_gate": ["implementation_complete"],
-          "exit_gate": ["verification_md_exists", "ref_integrity"]
-        },
-        "commit": {
-          "entry_gate": ["verification_md_exists"]
-        }
-      },
-      "v7_skeleton": true
     }
   },
 
   "scales": {
-    "small":  "trivial",
-    "medium": "quick",
-    "large":  "standard",
-    "ralph":  "ralph",
+    "_deprecated_doc": "v8.0: small/medium/large/ralph는 모두 ship으로 통합됨. 구 명령 사용 시 skills/{small,medium,large,ralph}/SKILL.md의 deprecation 셤이 ship으로 자동 리다이렉트.",
+    "small":  "ship",
+    "medium": "ship",
+    "large":  "ship",
+    "ralph":  "ship",
     "hotfix": "hotfix",
-    "fix":    "surgical"
+    "fix":    "fix",
+    "ship":   "ship"
   },
 
   "modes": {
@@ -371,7 +189,6 @@
       ".vela/cache/",
       ".vela/state/",
       ".vela/artifacts/",
-      ".vela/sprints/",
       ".vela/tracker-signals.json",
       ".vela/write-log.jsonl",
       "*.vela-tmp"
@@ -379,11 +196,11 @@
   },
 
   "presets": {
-    "auth":      { "scale": "large",  "task_type": "code",           "hint": "인증/권한/OAuth 구현" },
-    "api-crud":  { "scale": "medium", "task_type": "code",           "hint": "CRUD API 엔드포인트 추가" },
-    "bugfix":    { "scale": "ralph",  "task_type": "code-bug",       "hint": "버그 수정 (TDD 반복 루프)" },
-    "refactor":  { "scale": "medium", "task_type": "code-refactor",  "hint": "코드 리팩터링" },
-    "migration": { "scale": "large",  "task_type": "code",           "hint": "DB 마이그레이션/스키마 변경" },
+    "auth":      { "scale": "ship",   "task_type": "code",           "hint": "인증/권한/OAuth 구현" },
+    "api-crud":  { "scale": "ship",   "task_type": "code",           "hint": "CRUD API 엔드포인트 추가" },
+    "bugfix":    { "scale": "fix",    "task_type": "code-bug",       "hint": "버그 수정 (surgical, 작은 diff)" },
+    "refactor":  { "scale": "ship",   "task_type": "code-refactor",  "hint": "코드 리팩터링" },
+    "migration": { "scale": "ship",   "task_type": "code",           "hint": "DB 마이그레이션/스키마 변경" },
     "docs":      { "scale": "hotfix", "task_type": "docs",           "hint": "문서/README/주석 수정" }
   }
 }

@@ -1,4 +1,4 @@
-name: Vela V6 Tests
+name: Vela v8.0 Plugin Tests
 
 on:
   push:
@@ -62,6 +62,7 @@ jobs:
           echo "::group::tools"
           node --version 2>&1 || echo "(node not yet installed)"
           git --version
+          jq --version 2>&1 | head -1 || echo "(jq not yet installed)"
           shellcheck --version 2>&1 | head -2 || echo "(no shellcheck yet)"
           echo "::endgroup::"
 
@@ -79,19 +80,22 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install shellcheck + ripgrep
+      - name: Install shellcheck + ripgrep + jq
         id: s_sc_install
         continue-on-error: true
         run: |
           # ripgrep is required by test-change-surface.sh (reference
-          # integrity scan). Pre-installed on most ubuntu-latest images
-          # but guard for images without it.
-          if ! command -v shellcheck >/dev/null || ! command -v rg >/dev/null; then
+          # integrity scan). jq validates plugin manifests. Pre-installed
+          # on most ubuntu-latest images but guard for images without them.
+          if ! command -v shellcheck >/dev/null \
+             || ! command -v rg >/dev/null \
+             || ! command -v jq >/dev/null; then
             sudo apt-get update -qq
-            sudo apt-get install -y shellcheck ripgrep
+            sudo apt-get install -y shellcheck ripgrep jq
           fi
           shellcheck --version | head -2
           rg --version | head -1
+          jq --version | head -1
 
       - name: Configure git identity
         id: s_gitconfig
@@ -102,23 +106,71 @@ jobs:
           git config --global commit.gpgsign false
 
       # ───────────────────────────────────────────────────────────
-      # 1. Static checks (syntax + lint + meta-wiring)
+      # 1. Static checks (syntax + lint + plugin manifest validity)
       # ───────────────────────────────────────────────────────────
       - name: Syntax check — Node.js files
         id: s_syntax
         continue-on-error: true
         run: |
           set -e
-          node --check scripts/install.js
+          # v8.0: install.js removed. Core + commands + hooks + shared +
+          # cache + cli all need syntax verification.
           node --check scripts/cli/vela-engine.js
-          node --check scripts/cli/vela-analyze.js
-          for f in scripts/hooks/*.js scripts/shared/*.js scripts/cache/*.js; do
-            [ -f "$f" ] || continue
-            echo "  checking $f"
-            node --check "$f"
+          node --check scripts/cli/vela-friction.js
+          node --check scripts/cli/vela-cost.js
+          node --check scripts/cli/vela-report.js
+          node --check scripts/cli/vela-nightly.js
+          for dir in scripts/hooks scripts/shared scripts/cache scripts/core scripts/commands; do
+            for f in "$dir"/*.js; do
+              [ -f "$f" ] || continue
+              echo "  checking $f"
+              node --check "$f"
+            done
           done
 
-      - name: Shellcheck — test scripts
+      - name: Plugin manifest validity
+        id: s_plugin
+        continue-on-error: true
+        run: |
+          set -e
+          # v8.0 plugin layout — these files define the plugin entry points.
+          # Malformed JSON here would make the plugin fail to load entirely.
+          jq . .claude-plugin/plugin.json >/dev/null
+          echo "✅ .claude-plugin/plugin.json valid JSON"
+          jq . hooks/hooks.json >/dev/null
+          echo "✅ hooks/hooks.json valid JSON"
+          jq . package.json >/dev/null
+          echo "✅ package.json valid JSON"
+
+          # Required manifest fields
+          NAME=$(jq -r .name .claude-plugin/plugin.json)
+          VERSION=$(jq -r .version .claude-plugin/plugin.json)
+          [ "$NAME" = "vela" ] || { echo "❌ plugin.json name must be 'vela' (got $NAME)"; exit 1; }
+          [ -n "$VERSION" ] && [ "$VERSION" != "null" ] \
+            || { echo "❌ plugin.json version is empty"; exit 1; }
+          echo "✅ plugin name=$NAME version=$VERSION"
+
+          # bin wrapper must be executable
+          [ -x bin/vela-engine ] \
+            || { echo "❌ bin/vela-engine not executable"; exit 1; }
+          echo "✅ bin/vela-engine +x"
+
+          # Every hook listed in hooks.json must point at an existing file.
+          # Use `while read` not `for in $(...)` because commands contain
+          # spaces (`node "path"`) and would word-split mid-command.
+          # ${CLAUDE_PLUGIN_ROOT} is substituted with $PWD for this check
+          # since that is where the plugin lives in the CI checkout.
+          jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' hooks/hooks.json \
+          | while IFS= read -r cmd; do
+              path=$(echo "$cmd" | sed 's|\${CLAUDE_PLUGIN_ROOT}|.|g; s|"||g' | awk '{print $2}')
+              if [ ! -f "$path" ]; then
+                echo "❌ hook references missing file: $path"
+                exit 1
+              fi
+              echo "  ✅ hook target exists: $path"
+            done
+
+      - name: Shellcheck — test scripts + shims
         id: s_sc
         continue-on-error: true
         run: |
@@ -126,19 +178,20 @@ jobs:
           # Exclusions:
           #   SC2086  — intentional word splitting in test fixtures
           #   SC2016  — single quotes for node -e heredocs
-          #   SC1091  — not following sourced files (deploy-common.sh)
+          #   SC1091  — not following sourced files (helpers/setup-plugin-env.sh)
           #   SC2155  — declare+assign on same line is readable for short locals
-          #   SC2164  — `cd "$x"` without `|| exit`. v7.1 added many such
-          #             calls inside `( cd … ; cmd )` subshells where a
-          #             failed cd is already constrained by the subshell,
-          #             and inside test sandboxes where a missing $PROJECT
-          #             path is itself a test failure that surfaces in the
-          #             assertion rather than silently running in cwd.
+          #   SC2164  — `cd "$x"` without `|| exit` — already inside subshells
+          #             or test sandboxes where a missing path is a visible
+          #             test failure, not silent fallback to cwd.
+          #
+          # v8.0: deploy-common.sh removed. install.sh/update.sh are
+          # deprecation shims (still checked).
           shellcheck \
             --severity=warning \
             --exclude=SC2086,SC2016,SC1091,SC2155,SC2164 \
             scripts/tests/*.sh \
-            scripts/deploy-common.sh \
+            scripts/tests/helpers/*.sh \
+            bin/vela-engine \
             install.sh \
             update.sh
 
@@ -159,6 +212,24 @@ jobs:
             echo "✅ all $(ls scripts/tests/test-*.sh | wc -l) test files are wired in"
           fi
           exit $MISSING
+
+      - name: No stale legacy references in docs or commands
+        id: s_stale
+        continue-on-error: true
+        run: |
+          set -e
+          # M2 migrated `node .vela/cli/vela-engine.js` → `vela-engine` wrapper
+          # across all user-facing doc and agent surfaces. Guard against
+          # regressions by failing CI if the old pattern sneaks back into
+          # commands/, agents/, references/, or the engine-internal
+          # nextAction hints (scripts/commands/state-machine.js).
+          if grep -rn 'node \.vela/cli/vela-engine' \
+              commands/ agents/ references/ \
+              scripts/commands/state-machine.js 2>/dev/null; then
+            echo "::error::Found legacy 'node .vela/cli/vela-engine.js' reference — use 'vela-engine' (bin wrapper) instead"
+            exit 1
+          fi
+          echo "✅ no legacy engine-path references in commands/agents/references/state-machine"
 
       # ───────────────────────────────────────────────────────────
       # 2. Unit / integration test suites (each with id + log file)
@@ -205,7 +276,7 @@ jobs:
           bash scripts/tests/test-s03-relaxation.sh 2>&1 | tee /tmp/s03-relaxation.log
           exit ${PIPESTATUS[0]}
 
-      - name: Review Gate (vela-review-gate.js — V2-4)
+      - name: Review Gate (stop-hook review-gate path)
         id: s_rg
         continue-on-error: true
         run: |
@@ -217,27 +288,6 @@ jobs:
         continue-on-error: true
         run: |
           bash scripts/tests/test-engine-record.sh 2>&1 | tee /tmp/engine-record.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Sprint manager
-        id: s_sm
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-sprint-manager.sh 2>&1 | tee /tmp/sprint-manager.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Full pipeline scenario (E2E)
-        id: s_fp
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-full-pipeline.sh 2>&1 | tee /tmp/full-pipeline.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Install flow (E2E deploy/upgrade/uninstall)
-        id: s_if
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-install-flow.sh 2>&1 | tee /tmp/install-flow.log
           exit ${PIPESTATUS[0]}
 
       - name: Auto mode
@@ -256,7 +306,7 @@ jobs:
           git --version
           echo "::endgroup::"
           bash scripts/tests/test-change-surface.sh 2>&1 | tee /tmp/change-surface.log
-          exit ${PIPESTATUS[1]}
+          exit ${PIPESTATUS[0]}
 
       - name: Worktree manager
         id: s_wm
@@ -279,27 +329,6 @@ jobs:
           bash scripts/tests/test-locate-bench.sh 2>&1 | tee /tmp/locate-bench.log
           # always exit 0 — this is a measurement, not a gate
           exit 0
-
-      - name: Surgical pipeline skeleton E2E (v7.0)
-        id: s_sur
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-surgical-pipeline.sh 2>&1 | tee /tmp/surgical-pipeline.log
-          exit ${PIPESTATUS[0]}
-
-      - name: PM coverage static check (v7.0.1)
-        id: s_pmc
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-pm-coverage.sh 2>&1 | tee /tmp/pm-coverage.log
-          exit ${PIPESTATUS[0]}
-
-      - name: update.sh runtime integration (v7.0.3)
-        id: s_upd
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-update-runtime.sh 2>&1 | tee /tmp/update-runtime.log
-          exit ${PIPESTATUS[0]}
 
       - name: Engine walk-up project root (v7.0.6)
         id: s_ewu
@@ -329,39 +358,11 @@ jobs:
           bash scripts/tests/test-engine-advance.sh 2>&1 | tee /tmp/engine-advance.log
           exit ${PIPESTATUS[0]}
 
-      - name: CLAUDE.md cd-rule injection on upgrade (v7.1 M12)
-        id: s_cmd
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-claudemd-cd-rule-injection.sh 2>&1 | tee /tmp/claudemd-cd-rule.log
-          exit ${PIPESTATUS[0]}
-
       - name: Gate Keeper verify bash safelist (v7.1 M2)
         id: s_vba
         continue-on-error: true
         run: |
           bash scripts/tests/test-verify-bash-allowed.sh 2>&1 | tee /tmp/verify-bash-allowed.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Verifier Phase 3 smoke test (v7.1 M3)
-        id: s_vsm
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-verifier-smoke.sh 2>&1 | tee /tmp/verifier-smoke.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Plan checker sanity heuristics (v7.1 M4)
-        id: s_pcs
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-plan-checker-sanity.sh 2>&1 | tee /tmp/plan-checker-sanity.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Architecture Guardrails forbidden imports (v7.1 M4)
-        id: s_agr
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-architecture-guardrails.sh 2>&1 | tee /tmp/architecture-guardrails.log
           exit ${PIPESTATUS[0]}
 
       - name: Researcher targeted scope enforcement (v7.1 M11)
@@ -371,53 +372,11 @@ jobs:
           bash scripts/tests/test-researcher-targeted-scope.sh 2>&1 | tee /tmp/researcher-targeted-scope.log
           exit ${PIPESTATUS[0]}
 
-      - name: Context Pack contract (v7.1 M7)
-        id: s_cpk
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-context-pack.sh 2>&1 | tee /tmp/context-pack.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Role budgets (v7.1 M9)
-        id: s_rbg
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-role-budgets.sh 2>&1 | tee /tmp/role-budgets.log
-          exit ${PIPESTATUS[0]}
-
-      - name: File read cache hook (v7.1 M10)
-        id: s_frc
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-file-read-cache.sh 2>&1 | tee /tmp/file-read-cache.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Engine doctor health check (v7.1 M6)
+      - name: Engine doctor health check (v8.0 plugin-aware)
         id: s_doc
         continue-on-error: true
         run: |
           bash scripts/tests/test-engine-doctor.sh 2>&1 | tee /tmp/engine-doctor.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Deploy sync parity (v7.1.2 — FILE_MANIFEST ↔ deploy-common)
-        id: s_dsp
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-deploy-sync-parity.sh 2>&1 | tee /tmp/deploy-sync-parity.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Hook self-heal (v7.1.3 — dangling entry prune)
-        id: s_shl
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-hook-selfheal.sh 2>&1 | tee /tmp/hook-selfheal.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Global hook loadability (v7.1.4 — MODULE_NOT_FOUND guard)
-        id: s_ghl
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-global-hook-loadable.sh 2>&1 | tee /tmp/global-hook-loadable.log
           exit ${PIPESTATUS[0]}
 
       # ───────────────────────────────────────────────────────────
@@ -470,6 +429,48 @@ jobs:
           exit ${PIPESTATUS[0]}
 
       # ───────────────────────────────────────────────────────────
+      # v8.0 plugin smoke — end-to-end /vela:install flow
+      # ───────────────────────────────────────────────────────────
+      - name: Plugin bootstrap smoke (init-project in fresh repo)
+        id: s_boot
+        continue-on-error: true
+        run: |
+          set -e
+          FIXTURE=$(mktemp -d)
+          ( cd "$FIXTURE" \
+            && git init -q \
+            && git -c commit.gpgsign=false commit --allow-empty -q -m init )
+          INIT_CWD="$FIXTURE" CLAUDE_PLUGIN_ROOT="$PWD" \
+            node scripts/cli/vela-engine.js init-project \
+            > /tmp/plugin-bootstrap.log 2>&1
+
+          # Validate the fixture got the expected structure.
+          set +e
+          FAIL=0
+          for expected in \
+              "$FIXTURE/.vela/config.json" \
+              "$FIXTURE/.vela/templates/pipeline.json" \
+              "$FIXTURE/.vela/state/workspace.json" \
+              "$FIXTURE/.vela/artifacts" \
+              "$FIXTURE/.vela/learnings"; do
+            if [ ! -e "$expected" ]; then
+              echo "  ❌ init-project did not create: $expected" \
+                | tee -a /tmp/plugin-bootstrap.log
+              FAIL=$((FAIL + 1))
+            else
+              echo "  ✅ $expected"
+            fi
+          done
+
+          # workspace.json must record both projectRoot and pluginRoot
+          jq -e '.projectRoot and .pluginRoot and .version' \
+            "$FIXTURE/.vela/state/workspace.json" >/dev/null \
+            || { echo "  ❌ workspace.json missing required fields"; FAIL=$((FAIL + 1)); }
+
+          rm -rf "$FIXTURE"
+          [ "$FAIL" -eq 0 ]
+
+      # ───────────────────────────────────────────────────────────
       # 3. Reporting — GITHUB_STEP_SUMMARY + sticky PR comment +
       #    artifact upload on failure
       # ───────────────────────────────────────────────────────────
@@ -483,8 +484,10 @@ jobs:
           R_SC_INSTALL: ${{ steps.s_sc_install.outcome }}
           R_GITCONFIG: ${{ steps.s_gitconfig.outcome }}
           R_SYNTAX: ${{ steps.s_syntax.outcome }}
+          R_PLUGIN: ${{ steps.s_plugin.outcome }}
           R_SHELLCHECK: ${{ steps.s_sc.outcome }}
           R_META: ${{ steps.s_meta.outcome }}
+          R_STALE: ${{ steps.s_stale.outcome }}
           R_PURITY: ${{ steps.s_purity.outcome }}
           R_GK: ${{ steps.s_gk.outcome }}
           R_VK07: ${{ steps.s_vk07.outcome }}
@@ -493,40 +496,25 @@ jobs:
           R_S03: ${{ steps.s_s03.outcome }}
           R_RG: ${{ steps.s_rg.outcome }}
           R_ER: ${{ steps.s_er.outcome }}
-          R_SM: ${{ steps.s_sm.outcome }}
-          R_FP: ${{ steps.s_fp.outcome }}
-          R_IF: ${{ steps.s_if.outcome }}
           R_AM: ${{ steps.s_am.outcome }}
           R_CS: ${{ steps.s_cs.outcome }}
           R_WM: ${{ steps.s_wm.outcome }}
           R_LOC: ${{ steps.s_loc.outcome }}
           R_LOCB: ${{ steps.s_locb.outcome }}
-          R_SUR: ${{ steps.s_sur.outcome }}
-          R_PMC: ${{ steps.s_pmc.outcome }}
-          R_UPD: ${{ steps.s_upd.outcome }}
           R_EWU: ${{ steps.s_ewu.outcome }}
           R_CNG: ${{ steps.s_cng.outcome }}
           R_SLUG: ${{ steps.s_slug.outcome }}
           R_ADV: ${{ steps.s_adv.outcome }}
-          R_CMD: ${{ steps.s_cmd.outcome }}
           R_VBA: ${{ steps.s_vba.outcome }}
-          R_VSM: ${{ steps.s_vsm.outcome }}
-          R_PCS: ${{ steps.s_pcs.outcome }}
-          R_AGR: ${{ steps.s_agr.outcome }}
           R_RTS: ${{ steps.s_rts.outcome }}
-          R_CPK: ${{ steps.s_cpk.outcome }}
-          R_RBG: ${{ steps.s_rbg.outcome }}
-          R_FRC: ${{ steps.s_frc.outcome }}
           R_DOC: ${{ steps.s_doc.outcome }}
-          R_DSP: ${{ steps.s_dsp.outcome }}
-          R_SHL: ${{ steps.s_shl.outcome }}
-          R_GHL: ${{ steps.s_ghl.outcome }}
           R_GSE: ${{ steps.s_gse.outcome }}
           R_GTL: ${{ steps.s_gtl.outcome }}
           R_GPO: ${{ steps.s_gpo.outcome }}
           R_V72EF: ${{ steps.s_v72ef.outcome }}
           R_V72HK: ${{ steps.s_v72hk.outcome }}
           R_V72NM: ${{ steps.s_v72nm.outcome }}
+          R_BOOT: ${{ steps.s_boot.outcome }}
         run: |
           set -e
           # Build an ordered list: label | outcome | log_file
@@ -535,11 +523,13 @@ jobs:
           Setup: runner diagnostics	${R_RUNNER}
           Setup: checkout	${R_CHECKOUT}
           Setup: node	${R_NODE_SETUP}
-          Setup: shellcheck install	${R_SC_INSTALL}
+          Setup: shellcheck+rg+jq install	${R_SC_INSTALL}
           Setup: git config	${R_GITCONFIG}
           Static: node syntax	${R_SYNTAX}
+          Static: plugin manifest	${R_PLUGIN}
           Static: shellcheck	${R_SHELLCHECK}
           Static: meta-wiring	${R_META}
+          Static: no stale engine-path refs	${R_STALE}
           Unit: v6-purity	${R_PURITY}	/tmp/v6-purity.log
           Unit: gate-keeper	${R_GK}	/tmp/gate-keeper.log
           Unit: gate-vk07	${R_VK07}	/tmp/gate-vk07.log
@@ -548,40 +538,25 @@ jobs:
           Unit: s03-relaxation	${R_S03}	/tmp/s03-relaxation.log
           Unit: review-gate	${R_RG}	/tmp/review-gate.log
           Unit: engine-record	${R_ER}	/tmp/engine-record.log
-          Unit: sprint-manager	${R_SM}	/tmp/sprint-manager.log
-          E2E: full-pipeline	${R_FP}	/tmp/full-pipeline.log
-          E2E: install-flow	${R_IF}	/tmp/install-flow.log
           E2E: auto-mode	${R_AM}	/tmp/auto-mode.log
           E2E: change-surface	${R_CS}	/tmp/change-surface.log
           E2E: worktree-manager	${R_WM}	/tmp/worktree-manager.log
           Unit: locate (v6.1)	${R_LOC}	/tmp/locate.log
           Bench: locate accuracy (v6.1, non-blocking)	${R_LOCB}	/tmp/locate-bench.log
-          E2E: surgical pipeline (v7.0 skeleton)	${R_SUR}	/tmp/surgical-pipeline.log
-          Static: PM coverage (v7.0.1)	${R_PMC}	/tmp/pm-coverage.log
-          Runtime: update.sh integration (v7.0.3)	${R_UPD}	/tmp/update-runtime.log
           Unit: engine walk-up project root (v7.0.6)	${R_EWU}	/tmp/engine-walk-up.log
           Unit: commit/branch non-git guard (v7.1 M1)	${R_CNG}	/tmp/commit-not-a-repo.log
           Unit: slug fs-safe truncation (v7.1 M5)	${R_SLUG}	/tmp/slug-truncate.log
           Unit: engine advance command (v7.1 M8)	${R_ADV}	/tmp/engine-advance.log
-          Unit: CLAUDE.md cd-rule injection (v7.1 M12)	${R_CMD}	/tmp/claudemd-cd-rule.log
           Unit: verify bash safelist (v7.1 M2)	${R_VBA}	/tmp/verify-bash-allowed.log
-          Unit: verifier smoke Phase (v7.1 M3)	${R_VSM}	/tmp/verifier-smoke.log
-          Unit: plan-checker sanity (v7.1 M4)	${R_PCS}	/tmp/plan-checker-sanity.log
-          Unit: architecture guardrails (v7.1 M4)	${R_AGR}	/tmp/architecture-guardrails.log
           Unit: researcher targeted scope (v7.1 M11)	${R_RTS}	/tmp/researcher-targeted-scope.log
-          Unit: context pack contract (v7.1 M7)	${R_CPK}	/tmp/context-pack.log
-          Unit: role budgets (v7.1 M9)	${R_RBG}	/tmp/role-budgets.log
-          Unit: file read cache (v7.1 M10)	${R_FRC}	/tmp/file-read-cache.log
-          Unit: engine doctor (v7.1 M6)	${R_DOC}	/tmp/engine-doctor.log
-          Unit: deploy sync parity (v7.1.2)	${R_DSP}	/tmp/deploy-sync-parity.log
-          Unit: hook self-heal (v7.1.3)	${R_SHL}	/tmp/hook-selfheal.log
-          Unit: global hook loadable (v7.1.4)	${R_GHL}	/tmp/global-hook-loadable.log
+          Unit: engine doctor (v8.0 plugin-aware)	${R_DOC}	/tmp/engine-doctor.log
           Unit: gate structured stderr (v7.2)	${R_GSE}	/tmp/gate-stderr.log
           Unit: gate telemetry jsonl (v7.2)	${R_GTL}	/tmp/gate-telemetry.log
           Unit: gate policy ask/allow (v7.2)	${R_GPO}	/tmp/gate-policy.log
           Unit: engine state v7.2 fields (M1/M2/M13)	${R_V72EF}	/tmp/v72-engine-fields.log
           Unit: v7.2 observational hooks (M8)	${R_V72HK}	/tmp/v72-hooks.log
           Unit: v7.2 nightly + managed entry (M14/M15)	${R_V72NM}	/tmp/v72-nightly-managed.log
+          E2E: plugin bootstrap (v8.0 init-project)	${R_BOOT}	/tmp/plugin-bootstrap.log
           EOF
 
           PASS=0
@@ -604,7 +579,7 @@ jobs:
 
           # ── GITHUB_STEP_SUMMARY (visible in Actions run UI) ──
           {
-            echo "# ⛵ Vela V6 Test Report"
+            echo "# ⛵ Vela v8.0 Plugin Test Report"
             echo ""
             if [ "$FAIL" -eq 0 ]; then
               echo "**✅ $PASS / $TOTAL steps passed**"
@@ -632,7 +607,7 @@ jobs:
           # ── PR comment body (written to /tmp/pr-body.md) ──
           {
             echo "<!-- vela-ci-report -->"
-            echo "## ⛵ Vela V6 Test Report"
+            echo "## ⛵ Vela v8.0 Plugin Test Report"
             echo ""
             if [ "$FAIL" -eq 0 ]; then
               echo "**✅ $PASS / $TOTAL steps passed** — run [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) on \`${{ github.sha }}\`"

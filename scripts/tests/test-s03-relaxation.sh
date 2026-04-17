@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GATE_GUARD="$SCRIPT_DIR/../hooks/vela-gate-guard.js"
+GATE_GUARD="$SCRIPT_DIR/../hooks/vela-gate.js"  # v7.3-M4c: keeper + guard merged
 HOOK_STOP="$SCRIPT_DIR/../hooks/vela-stop.js"
 VELA_COST="$SCRIPT_DIR/../cli/vela-cost.js"
 CONSTANTS="$SCRIPT_DIR/../hooks/shared/constants.js"

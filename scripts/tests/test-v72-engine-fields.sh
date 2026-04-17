@@ -85,9 +85,12 @@ assert "tasks[] length matches total steps" "$TASKS_LEN" "ok"
 FIRST_STATUS=$(echo "$STATE_JSON" | node -e "const s=require('fs').readFileSync(0,'utf8'); console.log(JSON.parse(s).tasks[0].status)")
 assert "tasks[0].status = in_progress (current step)" "$FIRST_STATUS" "in_progress"
 
-# Task id prefix encodes pipeline_type
-FIRST_ID=$(echo "$STATE_JSON" | node -e "const s=require('fs').readFileSync(0,'utf8'); const id=JSON.parse(s).tasks[0].id; console.log(id.startsWith('vela-trivial-0-init') ? 'ok' : id)")
-assert "tasks[0].id = vela-trivial-0-init" "$FIRST_ID" "ok"
+# Task id prefix encodes pipeline_type.
+# v7.3-M3 collapsed pipelines: `trivial` → `ship` (all small/medium/
+# large/ralph/hotfix now route through the 6-step ship pipeline except
+# fix+hotfix). So the --scale small init above resolves to ship.
+FIRST_ID=$(echo "$STATE_JSON" | node -e "const s=require('fs').readFileSync(0,'utf8'); const id=JSON.parse(s).tasks[0].id; console.log(id.startsWith('vela-ship-0-init') ? 'ok' : id)")
+assert "tasks[0].id = vela-ship-0-init" "$FIRST_ID" "ok"
 
 cd /
 rm -rf "$TMPROOT"

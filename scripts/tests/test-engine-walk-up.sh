@@ -337,23 +337,27 @@ else
   echo "     stdout: $STDOUT_BAD"
 fi
 
-# ── Phase 7: install.js writes workspace.json (v7.0.7) ───────
-# A fresh `node install.js validate` run against a bare project
-# dir should leave .vela/state/workspace.json pinned to that dir.
+# ── Phase 7: init-project writes workspace.json (v8.0) ───────
+# v8.0-M3: install.js validate → `vela-engine init-project` (bound to
+# /vela:install). A fresh init-project run against a bare project dir
+# should leave .vela/state/workspace.json pinned to that dir with
+# projectRoot + pluginRoot + version.
 echo ""
-echo "📋 Phase 7: install.js validate pins workspace.json"
+echo "📋 Phase 7: init-project pins workspace.json"
 
 setup_sandbox
 rm -f "$PROJECT/.vela/state/workspace.json"
 
-INSTALL_JS="$SCRIPT_DIR/../install.js"
-(cd "$PROJECT" && node "$INSTALL_JS" validate >/tmp/install-validate.log 2>&1 || true)
+ENGINE="$SCRIPT_DIR/../cli/vela-engine.js"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+(cd "$PROJECT" && INIT_CWD="$PROJECT" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+   node "$ENGINE" init-project >/tmp/init-project.log 2>&1 || true)
 
 PIN_FILE="$PROJECT/.vela/state/workspace.json"
 if [ -f "$PIN_FILE" ]; then
-  assert_eq "install.js validate created workspace.json" "ok" "ok"
+  assert_eq "init-project created workspace.json" "ok" "ok"
 else
-  assert_eq "install.js validate created workspace.json" "ok" "missing"
+  assert_eq "init-project created workspace.json" "ok" "missing"
 fi
 
 # The recorded projectRoot must match the sandbox project path.

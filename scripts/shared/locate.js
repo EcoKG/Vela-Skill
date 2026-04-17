@@ -23,7 +23,8 @@
  * No LLM calls. ripgrep + git only. Average runtime: 0.2-2 seconds.
  *
  * @module locate
- * @see docs/v6.1-rfc-precision-locate.md
+ *
+ * v6.1 Universal Locate — see git history (docs/v6.1-rfc removed in v7.3-M5).
  */
 
 "use strict";
@@ -598,7 +599,7 @@ function locate(request, options = {}) {
 
   // Step 2b.5: kebab-case tokens almost always look like filename stems.
   // Grep alone misses the *defining* file because it doesn't contain its
-  // own name in its content (e.g. vela-review-gate.js doesn't grep itself).
+  // own name in its content (e.g. vela-session.js doesn't grep itself).
   // Try basename substring matching first; track which kebab tokens succeeded
   // so we can skip grep for them (grep would just add noise from references).
   const kebabBasenameSucceeded = new Set();
@@ -670,8 +671,8 @@ function locate(request, options = {}) {
 
     // Narrowing heuristic: if 5+ files matched, prefer files whose
     // basename actually contains the token. The definition file usually
-    // shares its name with the symbol it exports (e.g. vela-review-gate
-    // → vela-review-gate.js). Other files just reference it.
+    // shares its name with the symbol it exports (e.g. vela-session
+    // → vela-session.js). Other files just reference it.
     let candidateFiles = Array.from(byFile.entries());
     if (candidateFiles.length >= 5) {
       const lowerToken = t.token.toLowerCase();

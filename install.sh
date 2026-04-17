@@ -1,176 +1,31 @@
-#!/bin/bash
-# ⛵ Vela Engine — One-line installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/install.sh | bash
+#!/usr/bin/env bash
+# ⛵ Vela — install.sh (deprecated in v8.0, removal in v8.2)
 #
-# Installs Vela as a Claude Code skill in $HOME/.claude/skills/vela/
-
-set -e
-
-REPO="https://github.com/EcoKG/Vela-Skill.git"
-TMP="$HOME/.vela-install-tmp"
-SKILL_DIR="$HOME/.claude/skills/vela"
-
-echo ""
-echo "⛵ Vela Engine — Installing..."
-echo ""
-
-# ─── Clean previous attempts ───
-rm -rf "$TMP" 2>/dev/null
-
-# ─── Clone ───
-git clone --depth 1 -b main "$REPO" "$TMP" 2>/dev/null || {
-  echo "❌ git clone failed. Check network and try again."
-  exit 1
-}
-
-# ─── Read version from package.json (single source of truth) ───
-VELA_VERSION=$(node -e "process.stdout.write(require('$TMP/package.json').version)" 2>/dev/null || echo '?')
-
-# ─── Create skill directory ───
-mkdir -p "$SKILL_DIR"
-
-# ─── Copy skill structure ───
-# Core files
-cp "$TMP/SKILL.md" "$SKILL_DIR/"
-cp "$TMP/README.md" "$SKILL_DIR/" 2>/dev/null
-cp "$TMP/package.json" "$SKILL_DIR/" 2>/dev/null
-
-# Scripts (cli, agents, cache, guidelines, tests, shared, install)
-if [ -d "$TMP/scripts" ]; then
-  rm -rf "$SKILL_DIR/scripts" 2>/dev/null
-  cp -r "$TMP/scripts" "$SKILL_DIR/scripts"
-fi
-
-# Templates
-if [ -d "$TMP/templates" ]; then
-  rm -rf "$SKILL_DIR/templates" 2>/dev/null
-  cp -r "$TMP/templates" "$SKILL_DIR/templates"
-fi
-
-# References
-if [ -d "$TMP/references" ]; then
-  rm -rf "$SKILL_DIR/references" 2>/dev/null
-  cp -r "$TMP/references" "$SKILL_DIR/references"
-fi
-
-# Skills (sub-skills installed as independent top-level skills for Claude Code autocomplete)
+# Vela is now a Claude Code plugin. The curl + install.sh path is
+# replaced by the plugin marketplace flow. Run inside Claude Code:
 #
-# v7.0.4: We NO LONGER copy the skills/ tree into $SKILL_DIR/skills/.
-# Pre-v7.0.4 installs did `cp -r "$TMP/skills" "$SKILL_DIR/skills"`,
-# which created $SKILL_DIR/skills/<name>/SKILL.md files with the same
-# frontmatter `name: vela:<name>` as the top-level
-# $HOME/.claude/skills/vela-<name>/SKILL.md files installed by the
-# loop below. Claude Code discovers skills from nested .claude/skills/
-# directories, so it registered BOTH SKILL.md files under the same
-# name, causing a silent collision that hid the new /vela:fix,
-# /vela:small etc. commands from autocomplete.
+#   /plugin install vela@EcoKG/Vela-Skill
 #
-# We still rm -rf the legacy directory on fresh installs as a
-# defensive measure in case a user had pre-v7.0.4 state lying around.
-rm -rf "$SKILL_DIR/skills" 2>/dev/null
+# If you're on Claude Code 2.1.107+, the plugin system handles
+# installation, updates, permissions, and hook registration without
+# editing ~/.claude/settings.json by hand.
+#
+# After the plugin is installed, initialize each project once:
+#
+#   /vela:install
+#
+# This shim will be deleted in v8.2.
+cat <<'EOF' >&2
+⛵ Vela v8.0 — install.sh is deprecated.
 
-if [ -d "$TMP/skills" ]; then
-  # Install as independent top-level skills so /vela:fix, /vela:small etc.
-  # appear in Claude Code slash-command autocomplete. Dynamic glob — any
-  # skills/*/ directory is picked up automatically.
-  SKILLS_ROOT="$HOME/.claude/skills"
-  mkdir -p "$SKILLS_ROOT"
+  Vela is now a Claude Code plugin. Install it via:
 
-  _installed=0
-  _skill_install_log=""
-  for skill_src in "$TMP/skills"/*/; do
-    if [ ! -d "$skill_src" ]; then
-      continue
-    fi
-    sub=$(basename "$skill_src")
-    if [ ! -f "$skill_src/SKILL.md" ]; then
-      _skill_install_log="${_skill_install_log}  ⚠ skipped $sub — no SKILL.md\n"
-      continue
-    fi
-    if ! mkdir -p "$SKILLS_ROOT/vela-$sub" 2>/dev/null; then
-      _skill_install_log="${_skill_install_log}  ❌ mkdir failed for $SKILLS_ROOT/vela-$sub\n"
-      continue
-    fi
-    if ! cp "$skill_src/SKILL.md" "$SKILLS_ROOT/vela-$sub/SKILL.md" 2>/dev/null; then
-      _skill_install_log="${_skill_install_log}  ❌ cp failed for $sub\n"
-      continue
-    fi
-    _installed=$((_installed + 1))
-  done
+    /plugin install vela@EcoKG/Vela-Skill
 
-  echo "  ✦ Slash commands installed: $_installed skill(s) under $SKILLS_ROOT/vela-*"
-  if [ -n "$_skill_install_log" ]; then
-    printf "%b" "$_skill_install_log"
-  fi
-fi
+  Then initialize each project with:
 
-# Test fixtures (sample data for analyze/report)
-if [ -d "$TMP/test-fixtures" ]; then
-  rm -rf "$SKILL_DIR/test-fixtures" 2>/dev/null
-  cp -r "$TMP/test-fixtures" "$SKILL_DIR/test-fixtures"
-fi
+    /vela:install
 
-# Plugin metadata
-if [ -d "$TMP/.claude-plugin" ]; then
-  rm -rf "$SKILL_DIR/.claude-plugin" 2>/dev/null
-  cp -r "$TMP/.claude-plugin" "$SKILL_DIR/.claude-plugin"
-fi
-
-# ─── Note: No Agent Teams env injection needed ───
-# Vela V6 uses Claude Code native Agent tool for orchestration (no external SDK).
-# CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is not required.
-
-# ─── Install npm dependencies globally (SQLite backends for TreeNode cache) ───
-if command -v npm &>/dev/null; then
-  echo "  📦 Installing npm dependencies globally..."
-
-  # Core: playwright + sql.js (always needed)
-  npm install -g playwright sql.js --no-audit --no-fund 2>/dev/null
-
-  # better-sqlite3 (native build — may fail)
-  npm install -g better-sqlite3 --no-audit --no-fund 2>/dev/null && {
-    SQLITE_BACKEND="better-sqlite3"
-  } || {
-    SQLITE_BACKEND="sql.js"
-    echo "  ⚠ Native build failed — sql.js (WASM) will be used"
-  }
-
-  # Install Playwright Chromium browser binary
-  npx playwright install chromium 2>/dev/null || echo "  ⚠ Playwright chromium install failed"
-fi
-
-# ─── Source shared deploy functions ───
-source "$SKILL_DIR/scripts/deploy-common.sh"
-
-# ─── Register SessionStart version-check hook ───
-register_session_start_hook
-
-# ─── Auto-upgrade existing local .vela/ projects ───
-# If install.sh is run from inside a project that already has .vela/,
-# automatically update the local project too (same as update.sh --local).
-if [ -d ".vela" ]; then
-  echo "  🧭 Detected existing .vela/ — auto-upgrading local project..."
-  sync_local_project "$SKILL_DIR"
-  echo "  ✦ Local project auto-upgraded"
-fi
-
-# ─── Cleanup ───
-rm -rf "$TMP" 2>/dev/null
-
-# ─── Verify ───
-echo ""
-echo "✦───────────────────────────────────────✦"
-echo "  ⛵ Vela Engine v${VELA_VERSION} installed successfully!"
-echo "✦───────────────────────────────────────✦"
-echo ""
-echo "  📂 Location: $SKILL_DIR"
-echo "  💾 SQLite: ${SQLITE_BACKEND:-not checked}"
-echo "  🔌 SDK: Claude Agent SDK"
-echo ""
-echo "  🧭 Quick Start:"
-echo "     /vela init    — 프로젝트에 Vela 환경 구축"
-echo "     /vela start   — 파이프라인 바로 시작"
-echo "     /vela auto    — 무인 자동 실행"
-echo ""
-echo "  📖 Docs: https://github.com/EcoKG/Vela-Skill"
-echo ""
+  (This shim is scheduled for removal in v8.2.)
+EOF
+exit 1

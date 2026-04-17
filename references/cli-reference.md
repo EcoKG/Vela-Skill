@@ -3,19 +3,19 @@
 ## vela-engine (파이프라인 엔진)
 
 ```bash
-node .vela/cli/vela-engine.js init "설명" [--type TYPE] [--scale SIZE] [--auto]
-node .vela/cli/vela-engine.js state
-node .vela/cli/vela-engine.js transition
-node .vela/cli/vela-engine.js record pass|fail|reject
-node .vela/cli/vela-engine.js advance [pass|fail|reject]            # v7.1 M8 — record+transition
-node .vela/cli/vela-engine.js doctor                                # v7.1 M6 — health check
-node .vela/cli/vela-engine.js branch [--mode auto|prompt|none]
-node .vela/cli/vela-engine.js commit [--message TEXT]
-node .vela/cli/vela-engine.js cancel
-node .vela/cli/vela-engine.js history
-node .vela/cli/vela-engine.js locate [--request "..."] [--json]    # v6.1
-node .vela/cli/vela-engine.js clean-scan
-node .vela/cli/vela-engine.js clean-exec
+vela-engine init "설명" [--type TYPE] [--scale SIZE] [--auto]
+vela-engine state
+vela-engine transition
+vela-engine record pass|fail|reject
+vela-engine advance [pass|fail|reject]            # v7.1 M8 — record+transition
+vela-engine doctor                                # v7.1 M6 — health check
+vela-engine branch [--mode auto|prompt|none]
+vela-engine commit [--message TEXT]
+vela-engine cancel
+vela-engine history
+vela-engine locate [--request "..."] [--json]    # v6.1
+vela-engine clean-scan
+vela-engine clean-exec
 ```
 
 ### `advance` 명령 (v7.1 M8)
@@ -25,10 +25,10 @@ top-level Bash 호출을 절반으로 줄이고, 응답에 `nextAction` 힌트�
 `state` 재조회 없이 다음 단계의 Agent 소환으로 직행할 수 있다.
 
 ```bash
-node .vela/cli/vela-engine.js advance            # 기본값 pass
-node .vela/cli/vela-engine.js advance pass       # 동일
-node .vela/cli/vela-engine.js advance reject     # revisions++ + 같은 단계 유지
-node .vela/cli/vela-engine.js advance fail       # reject 와 동일한 retry 시멘틱
+vela-engine advance            # 기본값 pass
+vela-engine advance pass       # 동일
+vela-engine advance reject     # revisions++ + 같은 단계 유지
+vela-engine advance fail       # reject 와 동일한 retry 시멘틱
 ```
 
 응답 JSON: `{previousStep, currentStep, nextStep, revision, circuitOpen, nextAction, message}`.
@@ -42,13 +42,13 @@ node .vela/cli/vela-engine.js advance fail       # reject 와 동일한 retry �
 나열되고 `recovery: "node .vela/install.js validate"` 를 제안한다.
 
 ```bash
-node .vela/cli/vela-engine.js doctor
+vela-engine doctor
 ```
 
 검사 항목: core dirs, `cli/vela-engine.js`, `templates/pipeline.json` parse,
 `config.json` parse, agent manifest, v7.1 파일들 (role-budgets.json,
 plan-templates/quick.md, guidelines/live-processes.json,
-guidelines/smoke-test.sh.example, hooks/vela-file-read-cache.js).
+guidelines/smoke-test.sh.example). v7.3-M4에서 vela-file-read-cache.js 훅은 제거됨.
 
 ### `locate` 명령 (v6.1, LLM 0)
 
@@ -56,13 +56,13 @@ Universal Locate — 결정론적 file/symbol 식별자 탐지. ripgrep (없으�
 
 ```bash
 # 현재 활성 파이프라인의 request를 읽어 targets.json 생성 (PM이 locate 단계에서 호출)
-node .vela/cli/vela-engine.js locate
+vela-engine locate
 
 # 파이프라인 없이 미리보기
-node .vela/cli/vela-engine.js locate --request "auth.ts의 login 함수 검증 추가"
+vela-engine locate --request "auth.ts의 login 함수 검증 추가"
 
 # 전체 targets.json 구조 출력
-node .vela/cli/vela-engine.js locate --json
+vela-engine locate --json
 ```
 
 출력: `{artifactDir}/targets.json` (또는 `.vela/locate-preview/targets.json` for --request)
@@ -87,39 +87,34 @@ node .vela/cli/vela-engine.js locate --json
 
 ## V6/V7 파이프라인 실행
 
-V6에서 `vela-pipeline.js`가 제거되었다. PM(vela.md agent)이 직접 파이프라인을 오케스트레이션한다:
+v8.0에서 PM(vela.md agent)이 6단계 파이프라인을 오케스트레이션한다:
 
 ```
-PM → vela-engine.js init "요청" --scale {scale}
-   → vela-engine.js locate                    ← v6.1 (모든 scale 공통)
-   → Agent(vela-researcher) → Agent(vela-reviewer)
-   → Agent(vela-planner) → Agent(vela-reviewer)   ← plan mode 또는 mode: spec (v7.0)
-   → Agent(vela-executor) → Agent(vela-reviewer)  ← legacy execute 또는 patch (v7.0)
-   → Agent(vela-verifier) → ... → vela-engine.js commit
+PM → vela-engine.js init "요청" --scale {ship|fix|hotfix}
+   → vela-engine.js locate                           ← LLM 0 (모든 파이프라인 공통)
+   → Agent(vela-planner, mode=plan|spec) → Agent(vela-reviewer, mode=review)
+   → Agent(vela-executor) → Agent(vela-reviewer, mode=review)
+   → Agent(vela-reviewer, mode=verify) → vela-engine.js commit
 ```
 
-v7.0 surgical(`/vela:fix`)은 `plan` 대신 `spec` 단계에서 planner를 `mode: spec`으로 호출하여 `patch-spec.md`를 생성하고, `execute` 대신 `patch` 단계에서 executor가 이 spec을 정확히 적용한다.
+`/vela:fix`는 `plan` 단계에서 planner를 `mode: spec`으로 호출하여 `patch-spec.md`를 생성하고, executor가 그 spec을 정확히 적용한다(out-of-scope 범위 준수).
 
-## vela-sprint (스프린트 — V6)
+## ~~vela-sprint~~ (v7.3-M1c 제거됨)
 
-V6에서는 PM이 직접 스프린트를 처리한다:
+스프린트 오케스트레이션은 V8에서 제거되었다. 대규모 요청은 사용자가 작업을 작은 단위로 쪼개 단일 파이프라인을 여러 번 실행한다. Opus 4.7의 adaptive thinking + 1M context로 단일 파이프라인의 커버 범위가 넓어졌기 때문. `sprint-manager.js`, `vela-sprint-planner.md`, `test-sprint-manager.sh` 모두 제거.
 
-```
-PM → Agent(vela-sprint-planner) → sprint-{timestamp}.json
-   → 슬라이스별 파이프라인 순차 실행 (Agent 도구 체인)
-```
+## /vela:analyze (분석 — v7.3-M1b부터 스킬 내부 실행)
 
-- `sprint-manager.js`가 스프린트 상태를 `.vela/sprints/sprint-*.json`에 기록한다.
+전용 CLI 없이 `skills/analyze/SKILL.md` 스킬이 직접 운영한다:
+- **deps**: 스킬 내부에서 `npm audit --json` + `npm outdated --json` 실행, Claude가 markdown 요약 작성
+- **perspectives** (security/bugs/performance/code-quality/architecture): `Agent(subagent_type="vela-researcher", mode=analyze)` 호출 (v7.3-M2a 흡수)
 
-## vela-analyze (분석 보고서)
+출력: `.vela/artifacts/<ts>/analysis.md` (PDF 필요 시 Claude Code의 브라우저 출력 사용)
+
+## vela-friction (훅 마찰 집계)
 
 ```bash
-node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (npm audit/outdated, 무료)
-node .vela/cli/vela-analyze.js report --input <file> [--output <file>]  # JSON → PDF 변환
-node .vela/cli/vela-analyze.js full --items <list> [--output <file>]  # 통합 분석 → PDF (deps는 CLI, 나머지는 Agent)
-
-# perspectives: security, bugs, performance, code-quality, architecture
-# items: deps, security, bugs, performance, code-quality, architecture
+node .vela/cli/vela-friction.js [--limit 500] [--json]
 ```
 
 ## TreeNode 캐시
@@ -163,10 +158,9 @@ node .vela/cli/vela-report.js --html report.html # HTML 대시보드
 
 | 훅 | 이벤트 | 역할 |
 |----|--------|------|
-| `vela-gate-keeper.js` | PreToolUse | VK-01~08: 모드별 도구 제한 |
-| `vela-gate-guard.js` | PreToolUse | VG-03~15: 단계 순서 강제, 서킷 브레이커 |
-| `vela-stop.js` | Stop | Auto 모드 파이프라인 중 조기 종료 차단 |
-| `vela-review-gate.js` | Stop | APPROVE 후 N회 재검증 강제 (기본 3회) |
+| `vela-gate.js` | PreToolUse | VK-01~10 (모드별 도구 제한, 시크릿, 체인 연산자, researcher 범위) + VG-03/13/14/15 (git commit 안전, pipeline.json 보호, 서킷 브레이커) (v7.3-M4c 통합) |
+| `vela-stop.js` | Stop + SubagentStop | Auto 모드 차단 + review-gate 재검증(기본 1회, execute 전용) + dirty tree 경고 + session-end snapshot + 에이전트 텔레메트리 (v7.3-M4d 통합) |
+| `vela-session.js` | SessionStart | 버전 체크 + 파이프라인 상태/학습/환경/git context 주입 (v7.3-M4b 통합) |
 
 ### review_gate 설정 (.vela/config.json)
 
