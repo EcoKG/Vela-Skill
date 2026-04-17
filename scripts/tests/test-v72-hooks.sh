@@ -25,7 +25,8 @@ assert() {
 }
 
 TMPROOT="$(mktemp -d)"
-trap "rm -rf $TMPROOT" EXIT
+# shellcheck disable=SC2064  # $TMPROOT deliberately expanded now (fixed cleanup target)
+trap "rm -rf '$TMPROOT'" EXIT
 
 PROJECT="$TMPROOT/project"
 AD="$PROJECT/.vela/artifacts/20260415T120000-test"
