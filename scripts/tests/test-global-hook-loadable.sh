@@ -144,8 +144,7 @@ run_install
 for hook_name in \
   vela-gate-keeper.js \
   vela-gate-guard.js \
-  vela-stop.js \
-  vela-review-gate.js; do
+  vela-stop.js; do
   assert_loadable "$hook_name"
 done
 

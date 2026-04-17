@@ -240,12 +240,12 @@ const FILE_MANIFEST = [
   // Hooks (staging for registerGlobalHooks — copied to ~/.vela/hooks/ at install time)
   { src: "scripts/hooks/vela-gate-keeper.js", dst: "hooks/vela-gate-keeper.js" },
   { src: "scripts/hooks/vela-gate-guard.js",  dst: "hooks/vela-gate-guard.js"  },
-  { src: "scripts/hooks/vela-stop.js",        dst: "hooks/vela-stop.js"        },
-  { src: "scripts/hooks/vela-review-gate.js", dst: "hooks/vela-review-gate.js" },
+  // v7.3-M4d: vela-stop.js는 Stop + SubagentStop + review-gate를 통합한 단일 훅.
+  // 구 vela-review-gate.js / vela-subagent-stop.js는 삭제되었고 settings.json에는
+  // vela-stop.js가 두 이벤트 모두에 등록된다 (registerGlobalHooks 참고).
   // v7.3-M4 (관찰 훅 2개 제거): vela-file-read-cache.js (v7.1 M10) +
-  // vela-post-tool-learning.js (v7.2 M8) 제거됨. Claude Code v2026의
-  // 내장 캐시/텔레메트리가 기능 대체. SubagentStop 훅은 유지.
-  { src: "scripts/hooks/vela-subagent-stop.js",      dst: "hooks/vela-subagent-stop.js"      },
+  // vela-post-tool-learning.js (v7.2 M8) 제거됨.
+  { src: "scripts/hooks/vela-stop.js",        dst: "hooks/vela-stop.js"        },
   { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
 
@@ -1604,7 +1604,9 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js", "vela-review-gate.js", "vela-subagent-stop.js"];
+    // v7.3-M4d: vela-stop.js가 Stop + SubagentStop + review-gate 통합.
+    // 구 vela-review-gate.js / vela-subagent-stop.js 파일은 삭제됨.
+    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1718,12 +1720,15 @@ function registerGlobalHooks(hooksSourceDir) {
   // contains a given vela hook filename.
   //
   // v7.3-M4: file-read-cache + post-tool-learning 제거됨 (2026 Claude Code 내장 대체).
+  // v7.3-M4d: vela-review-gate.js + vela-subagent-stop.js → vela-stop.js 통합.
+  //   구 파일명도 그대로 포함하여 legacy settings.json 항목(pre-M4d 사용자)이
+  //   upgrade 시 자동 dedup/정리되도록 유지한다.
   const VELA_HOOK_FILES = [
     "vela-gate-keeper.js",
     "vela-gate-guard.js",
     "vela-stop.js",
-    "vela-review-gate.js",
-    "vela-subagent-stop.js",       // v7.2 M8 — SubagentStop
+    "vela-review-gate.js",         // legacy pre-M4d — kept for dedup only
+    "vela-subagent-stop.js",       // legacy pre-M4d — kept for dedup only
   ];
   function dedupVelaHooks(event) {
     const list = globalSettings.hooks[event];
@@ -1824,6 +1829,11 @@ function registerGlobalHooks(hooksSourceDir) {
   // "never register what you can't run" half of the self-heal design.
   // Combined with pruneDanglingVelaHooks above, settings.json always
   // converges on "exactly the files that exist".
+  // v7.3-M4d: dedup by explicit _velaId when present, fall back to
+  // substring match on the stringified entry for legacy entries.
+  // The _velaId field lets the same hook file be registered on two
+  // different events (vela-stop.js on Stop + SubagentStop) without
+  // the id-substring check false-matching.
   function addGlobalHook(event, id, command, timeout) {
     // Extract "node /abs/path/to/file.js" and verify file exists.
     const m = /node\s+(\S+\.js)/.exec(command);
@@ -1831,11 +1841,18 @@ function registerGlobalHooks(hooksSourceDir) {
       return; // source missing — don't register, don't error
     }
     globalSettings.hooks[event] = globalSettings.hooks[event] || [];
-    const already = globalSettings.hooks[event].some(
-      (e) => JSON.stringify(e).includes(id)
-    );
+    const already = globalSettings.hooks[event].some((e) => {
+      if (!e) return false;
+      if (e._velaId === id) return true;
+      // Legacy entries without _velaId — fall back to substring match,
+      // but skip entries that carry a DIFFERENT _velaId (so the same
+      // file on two events stays distinct).
+      if (!e._velaId && JSON.stringify(e).includes(id)) return true;
+      return false;
+    });
     if (!already) {
       globalSettings.hooks[event].push({
+        _velaId: id,
         hooks: [{ type: "command", command, timeout }],
       });
     }
@@ -1847,18 +1864,18 @@ function registerGlobalHooks(hooksSourceDir) {
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-keeper.js")}`, 10);
   addGlobalHook("PreToolUse", "vela-gate-guard",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
-  // v7.1 M10 — file read cache is also PreToolUse, but purely
   // v7.3-M4: vela-file-read-cache + vela-post-tool-learning 훅 제거.
   // Claude Code v2026 내장 캐시/텔레메트리가 역할 대체. upgrade 경로에서
-  // VELA_HOOK_FILES 축소로 기존 설치분의 deadbeef 엔트리가 자동 정리됨.
+  // VELA_HOOK_FILES 축소로 기존 설치분의 dangling 엔트리가 자동 정리됨.
+  //
+  // v7.3-M4d: 단일 vela-stop.js가 Stop + SubagentStop + review-gate를 통합.
+  // 같은 스크립트 파일을 두 이벤트에 모두 등록한다 — hook_event_name으로
+  // 내부 dispatch. 구 vela-review-gate / vela-subagent-stop 엔트리는
+  // pruneDanglingVelaHooks가 삭제된 파일을 가리키는 것을 감지해 자동 제거.
   addGlobalHook("Stop", "vela-stop",
     `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 10);
-  addGlobalHook("Stop", "vela-review-gate",
-    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-review-gate.js")}`, 10);
-
-  // v7.2 M8 — SubagentStop per-agent telemetry rollup for vela-cost.
-  addGlobalHook("SubagentStop", "vela-subagent-stop",
-    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-subagent-stop.js")}`, 5);
+  addGlobalHook("SubagentStop", "vela-stop-subagent",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-stop.js")}`, 5);
 
   writeSettings(globalSettings, GLOBAL_SETTINGS_PATH);
 }

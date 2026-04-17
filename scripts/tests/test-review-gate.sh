@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# test-review-gate.sh — vela-review-gate.js 단위 테스트
+# test-review-gate.sh — review-gate 동작 단위 테스트 (v7.3-M4d)
+#
+# v7.3-M4d (2026-04-17): vela-review-gate.js → vela-stop.js 통합.
+# 테스트는 hook_event_name="Stop"으로 vela-stop.js를 호출하여
+# 내부 evaluateReviewGate() 경로를 검증한다.
 #
 # Covers (legacy validation-plan V2-4 — doc removed in v7.3-M5):
 #   V2-4-1:  활성 파이프라인 없을 때 통과
@@ -17,7 +21,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK="$SCRIPT_DIR/../hooks/vela-review-gate.js"
+HOOK="$SCRIPT_DIR/../hooks/vela-stop.js"
 ENGINE="$SCRIPT_DIR/../cli/vela-engine.js"
 
 PASS=0
@@ -84,7 +88,7 @@ teardown_sandbox() {
 
 # Run the hook, capture stdout; always exits 0 (fail-open)
 run_hook() {
-  echo "{\"cwd\":\"$PROJECT\"}" | node "$HOOK" 2>/dev/null || true
+  echo "{\"hook_event_name\":\"Stop\",\"cwd\":\"$PROJECT\"}" | node "$HOOK" 2>/dev/null || true
 }
 
 # Set current_step in pipeline-state.json
@@ -214,7 +218,7 @@ assert_file_absent() {
 
 # ── Tests ────────────────────────────────────────────────────
 
-echo "⛵ vela-review-gate.js 테스트"
+echo "⛵ review-gate 테스트 (via vela-stop.js unified hook, v7.3-M4d)"
 echo "═══════════════════════════════════════"
 
 # ─────────────────────────────────────────────────────────────

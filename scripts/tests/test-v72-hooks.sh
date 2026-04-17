@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# test-v72-hooks.sh — v7.2 M8 (v7.3-M4 트림됨)
+# test-v72-hooks.sh — v7.2 M8 (v7.3-M4d 통합됨)
 #
 # vela-post-tool-learning.js 관련 테스트 블록은 v7.3-M4에서 훅이
-# 제거되면서 삭제됨. SubagentStop 훅(vela-subagent-stop.js) 검증만 남김.
+# 제거되면서 삭제됨.
+#
+# v7.3-M4d: vela-subagent-stop.js → vela-stop.js로 통합.
+# 입력에 hook_event_name="SubagentStop"을 넣어 통합 훅을 호출한다.
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_SUB="$SCRIPT_DIR/../hooks/vela-subagent-stop.js"
+HOOK_SUB="$SCRIPT_DIR/../hooks/vela-stop.js"
 
 PASS=0
 FAIL=0
@@ -31,10 +34,10 @@ cat > "$AD/pipeline-state.json" <<'EOF'
 { "status": "active", "pipeline_type": "ship", "current_step": "execute" }
 EOF
 
-echo "=== v7.2 M8 — vela-subagent-stop hook ==="
+echo "=== v7.2 M8 — SubagentStop dispatch via unified vela-stop.js (M4d) ==="
 
 # Subagent stop with usage → agent-telemetry.jsonl line
-echo '{"subagent_type":"vela-researcher","cwd":"'$PROJECT'","usage":{"input_tokens":100,"output_tokens":50},"tool_counts":{"Read":5,"Grep":2},"duration_ms":3400,"model":"opus"}' \
+echo '{"hook_event_name":"SubagentStop","subagent_type":"vela-researcher","cwd":"'$PROJECT'","usage":{"input_tokens":100,"output_tokens":50},"tool_counts":{"Read":5,"Grep":2},"duration_ms":3400,"model":"opus"}' \
   | node "$HOOK_SUB" >/dev/null 2>&1
 EXIT2=$?
 assert "subagent-stop exit 0" "$EXIT2" "0"
@@ -56,7 +59,7 @@ echo "=== No active pipeline → hook is a no-op ==="
 
 EMPTY="$TMPROOT/empty"
 mkdir -p "$EMPTY"
-echo '{"subagent_type":"vela-researcher","cwd":"'$EMPTY'","usage":{"input_tokens":10,"output_tokens":5}}' \
+echo '{"hook_event_name":"SubagentStop","subagent_type":"vela-researcher","cwd":"'$EMPTY'","usage":{"input_tokens":10,"output_tokens":5}}' \
   | node "$HOOK_SUB" >/dev/null 2>&1
 assert "subagent-stop is no-op outside a pipeline (exit 0)" "$?" "0"
 

@@ -160,8 +160,8 @@ node .vela/cli/vela-report.js --html report.html # HTML 대시보드
 |----|--------|------|
 | `vela-gate-keeper.js` | PreToolUse | VK-01~08: 모드별 도구 제한 |
 | `vela-gate-guard.js` | PreToolUse | VG-03~15: 단계 순서 강제, 서킷 브레이커 |
-| `vela-stop.js` | Stop | Auto 모드 파이프라인 중 조기 종료 차단 |
-| `vela-review-gate.js` | Stop | APPROVE 후 N회 재검증 강제 (기본 3회) |
+| `vela-stop.js` | Stop + SubagentStop | Auto 모드 차단 + review-gate 재검증(기본 1회, execute 전용) + dirty tree 경고 + session-end snapshot + 에이전트 텔레메트리 (v7.3-M4d 통합) |
+| `vela-session.js` | SessionStart | 버전 체크 + 파이프라인 상태/학습/환경/git context 주입 (v7.3-M4b 통합) |
 
 ### review_gate 설정 (.vela/config.json)
 

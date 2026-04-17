@@ -135,8 +135,8 @@ scenario "B1 kebab CLI tool" \
   "vela-engine init 명령의 에러 메시지 개선" \
   "scripts/cli/vela-engine.js"
 scenario "B2 kebab hook" \
-  "vela-review-gate 훅의 validation_rounds 로깅" \
-  "scripts/hooks/vela-review-gate.js"
+  "vela-stop 훅의 review gate validation_rounds 로깅" \
+  "scripts/hooks/vela-stop.js"
 scenario "B3 kebab module" \
   "change-surface 모듈의 parseDiff 경로 보정" \
   "scripts/shared/change-surface.js"

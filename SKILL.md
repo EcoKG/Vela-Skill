@@ -134,7 +134,7 @@ node .vela/cli/vela-friction.js                  # gate-events.jsonl 집계 (VK/
 1. PM이 `Agent(subagent_type="vela-reviewer")` 호출 → reviewer가 `review-{step}.md` + `approval-{step}.json` 자동 생성
 2. 엔진 `exit_gate`가 `approval-{step}.json`의 `decision` 필드를 확인 — `approve`가 아니면 `transition` 차단
 3. REJECT 시: PM이 `reviewFeedback`을 worker에게 재전달 → 재작업 → 재리뷰. `max_revisions` 소진 시 사용자에게 에스컬레이션
-4. APPROVE 후 `Stop` 훅(`vela-review-gate.js`)이 `review_gate.validation_rounds` 횟수만큼 재검증 강제
+4. APPROVE 후 `Stop` 훅(`vela-stop.js`의 review-gate 경로)이 `review_gate.validation_rounds` 횟수만큼 재검증 강제
 
 ---
 
@@ -144,9 +144,7 @@ node .vela/cli/vela-friction.js                  # gate-events.jsonl 집계 (VK/
 |----|-------|------|
 | `vela-gate-keeper.js` | PreToolUse | VK-01~08: 모드별 Bash/Write/Edit 차단, 시크릿 감지, 체인 연산자 차단 |
 | `vela-gate-guard.js` | PreToolUse | VG-03~15: 단계 순서 강제, pipeline.json 보호, 서킷 브레이커 |
-| `vela-stop.js` | Stop | auto 모드 중 중단 방지 |
-| `vela-review-gate.js` | Stop | APPROVE 후 N회 재검증 강제 |
-| `vela-subagent-stop.js` | SubagentStop | 에이전트별 텔레메트리 (v7.2 M8) |
+| `vela-stop.js` | Stop + SubagentStop | auto 모드 차단 + review-gate 재검증 + dirty tree 경고 + session-end snapshot + 에이전트 텔레메트리. `hook_event_name`으로 내부 dispatch (v7.3-M4d) |
 | `vela-session.js` | SessionStart | 버전 체크 + rich context 주입 (persona.md, pipeline state, git, env) |
 
 **Fail-closed**: 모든 훅의 오류 경로는 `exit 2`(차단)로 폴백.

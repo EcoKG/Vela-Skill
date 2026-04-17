@@ -46,18 +46,21 @@ PROJECT=""
 
 # The active hooks that must always be present after install/upgrade.
 # v7.3-M4: vela-file-read-cache.js + vela-post-tool-learning.js 제거됨.
+# v7.3-M4d: vela-review-gate.js + vela-subagent-stop.js → vela-stop.js 통합.
 ACTIVE_HOOKS=(
   vela-gate-keeper.js
   vela-gate-guard.js
   vela-stop.js
-  vela-review-gate.js
 )
 
 # Legacy V4.1 hooks that must NOT reappear in .vela/hooks/.
+# v7.3-M4d 이후 vela-review-gate.js + vela-subagent-stop.js도 legacy에 편입.
 LEGACY_HOOKS=(
   vela-failure.js
   vela-compact.js
   vela-analytics.js
+  vela-review-gate.js
+  vela-subagent-stop.js
 )
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -222,9 +225,11 @@ for hook in "${ACTIVE_HOOKS[@]}"; do
 done
 
 # v7.3-M4: file-read-cache 훅 제거로 PreToolUse 3 → 2 복귀 (gate-keeper, gate-guard).
-# Stop는 여전히 2 (vela-stop, vela-review-gate).
+# v7.3-M4d: vela-stop.js가 Stop + SubagentStop에 모두 등록됨 (같은 파일, 다른 _velaId).
+#   Stop은 review-gate 흡수로 2 → 1, SubagentStop은 1 유지.
 assert_eq "A: PreToolUse vela hook count"  "2" "$(count_global_hooks PreToolUse)"
-assert_eq "A: Stop vela hook count"        "2" "$(count_global_hooks Stop)"
+assert_eq "A: Stop vela hook count"        "1" "$(count_global_hooks Stop)"
+assert_eq "A: SubagentStop vela hook count" "1" "$(count_global_hooks SubagentStop)"
 
 # Hook commands point at the global hooks dir under the fake HOME
 GLOBAL_SETTINGS_JSON=$(cat_global_settings)
@@ -234,8 +239,6 @@ assert_contains "A: gate-guard command uses ~/.vela/hooks/" \
   "$FAKE_HOME/.vela/hooks/vela-gate-guard.js" "$GLOBAL_SETTINGS_JSON"
 assert_contains "A: stop command uses ~/.vela/hooks/" \
   "$FAKE_HOME/.vela/hooks/vela-stop.js" "$GLOBAL_SETTINGS_JSON"
-assert_contains "A: review-gate command uses ~/.vela/hooks/" \
-  "$FAKE_HOME/.vela/hooks/vela-review-gate.js" "$GLOBAL_SETTINGS_JSON"
 
 # Project-local settings.local.json exists and has permissions + agent
 assert_file "A: .claude/settings.local.json created" \
@@ -255,24 +258,24 @@ assert_contains "A: verify reports ok:true" '"ok": true' "$VERIFY_OUT"
 # Scenario B — Upgrade idempotency (THE critical regression check)
 # ─────────────────────────────────────────────────────────────
 echo ""
-echo "📋 Scenario B — Upgrade idempotency (review-gate survives cleanup)"
+echo "📋 Scenario B — Upgrade idempotency (active hooks survive cleanup)"
 
-# First upgrade — this is what exposed the FILE_MANIFEST bug before
+# First upgrade — this is what exposed the FILE_MANIFEST bug before.
+# v7.3-M4d: vela-review-gate.js is no longer an active hook (merged
+# into vela-stop.js). The regression the original bug was about
+# (active hooks disappearing after upgrade) is now verified against
+# the 3 remaining active hooks.
 UPGRADE_OUT_1=$(install_js upgrade 2>&1 || true)
 assert_contains "B: first upgrade reports ok" '"ok": true' "$UPGRADE_OUT_1"
 
-# review-gate.js MUST still exist after upgrade (the bug fix)
-assert_file "B: vela-review-gate.js survives first upgrade" \
-  "$PROJECT/.vela/hooks/vela-review-gate.js"
-
-# All other active hooks also still there
+# All 3 active hooks must still be there after upgrade
 for hook in vela-gate-keeper.js vela-gate-guard.js vela-stop.js; do
   assert_file "B: $hook survives first upgrade" "$PROJECT/.vela/hooks/$hook"
 done
 
 # orphansRemoved should NOT mention any active hook
 TOTAL=$((TOTAL + 1))
-if echo "$UPGRADE_OUT_1" | grep -q 'hooks/vela-review-gate.js"\|hooks/vela-gate-keeper.js"\|hooks/vela-gate-guard.js"\|hooks/vela-stop.js"' && \
+if echo "$UPGRADE_OUT_1" | grep -q 'hooks/vela-gate-keeper.js"\|hooks/vela-gate-guard.js"\|hooks/vela-stop.js"' && \
    echo "$UPGRADE_OUT_1" | grep -q '"orphansRemoved"'; then
   # Only fail if an active hook name shows up inside the orphansRemoved section
   ORPHANS=$(echo "$UPGRADE_OUT_1" | node -e "
@@ -283,7 +286,7 @@ if echo "$UPGRADE_OUT_1" | grep -q 'hooks/vela-review-gate.js"\|hooks/vela-gate-
       } catch (_) { process.stdout.write(''); }
     });
   ")
-  if echo "$ORPHANS" | grep -q 'vela-gate-keeper\|vela-gate-guard\|vela-stop\|vela-review-gate'; then
+  if echo "$ORPHANS" | grep -q 'vela-gate-keeper\|vela-gate-guard\|^hooks/vela-stop\.js$'; then
     echo "  ❌ FAIL: B: active hook appeared in orphansRemoved: $ORPHANS"
     FAIL=$((FAIL + 1))
   else
@@ -298,8 +301,8 @@ fi
 # Second upgrade (idempotency)
 UPGRADE_OUT_2=$(install_js upgrade 2>&1 || true)
 assert_contains "B: second upgrade reports ok" '"ok": true' "$UPGRADE_OUT_2"
-assert_file "B: review-gate.js still present after 2nd upgrade" \
-  "$PROJECT/.vela/hooks/vela-review-gate.js"
+assert_file "B: vela-stop.js still present after 2nd upgrade" \
+  "$PROJECT/.vela/hooks/vela-stop.js"
 
 # ─────────────────────────────────────────────────────────────
 # Scenario C — V4.1 residue orphan cleanup
@@ -358,7 +361,10 @@ assert_eq "D: Stop count unchanged after 2x install" \
 # Plant 3 extra duplicate Stop hook entries directly into settings.json
 # (mimicking what a user who installed multiple times under the buggy
 # version would see) and assert the next install() call dedups them
-# back to exactly 2.
+# back to exactly 1 (v7.3-M4d: stop + review-gate merged).
+# Also plants legacy vela-review-gate.js entries to verify
+# pruneDanglingVelaHooks + VELA_HOOK_FILES dedup clears them since
+# the file no longer exists.
 HOME="$FAKE_HOME" node -e "
   const fs = require('fs');
   const path = require('path');
@@ -368,22 +374,24 @@ HOME="$FAKE_HOME" node -e "
   s.hooks.Stop = s.hooks.Stop || [];
   const stopCmd = 'node ' + path.join(process.env.HOME, '.vela', 'hooks', 'vela-stop.js');
   const rgCmd   = 'node ' + path.join(process.env.HOME, '.vela', 'hooks', 'vela-review-gate.js');
-  // 3 extra stop + 2 extra review-gate duplicates = 5 extras
+  // 3 extra stop entries (same file, no _velaId) → dedup should keep 1
   for (let i = 0; i < 3; i++) {
     s.hooks.Stop.push({ hooks: [{ type: 'command', command: stopCmd, timeout: 10 }] });
   }
+  // 2 legacy review-gate entries → pruneDanglingVelaHooks removes them
+  // (file doesn't exist post-M4d)
   for (let i = 0; i < 2; i++) {
     s.hooks.Stop.push({ hooks: [{ type: 'command', command: rgCmd, timeout: 10 }] });
   }
   fs.writeFileSync(p, JSON.stringify(s, null, 2));
 "
 PRE_HEAL_STOP=$(count_global_hooks Stop)
-assert_eq "D2: planted Stop hook count (2 + 3 + 2 = 7)" "7" "$PRE_HEAL_STOP"
+assert_eq "D2: planted Stop hook count (1 + 3 + 2 = 6)" "6" "$PRE_HEAL_STOP"
 
 install_js > /dev/null 2>&1 || true
 
 POST_HEAL_STOP=$(count_global_hooks Stop)
-assert_eq "D2: install() healed duplicates back to 2" "2" "$POST_HEAL_STOP"
+assert_eq "D2: install() healed duplicates back to 1 (M4d)" "1" "$POST_HEAL_STOP"
 
 teardown
 
@@ -409,7 +417,7 @@ setup_home_and_project
   sync_local_project "$REPO_ROOT" > /dev/null 2>&1
 )
 
-# After sync: exactly the 4 active hooks + shared/constants.js
+# After sync: exactly the 3 active hooks + shared/constants.js
 for hook in "${ACTIVE_HOOKS[@]}"; do
   assert_file "E: sync_local_project deployed $hook" \
     "$PROJECT/.vela/hooks/$hook"
@@ -417,7 +425,7 @@ done
 assert_file "E: sync_local_project deployed hooks/shared/constants.js" \
   "$PROJECT/.vela/hooks/shared/constants.js"
 
-# No V4.1 residue copied
+# No V4.1 residue copied (also no M4d-retired files)
 for legacy in "${LEGACY_HOOKS[@]}"; do
   assert_no_file "E: sync_local_project did NOT copy $legacy" \
     "$PROJECT/.vela/hooks/$legacy"
@@ -425,8 +433,10 @@ done
 
 # sync_local_project internally runs install.js → global hooks registered.
 # v7.3-M4: file-read-cache 제거로 PreToolUse 3 → 2.
+# v7.3-M4d: Stop 2 → 1 (review-gate 흡수), SubagentStop 1 유지.
 assert_eq "E: global PreToolUse count after sync" "2" "$(count_global_hooks PreToolUse)"
-assert_eq "E: global Stop count after sync"       "2" "$(count_global_hooks Stop)"
+assert_eq "E: global Stop count after sync"       "1" "$(count_global_hooks Stop)"
+assert_eq "E: global SubagentStop count after sync" "1" "$(count_global_hooks SubagentStop)"
 
 # ─────────────────────────────────────────────────────────────
 # v7.1.1 regression guard — sync_local_project MUST deploy every
@@ -479,17 +489,22 @@ install_js > /dev/null 2>&1 || true
 
 PRE_UNINSTALL_PRE=$(count_global_hooks PreToolUse)
 PRE_UNINSTALL_STOP=$(count_global_hooks Stop)
+PRE_UNINSTALL_SUB=$(count_global_hooks SubagentStop)
 # v7.3-M4: file-read-cache 제거로 PreToolUse 다시 2.
-assert_eq "F: baseline PreToolUse count" "2" "$PRE_UNINSTALL_PRE"
-assert_eq "F: baseline Stop count"       "2" "$PRE_UNINSTALL_STOP"
+# v7.3-M4d: Stop 1 (review-gate 흡수), SubagentStop 1 (통합된 vela-stop.js 재사용).
+assert_eq "F: baseline PreToolUse count"  "2" "$PRE_UNINSTALL_PRE"
+assert_eq "F: baseline Stop count"        "1" "$PRE_UNINSTALL_STOP"
+assert_eq "F: baseline SubagentStop count" "1" "$PRE_UNINSTALL_SUB"
 
 UNINSTALL_OUT=$(install_js uninstall 2>&1 || true)
 assert_contains "F: uninstall reports ok" '"ok": true' "$UNINSTALL_OUT"
 
 POST_UNINSTALL_PRE=$(count_global_hooks PreToolUse)
 POST_UNINSTALL_STOP=$(count_global_hooks Stop)
-assert_eq "F: PreToolUse vela hooks gone" "0" "$POST_UNINSTALL_PRE"
-assert_eq "F: Stop vela hooks gone"       "0" "$POST_UNINSTALL_STOP"
+POST_UNINSTALL_SUB=$(count_global_hooks SubagentStop)
+assert_eq "F: PreToolUse vela hooks gone"  "0" "$POST_UNINSTALL_PRE"
+assert_eq "F: Stop vela hooks gone"        "0" "$POST_UNINSTALL_STOP"
+assert_eq "F: SubagentStop vela hooks gone" "0" "$POST_UNINSTALL_SUB"
 
 # ── Summary ──────────────────────────────────────────────────
 echo ""
