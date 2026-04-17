@@ -110,14 +110,10 @@ curl -fsSL https://raw.githubusercontent.com/EcoKG/Vela-Skill/main/update.sh | b
 │       → learning → commit → finalize                     │
 │                                                           │
 │  🤖 ROLE AGENTS (Native Claude Code) ────────────        │
-│  vela-researcher:   3관점 분석 (아키텍처/보안/품질)         │
-│  vela-planner:      plan.md 작성 (Architecture/Spec/Test) │
+│  vela-researcher:   /vela:analyze 전용 (research/merge/analyze)│
+│  vela-planner:      plan + self-check 통합 (research 흡수)│
 │  vela-executor:     TDD 구현 (test→implement→refactor)   │
-│  vela-reviewer:     5차원 독립 평가 (20+/25 approve)      │
-│  vela-plan-checker: plan 구조 검증 (PASS/FAIL)            │
-│  vela-verifier:     테스트/린트 실행 + verification.md    │
-│  vela-diff-summary: diff 5차원 통합 검토                   │
-│  vela-learning:     파이프라인 패턴 학습 추출               │
+│  vela-reviewer:     review + verify + diff-summary 통합  │
 │                                                           │
 │  ✦ ARCHITECTURE ─────────────────────────────────        │
 │  Plan Gate: Architecture/ClassSpec/TestStrategy 필수      │
@@ -210,16 +206,12 @@ V6에서 PM은 Claude Code 네이티브 Agent 도구로 각 역할 에이전트�
 
 ```
 PM (vela.md agent)
-  ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI 호출
-  ├── Agent(vela-researcher)       → research.md (단일 또는 v7.2 병렬 3관점)
-  ├── Agent(vela-planner)          → plan.md (또는 mode:spec → patch-spec.md)
-  ├── Agent(vela-plan-checker)     → plan-check.md
-  ├── Agent(vela-executor)         → 코드 구현 (TDD; v7.2 M6 worktree opt-in)
-  ├── Agent(vela-reviewer)         → review-{step}.md
-  ├── Agent(vela-verifier)         → verification.md
-  ├── Agent(vela-diff-summary)     → diff-summary.md (v7.2 M7 background opt-in)
-  ├── Agent(vela-learning)         → learning.md    (v7.2 M7 background opt-in)
-  └── Agent(vela-researcher mode=analyze) → analysis.md (`/vela:analyze`)
+  ├── vela-engine.js (상태 머신: init/transition/record/commit)  ← CLI 호출
+  ├── Agent(vela-planner, mode=plan|spec)  → plan.md (research + self-check 통합) 또는 patch-spec.md
+  ├── Agent(vela-executor)                 → 코드 구현 (TDD; v7.2 M6 worktree opt-in)
+  ├── Agent(vela-reviewer, mode=review)    → review-{step}.md
+  ├── Agent(vela-reviewer, mode=verify)    → verification.md (테스트+린트+diff 요약 통합)
+  └── Agent(vela-researcher, mode=analyze) → analysis.md (`/vela:analyze` 전용)
 
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
   ├── vela-gate-keeper.js        (VK-01~08: 모드별 도구 제한)      [PreToolUse]
@@ -315,14 +307,10 @@ V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 
 | 작업 | subagent_type | 모델 |
 |------|--------------|------|
-| 프로젝트 분석 | `vela-researcher` | sonnet |
-| 구현 계획 | `vela-planner` | sonnet |
-| plan 구조 검증 | `vela-plan-checker` | haiku |
-| 코드 구현 | `vela-executor` | sonnet |
-| 품질 리뷰 | `vela-reviewer` | sonnet |
-| 테스트 검증 | `vela-verifier` | sonnet |
-| diff 분석 | `vela-diff-summary` | haiku |
-| 학습 추출 | `vela-learning` | haiku |
+| /vela:analyze 분석 | `vela-researcher` (mode=analyze) | haiku |
+| 구현 계획 (research+self-check 통합) | `vela-planner` | opus 4.7 (adaptive) |
+| 코드 구현 | `vela-executor` | sonnet (effort: xhigh) |
+| 품질 리뷰 + 검증 + diff 요약 | `vela-reviewer` (mode=review\|verify) | sonnet |
 
 ### 승인 메커니즘 — 파일 기반
 
@@ -348,9 +336,10 @@ Auto 모드(`/vela auto` 또는 `--auto`)는 파이프라인을 완전 무인으
 
 | 메커니즘 | 동작 |
 |---------|------|
-| **리뷰** | `Agent(vela-reviewer)` → review-{step}.md 작성 (5차원 채점) |
-| **plan-check** | `Agent(vela-plan-checker)` → plan.md 구조 자동 검증 |
-| **exit gate** | 엔진이 단계별 필수 산출물(review-*.md, approval-*.json) 존재를 확인 → 없으면 transition 차단 |
+| **리뷰** | `Agent(vela-reviewer, mode=review)` → review-{step}.md 작성 (5차원 채점) |
+| **plan self-check** | planner의 `## Self-Check` 섹션에서 자체 검증 (구 plan-checker 흡수) |
+| **검증** | `Agent(vela-reviewer, mode=verify)` → verification.md (테스트+린트+타입체크+diff 요약 통합) |
+| **exit gate** | 엔진이 단계별 필수 산출물(review-*.md, approval-*.json, verification.md) 존재를 확인 → 없으면 transition 차단 |
 
 ---
 

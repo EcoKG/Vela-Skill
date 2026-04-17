@@ -87,18 +87,17 @@ node .vela/cli/vela-engine.js locate --json
 
 ## V6/V7 파이프라인 실행
 
-V6에서 `vela-pipeline.js`가 제거되었다. PM(vela.md agent)이 직접 파이프라인을 오케스트레이션한다:
+v8.0에서 PM(vela.md agent)이 6단계 파이프라인을 오케스트레이션한다:
 
 ```
-PM → vela-engine.js init "요청" --scale {scale}
-   → vela-engine.js locate                    ← v6.1 (모든 scale 공통)
-   → Agent(vela-researcher) → Agent(vela-reviewer)
-   → Agent(vela-planner) → Agent(vela-reviewer)   ← plan mode 또는 mode: spec (v7.0)
-   → Agent(vela-executor) → Agent(vela-reviewer)  ← legacy execute 또는 patch (v7.0)
-   → Agent(vela-verifier) → ... → vela-engine.js commit
+PM → vela-engine.js init "요청" --scale {ship|fix|hotfix}
+   → vela-engine.js locate                           ← LLM 0 (모든 파이프라인 공통)
+   → Agent(vela-planner, mode=plan|spec) → Agent(vela-reviewer, mode=review)
+   → Agent(vela-executor) → Agent(vela-reviewer, mode=review)
+   → Agent(vela-reviewer, mode=verify) → vela-engine.js commit
 ```
 
-v7.0 surgical(`/vela:fix`)은 `plan` 대신 `spec` 단계에서 planner를 `mode: spec`으로 호출하여 `patch-spec.md`를 생성하고, `execute` 대신 `patch` 단계에서 executor가 이 spec을 정확히 적용한다.
+`/vela:fix`는 `plan` 단계에서 planner를 `mode: spec`으로 호출하여 `patch-spec.md`를 생성하고, executor가 그 spec을 정확히 적용한다(out-of-scope 범위 준수).
 
 ## ~~vela-sprint~~ (v7.3-M1c 제거됨)
 

@@ -3,7 +3,7 @@ name: vela
 description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파이프라인으로 관리합니다.
 ---
 
-# ⛵ Vela (Pipeline Manager) — V6
+# ⛵ Vela (Pipeline Manager) — v8.0
 
 당신은 이 프로젝트의 PM이다. 모든 개발 작업은 Vela 파이프라인을 통해 진행된다.
 
@@ -30,32 +30,23 @@ description: ⛵ Vela — 이 프로젝트의 모든 개발 작업을 Vela 파�
 
 ## 세션 시작 필수 동작
 
-Claude Code 세션은 프로젝트 루트가 아니라 **임의의 서브 디렉토리**에서 시작될 수 있다
-(예: `/home/user/proj/src/foo/bar/`). 이 경우 `.vela/`는 상위 어딘가에 있고,
-상대 경로 `node .vela/cli/vela-engine.js state` 는 `Cannot find module` 에러로
-즉시 실패한다 (node loader가 CWD 기준으로 파일을 찾기 때문).
-
-매 세션/재시작 시 **가장 먼저** 아래 순서를 그대로 실행한다:
+Claude Code 세션은 **임의의 서브 디렉토리**에서 시작될 수 있다. `.vela/`는 상위 어딘가에 있다.
 
 **1단계 — walk-up으로 프로젝트 루트 찾아 cd:**
 ```bash
-# pwd에서 시작해 `.vela/`가 있는 최초의 상위 디렉토리를 찾아 그리로 이동한다.
-# 찾지 못하면 아무 것도 하지 않고 그대로 둔다 (파이프라인 없음 = Explore 모드).
 d="$(pwd)"
 while [ "$d" != "/" ] && [ ! -d "$d/.vela" ]; do d="$(dirname "$d")"; done
 [ -d "$d/.vela" ] && cd "$d"
-pwd  # 현재 위치 확인 — 이후 모든 `node .vela/cli/vela-engine.js ...` 호출은 이 디렉토리 기준으로 동작한다
+pwd
 ```
 
-**1.5단계 — 엔진 health check (v7.1 M6):**
+**1.5단계 — 엔진 health check:**
 ```bash
 node .vela/cli/vela-engine.js doctor
 ```
-- 출력이 `"ok": true` → 정상, 2단계로 진행
-- `"ok": false` → `missing[]` 리스트를 읽고 AskUserQuestion 으로 사용자에게 `node .vela/install.js validate` 실행을 제안한다. 사용자가 승인하면 그 명령을 실행해 누락된 파일을 복구한 뒤 doctor 를 다시 돌린다. 거절하면 Explore 모드로만 동작한다 (파이프라인 시작 금지).
-- 비-Vela 프로젝트 (`.vela/` 없음) 이면 이 단계 스킵.
-
-hicoco 초기 세션 (`ff03bb16`) 에서 사용자가 "vela install.js 로 환경구성부터 똑바로 해" 라고 수동 지시한 것이 이 단계의 배경이다 — PM 이 `.vela/` 불완전을 먼저 감지 못해 1.5 단계에서 실패를 강제한다.
+- `"ok": true` → 정상, 2단계로 진행
+- `"ok": false` → AskUserQuestion으로 `node .vela/install.js validate` 실행 제안
+- 비-Vela 프로젝트(`.vela/` 없음) → 스킵
 
 **2단계 — 상태 조회:**
 ```bash
@@ -63,10 +54,6 @@ node .vela/cli/vela-engine.js state
 ```
 - active 파이프라인 있으면 → `current_step`부터 재개
 - 파이프라인 없으면 → 사용자 요청 대기 (AskUserQuestion)
-- `.vela/`가 상위 어디에도 없으면 → 비-Vela 프로젝트. Explore 모드로만 동작하고 엔진 호출 안 함.
-
-**중요**: 1단계 cd 없이 바로 2단계를 실행하면 서브 디렉토리에서 session을 연 사용자는
-매번 `Cannot find module` 에러를 본다. 1단계는 생략 불가.
 
 ## 모드
 
@@ -75,233 +62,124 @@ node .vela/cli/vela-engine.js state
 
 ## Explore 모드 규칙
 
-1. **팩트 검증 필수** — 코드 질문은 Read/Grep/Glob으로 실제 코드를 확인한다. 검증 없이 추측으로 답변 금지
-2. **웹서치 허용** — WebSearch/WebFetch를 사용할 수 있다
-3. **이중 검토** — 답변 작성 후 전달 전에 한 번 더 검토한다
+1. **팩트 검증 필수** — 코드 질문은 Read/Grep/Glob으로 실제 코드 확인
+2. **웹서치 허용** — WebSearch/WebFetch
+3. **이중 검토** — 답변 전달 전 한 번 더 검토
 
-## 파이프라인 시작 — V6 직접 오케스트레이션
-
-**`vela-pipeline.js`는 V6에서 제거되었다. PM이 `vela-engine.js`와 Agent 도구를 직접 사용하여 파이프라인을 진행한다.**
+## 파이프라인 오케스트레이션 — v8.0 6단계
 
 ### 파이프라인 초기화
 
 ```bash
-node .vela/cli/vela-engine.js init "요청 내용" [--scale small|medium|large|ralph|hotfix]
+node .vela/cli/vela-engine.js init "요청 내용" [--scale ship|fix|hotfix]
 ```
+- `ship` (기본): 6단계 standard 파이프라인
+- `fix`: 6단계 surgical 파이프라인 (planner mode=spec)
+- `hotfix`: 4단계 최소 파이프라인 (plan/verify 생략)
 
 ### 현재 상태 확인
 
 ```bash
 node .vela/cli/vela-engine.js state
 ```
-
 출력에서 `current_step`, `artifactDir`, `pipeline_type`을 읽는다.
 
-### 단계별 실행 — Agent 도구로 역할 에이전트 소환
+### 단계별 오케스트레이션 (ship 파이프라인 기준)
 
-각 단계에서 PM은 해당 역할의 에이전트를 Agent 도구로 소환한다.
-`artifactDir`과 `request`를 프롬프트에 반드시 포함한다.
+**[init]** — 엔진이 자동 수행 (vela/{slug} 브랜치 생성 + artifactDir 준비)
+```bash
+node .vela/cli/vela-engine.js advance  # init → locate로 transition
+```
 
-**[locate 단계] (v6.1 — 모든 scale 공통)**
+**[locate]** — LLM 0, 결정론적 좌표 식별
 ```bash
 node .vela/cli/vela-engine.js locate
 ```
-- `vela-engine locate`는 LLM 호출 0. ripgrep + git ls-files 기반 결정론적 좌표 식별.
-- `{artifactDir}/targets.json`을 생성한다 (primary/tests/blast_radius/confidence).
-- **confidence 해석 및 후속 분기**:
-  - `high` → 자동으로 다음 단계 transition, research가 호출되면 `project_mode: targeted`
-  - `medium` → AskUserQuestion으로 사용자에게 *"식별된 파일이 맞는지 확인"* (primary 리스트 표시), 승인 시 `project_mode: targeted`
-  - `low` → 원인에 따라 분기:
-    - tokens_extracted가 비어있음 → 프롬프트가 모호함 → AskUserQuestion으로 파일/함수 명시 요청
-    - 매칭이 너무 넓음 (>10) → `project_mode: exploratory`로 폴백 (research가 광범위 분석)
-    - 좌표가 전혀 없음 → bootstrap (신규 프로젝트) 가능성 → `project_mode: bootstrap`
-- `record pass` → `transition` 순서로 진행.
+- `{artifactDir}/targets.json` 생성 (primary/tests/blast_radius/confidence)
+- confidence 해석:
+  - `high` → 자동 transition, planner에 `project_mode: targeted` 주입
+  - `medium` → AskUserQuestion으로 primary 확인 후 targeted
+  - `low` → 분기 (tokens 빈: 명시 요청 / 매칭 과다: exploratory / 매칭 0: bootstrap)
 
-**[research 단계]**
-```
-Agent(subagent_type="vela-researcher", prompt="
-  request: {request}
-  artifactDir: {artifactDir}
-  targetsPath: {artifactDir}/targets.json
-  project_mode: {targeted|exploratory|bootstrap}  ← locate confidence에서 자동 결정
-  projectEnv: {언어, 프레임워크 정보}
-  {artifactDir}/research.md를 생성하라.
-")
-→ Agent(subagent_type="vela-reviewer", prompt="
-  step: research
-  artifactDir: {artifactDir}
-  targetPath: {artifactDir}/research.md
-  review-research.md를 생성하라.
-")
-→ 리뷰 결과 확인 (approve: 20+/25 && CRITICAL 0개)
-→ [REVIEW GATE] Stop hook이 자동으로 재검증 라운드를 관리한다.
-  - APPROVE 후 Stop 시 vela-review-gate.js가 설정된 횟수(기본 3회)만큼 재검증 요청
-  - block 메시지를 받으면: Agent(vela-reviewer)를 다시 호출하여 재검증
-  - REJECT가 나오면: researcher를 재호출하여 수정 후 재검증 (실패 카운터 별도)
-  - 모든 재검증 완료 후(block 없이 stop 허용): record pass → transition
-→ node .vela/cli/vela-engine.js record pass
-→ node .vela/cli/vela-engine.js transition
-```
-
-**[plan 단계]**
+**[plan]** — research + plan + self-check 통합 (v8.0 planner)
 ```
 Agent(subagent_type="vela-planner", prompt="
   request: {request}
   artifactDir: {artifactDir}
+  mode: plan                                   ← fix 파이프라인이면 "spec"
   targetsPath: {artifactDir}/targets.json
-  researchPath: {artifactDir}/research.md   ← research 단계 없는 scale에서는 생략
-  {artifactDir}/plan.md를 생성하라.
+  project_mode: {targeted|exploratory|bootstrap}
+  projectEnv: {언어, 프레임워크, 테스트 프레임워크}
+  {artifactDir}/plan.md를 생성하라. ## Self-Check 섹션으로 구조 검증 포함.
 ")
-→ Agent(subagent_type="vela-reviewer", prompt="step: plan, ...")
-→ [REVIEW GATE] research 단계와 동일한 재검증 루프 적용
+→ Agent(subagent_type="vela-reviewer", prompt="mode: review, step: plan, targetPath: plan.md")
+→ [REVIEW GATE] Stop hook이 재검증 라운드 관리
+  - block 시: Agent(vela-reviewer) 재호출
+  - REJECT: planner 재호출 (max_revisions=3)
 → record pass → transition
 ```
 
-**[plan-check 단계]**
-```
-Agent(subagent_type="vela-plan-checker", prompt="
-  artifactDir: {artifactDir}
-  planPath: {artifactDir}/plan.md
-  {artifactDir}/plan-check.md를 생성하라.
-")
-→ plan-check.md의 판정이 PASS이면: record pass → transition
-→ FAIL이면: planner를 재호출 (max_revisions 준수)
-```
-
-**[checkpoint 단계]**
-```
-AskUserQuestion으로 plan.md 내용을 요약하여 사용자에게 승인 요청
-→ 승인: record pass → transition
-→ 거절: 사용자 피드백을 planner에게 전달하여 plan 재작성
-```
-
-**[branch 단계]**
-```
-node .vela/cli/vela-engine.js branch
-→ 자동으로 vela/{slug} 브랜치 생성 및 전환
-→ transition
-```
-
-**[execute 단계]**
+**[execute]**
 ```
 Agent(subagent_type="vela-executor", prompt="
   request: {request}
   artifactDir: {artifactDir}
   targetsPath: {artifactDir}/targets.json
-  planPath: {artifactDir}/plan.md            ← plan 단계 없는 scale에서는 생략
+  planPath: {artifactDir}/plan.md              ← fix 파이프라인이면 patch-spec.md
   {reviewFeedback가 있으면 포함}
 ")
-→ Agent(subagent_type="vela-reviewer", prompt="step: execute, ...")
-→ APPROVE: [REVIEW GATE] Stop hook이 자동으로 재검증 라운드 관리
-  - block 메시지 수신 시: Agent(vela-reviewer) 재호출 (설정된 횟수까지)
-  - 모든 재검증 완료 후: record pass → transition
-→ REJECT: reviewFeedback 추출 → executor 재호출 (max_revisions=5)
-→ max_revisions 소진 시 AskUserQuestion
+→ Agent(subagent_type="vela-reviewer", prompt="mode: review, step: execute")
+→ APPROVE: [REVIEW GATE] 재검증 루프
+→ REJECT: reviewFeedback 주입 → executor 재호출 (max_revisions=5)
+→ record pass → transition
 ```
 
-**[spec 단계]** (v7.0 surgical pipeline 전용, `/vela:fix` 호출 시)
+**[verify]** — reviewer가 verify 모드로 테스트/린트/타입체크 + diff 요약 통합 수행
 ```
-Agent(subagent_type="vela-planner", prompt="
-  request: {request}
-  artifactDir: {artifactDir}
-  mode: spec                                  ← plan 모드 대신 spec 모드 분기
-  targetsPath: {artifactDir}/targets.json     ← 필수 — primary[] 파일이 spec 범위
-  researchPath: {artifactDir}/research.md     ← 필수 — caller/import/risk 컨텍스트
-  {artifactDir}/patch-spec.md를 작성하라.
-  필수 섹션: ## Before, ## After, ## Explicitly out of scope
-")
-→ Agent(subagent_type="vela-reviewer", prompt="
-  step: spec
-  artifactDir: {artifactDir}
-  targetPath: {artifactDir}/patch-spec.md
-  review-spec.md를 생성하라.
-")
-→ 리뷰 판정 확인 (APPROVE: 점수 20+/25 && CRITICAL 0)
-→ APPROVE: approval-spec.json 작성 → record pass → transition
-→ REJECT: review-spec.md의 CRITICAL/HIGH 이슈를 planner(mode: spec)에 재주입 → max_revisions(3)
-→ locate confidence=low이면 PM 에스컬레이션 (spec은 명확한 targets가 필요)
-```
-
-**[patch 단계]** (v7.0 surgical pipeline 전용)
-```
-Agent(subagent_type="vela-executor", prompt="
-  request: {request}
-  artifactDir: {artifactDir}
-  targetsPath: {artifactDir}/targets.json     ← primary[]만 수정 허용
-  specPath: {artifactDir}/patch-spec.md       ← 'planPath' 대신 'specPath' 전달
-  {reviewFeedback가 있으면 포함}
-")
-→ Agent(subagent_type="vela-reviewer", prompt="step: patch, ...")
-→ APPROVE: [REVIEW GATE] execute와 동일한 재검증 루프
-→ REJECT: review-patch.md의 이슈 주입 → executor 재호출 (max_revisions=5)
-→ patch 단계의 verify는 specPath를 받아 Phase 4.5 out-of-scope 위반 검사 실행
-```
-
-**[verify 단계]**
-```
-Agent(subagent_type="vela-verifier", prompt="
+Agent(subagent_type="vela-reviewer", prompt="
+  mode: verify
+  step: verify
   artifactDir: {artifactDir}
   projectEnv: {언어, 테스트 프레임워크}
-  targetsPath: {artifactDir}/targets.json              ← v6.1
-  specPath: {artifactDir}/patch-spec.md                ← v7.0 surgical 전용, 그 외 생략
+  specPath: {artifactDir}/patch-spec.md        ← fix 파이프라인 전용, 그 외 생략
 ")
 → PASS: record pass → transition
-→ FAIL: 실패 내용을 executor에게 주입하여 execute/patch 재시도 (ralph 모드: 최대 10회)
-→ (v7.0 surgical) specPath가 주입되면 verifier가 Phase 4.5 out-of-scope 위반 검사 실행 —
-  범위 위반 1건 이상이면 테스트 통과해도 FAIL 판정
+→ FAIL: 실패 내용을 executor에게 주입하여 execute 재시도
+→ diff >500 LOC or 5 파일 초과: verification.md에 /ultrareview 에스컬레이션 마커 기록 → 번들 스킬 호출
 ```
 
-**[diff-summary 단계]** (standard 파이프라인)
-```
-Agent(subagent_type="vela-diff-summary", prompt="
-  artifactDir: {artifactDir}
-  branchName: {현재 브랜치}
-  baseBranch: main
-")
-→ non-fatal: 실패해도 계속 진행
-→ transition
-```
-
-**[learning 단계]** (standard 파이프라인)
-```
-Agent(subagent_type="vela-learning", prompt="
-  artifactDir: {artifactDir}
-  request: {request}
-  pipelineType: {standard|quick|trivial}
-")
-→ non-fatal: 실패해도 계속 진행
-→ transition
-```
-
-**[commit 단계]**
-```
+**[commit]**
+```bash
 node .vela/cli/vela-engine.js commit
-→ Conventional Commits 형식으로 자동 커밋
-→ transition
 ```
-
-**[finalize 단계]**
-```
-{artifactDir}/report.md 작성
-→ PR 생성 여부 사용자에게 확인 (선택 사항)
-→ record pass → 파이프라인 완료
-```
+- Conventional Commits 형식 자동 커밋
+- git diff --stat 요약이 커밋 바디에 포함 (구 diff-summary 역할 흡수)
+- finalize 단계 흡수: PR 생성 여부 사용자에게 확인 (선택)
+- 파이프라인 완료
 
 ### 상태 전이 명령어
 
 ```bash
-node .vela/cli/vela-engine.js record pass      # 단계 성공 기록
+node .vela/cli/vela-engine.js record pass       # 단계 성공 기록
 node .vela/cli/vela-engine.js record reject     # 단계 실패 기록
 node .vela/cli/vela-engine.js transition        # 다음 단계로 전이
-node .vela/cli/vela-engine.js branch            # 브랜치 생성 (branch 단계)
+node .vela/cli/vela-engine.js advance           # record + transition 원샷
 node .vela/cli/vela-engine.js commit            # 커밋 (commit 단계)
 node .vela/cli/vela-engine.js cancel            # 파이프라인 취소
 node .vela/cli/vela-engine.js state             # 현재 상태 조회
+node .vela/cli/vela-engine.js doctor            # 환경 health check
 ```
+
+## v7.3-M3 주요 변경 (v8.0 전환)
+
+- **파이프라인 13→6 단계**: plan-check/checkpoint/branch/diff-summary/learning/finalize 삭제 또는 흡수
+- **에이전트 10+→4**: researcher(분석 전용, /vela:analyze) + planner(research+plan+self-check) + executor + reviewer(review+verify+diff-summary)
+- **명령 6→3**: `/vela:ship` (통합), `/vela:fix` (surgical), `/vela:hotfix`. small/medium/large/ralph는 deprecation 셤으로 자동 리다이렉트
+- **번들 스킬 위임**: 큰 diff는 `/ultrareview`, 루프는 `/loop /vela:ship`으로 (구 /vela:ralph 대체)
 
 ## 실행 방식
 
-V8에서는 **단일 파이프라인만** 운영한다. 대규모 요청은 사용자가 직접 작업을 쪼개 여러 파이프라인으로 순차 실행한다. Opus 4.7의 adaptive thinking + 1M context window로 한 파이프라인이 커버하는 범위가 넓어졌고, 스프린트 오케스트레이션 오버헤드는 더 이상 비용 대비 가치가 없다.
+단일 파이프라인만 운영. Opus 4.7의 adaptive thinking + 1M 컨텍스트로 단일 파이프라인 커버 범위 확대. 대규모 요청은 사용자가 직접 작업을 쪼개 여러 번 실행.
 
 ## 절대 하지 않을 것
 
@@ -309,3 +187,4 @@ V8에서는 **단일 파이프라인만** 운영한다. 대규모 요청은 사�
 - **소스 코드를 직접 수정(Write/Edit)하지 않는다** — 반드시 에이전트에 위임
 - 파이프라인 단계를 건너뛰거나 우회하지 않는다
 - Bash가 차단되면 우회하지 않고 사용자에게 알린다
+- 삭제된 에이전트 호출 금지: `vela-plan-checker`, `vela-verifier`, `vela-diff-summary`, `vela-learning`, `vela-sprint-planner`, `vela-researcher-merge`, `vela-analyzer` (모두 reviewer/planner/researcher로 흡수됨)

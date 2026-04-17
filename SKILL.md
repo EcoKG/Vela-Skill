@@ -104,12 +104,11 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
    node .vela/cli/vela-engine.js init "작업 설명" --scale <small|medium|large>
    ```
 
-5. **파이프라인 진행**
+5. **파이프라인 진행** (v8.0 — 6단계)
    PM이 `vela-engine.js`로 상태를 추적하며, Agent 도구로 역할별 에이전트를 순서대로 소환한다.
-   - research 단계: `Agent(subagent_type="vela-researcher")` → `Agent(subagent_type="vela-reviewer")`
-   - plan 단계: `Agent(subagent_type="vela-planner")` → 리뷰
-   - execute 단계: `Agent(subagent_type="vela-executor")` → 리뷰
-   - verify 단계: `Agent(subagent_type="vela-verifier")`
+   - plan 단계: `Agent(subagent_type="vela-planner")` → `Agent(subagent_type="vela-reviewer")`
+   - execute 단계: `Agent(subagent_type="vela-executor")` → reviewer
+   - verify 단계: `Agent(subagent_type="vela-reviewer", mode="verify")`
    - 각 단계 완료 후 `node .vela/cli/vela-engine.js transition`으로 전이
 
 ---
@@ -330,14 +329,10 @@ PM → Agent(subagent_type="vela-reviewer", prompt="step: {step}, artifactDir: {
 
 | 에이전트 | 역할 | 산출물 |
 |---------|------|--------|
-| `vela-researcher` | 아키텍처/보안/품질 3관점 분석 | `research.md` |
-| `vela-planner` | plan.md 작성 | `plan.md` |
-| `vela-plan-checker` | plan.md 구조 검증 | `plan-check.md` |
+| `vela-researcher` (mode=research/merge/analyze) | `/vela:analyze` 전용 — 3관점/머지/심층 분석 | `analysis.md` |
+| `vela-planner` (mode=plan/spec) | research+plan+self-check 통합 | `plan.md` 또는 `patch-spec.md` |
 | `vela-executor` | TDD 기반 코드 구현 | `task-summary.md` |
-| `vela-reviewer` | 5차원 채점 (≥20/25 승인) | `review-{step}.md` |
-| `vela-verifier` | 테스트/린트/타입 체크 | `verification.md` |
-| `vela-diff-summary` | diff 5차원 통합 검토 | `diff-summary.md` |
-| `vela-learning` | 학습 패턴 추출 | `learning.md` |
+| `vela-reviewer` (mode=review/verify) | 5차원 채점 + 테스트/린트 + diff 요약 통합 | `review-{step}.md`, `verification.md` |
 
 #### 에이전트 지시사항 (`.vela/agents/`)
 
@@ -451,14 +446,10 @@ V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 
 | 작업 | subagent_type | 고정 모델 |
 |------|--------------|----------|
-| 프로젝트 분석 | `vela-researcher` | `sonnet` |
-| 구현 계획 | `vela-planner` | `sonnet` |
-| plan 구조 검증 | `vela-plan-checker` | `haiku` |
-| 코드 구현 | `vela-executor` | `sonnet` |
-| 품질 리뷰 | `vela-reviewer` | `sonnet` |
-| 테스트 검증 | `vela-verifier` | `sonnet` |
-| diff 요약 | `vela-diff-summary` | `haiku` |
-| 학습 추출 | `vela-learning` | `haiku` |
+| 프로젝트 분석 (/vela:analyze) | `vela-researcher` (mode=analyze) | `haiku` |
+| 구현 계획 (research 흡수, Self-Check 포함) | `vela-planner` | `opus` (adaptive thinking) |
+| 코드 구현 | `vela-executor` | `sonnet` (effort: xhigh) |
+| 품질 리뷰 + 검증 + diff 요약 통합 | `vela-reviewer` | `sonnet` |
 
 ### 에이전트 소환 예시
 
@@ -518,16 +509,12 @@ Vela V6는 Claude Code 네이티브 Agent 도구로 파이프라인을 제어한
 ### 아키텍처
 
 ```
-PM (vela.md agent)
-  ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI 호출
-  ├── Agent(vela-researcher) → research.md
-  ├── Agent(vela-planner)    → plan.md
-  ├── Agent(vela-plan-checker) → plan-check.md
-  ├── Agent(vela-executor)   → 코드 구현 (TDD)
-  ├── Agent(vela-reviewer)   → review-{step}.md
-  ├── Agent(vela-verifier)   → verification.md
-  ├── Agent(vela-diff-summary) → diff-summary.md
-  └── Agent(vela-learning)   → learning.md
+PM (vela.md agent) — v8.0 6단계
+  ├── vela-engine.js (상태 머신: init/transition/record/commit)  ← CLI 호출
+  ├── Agent(vela-planner, mode=plan|spec) → plan.md 또는 patch-spec.md
+  ├── Agent(vela-executor) → 코드 구현 (TDD)
+  ├── Agent(vela-reviewer, mode=review) → review-{step}.md
+  └── Agent(vela-reviewer, mode=verify) → verification.md (테스트+린트+diff 요약 통합)
 
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
   ├── vela-gate-keeper.js  (VK-01~08: 모드별 도구 제한)   [PreToolUse]

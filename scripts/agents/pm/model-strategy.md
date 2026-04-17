@@ -1,56 +1,50 @@
-# 모델 선택 전략 — V6 Agent 도구 기반
+# 모델 선택 전략 — v8.0 (v7.3-M3 이후)
 
-V6에서는 PM이 각 단계를 Agent 도구로 직접 실행한다. 모델 선택은 각 역할 에이전트의 시스템 프롬프트에서 자체적으로 처리한다.
+PM은 각 단계를 Agent 도구로 실행한다. 모델 선택은 각 역할 에이전트의 frontmatter에서 고정한다.
 
-## 단계별 실행 경로
+## 단계별 실행 경로 (6단계)
 
-| 단계 | 역할 에이전트 | 모델 | 특징 |
-|------|-------------|------|------|
-| research | `vela-researcher` | Sonnet | 아키텍처/보안/품질 3관점 분석 (v6.1에서 `project_mode: targeted` 자동 활성화) |
-| plan | `vela-planner` | Sonnet | plan mode — Architecture/ClassSpec/TestStrategy 필수 |
-| **spec** (v7.0) | `vela-planner` | Sonnet | spec mode — `patch-spec.md` (file:line Before/After + Explicitly out of scope), planner가 `mode: spec`으로 호출됨 |
-| plan-check | `vela-plan-checker` | Haiku (`effort: low`) | plan.md 구조 검증 (PASS/FAIL) |
-| execute | `vela-executor` | Sonnet | plan mode TDD 3단계 구현 |
-| **patch** (v7.0) | `vela-executor` | Sonnet | spec mode — `patch-spec.md`의 `## After`를 정확히 적용, `Explicitly out of scope` 범위 준수 |
-| verify | `vela-verifier` | Sonnet | 테스트/린트/타입 체크 + (v7.0) specPath 주입 시 Phase 4.5 out-of-scope 위반 검사 |
-| review | `vela-reviewer` | Sonnet | 5차원 채점 (점수 ≥ 20/25 → 승인) |
-| diff-summary | `vela-diff-summary` | Haiku (`effort: low`) | 전체 diff 통합 검토 (non-fatal) |
-| learning | `vela-learning` | Haiku (`effort: low`) | 파이프라인 학습 축적 (non-fatal) |
+| 단계 | 역할 에이전트 | mode | 모델 | 특징 |
+|------|-------------|------|------|------|
+| init | (엔진) | — | — | 아티팩트 디렉토리 + 브랜치 자동 생성 (LLM 0) |
+| locate | (엔진) | — | — | ripgrep + git grep 결정론 (LLM 0) |
+| plan (ship) | `vela-planner` | `plan` | Sonnet (effort: high) | research 흡수 — 파일 직접 Read + plan.md + ## Self-Check |
+| plan (fix) | `vela-planner` | `spec` | Sonnet (effort: high) | patch-spec.md (file:line Before/After + out-of-scope) |
+| execute | `vela-executor` | — | Sonnet (effort: xhigh) | TDD 3단계 (test-write→implement→refactor). fix에서는 patch-spec 엄수. |
+| verify | `vela-reviewer` | `verify` | Sonnet | 테스트/린트/타입체크 + diff 요약 통합. >500 LOC → /ultrareview 에스컬레이션 |
+| commit | (엔진) | — | — | Conventional Commits 자동 (LLM 0) |
 
-**v7.0 note**: spec과 patch는 각각 `vela-planner` / `vela-executor` 에이전트의 **새 mode**로 구현된다 — 새 에이전트 파일은 없다. PM이 프롬프트에 `mode: spec`을 주입하면 planner가 분기한다.
+review 판정은 verify 단계 내부에서 `mode: review`로 중첩 수행되거나 execute 직후 별도 호출 (파이프라인 설정에 따라). Architecture Guardrails 위반/CRITICAL 검출 시 REJECT.
 
-## PM 오케스트레이션 패턴
+## 모델 고정 원칙
 
-PM은 각 단계에서 다음과 같이 Agent 도구를 호출한다:
+- 각 에이전트 frontmatter `model:`는 **반드시 명시**한다. 생략 시 `inherit`로 부모 모델(Opus)이 흘러내려 비용 폭증.
+- v8.0 권고:
+  - `vela-planner` — **Opus 4.7** (`model: opus`, `effort: high`, adaptive thinking으로 Task Budget 자가 페이싱)
+  - `vela-executor` — Sonnet 4.5 (`model: sonnet`, `effort: xhigh` — 코딩 특화)
+  - `vela-reviewer` — Sonnet 4.5 (`model: sonnet`). 대형 diff 시 `/ultrareview`로 Opus 위임.
+  - `vela-researcher` (/vela:analyze 전용) — Haiku 4.5 (`model: haiku`, `effort: low`) — 스캔 중심
 
-```
-Agent(
-  subagent_type="vela-researcher",
-  prompt="request: {요청}, artifactDir: {artifactDir}, cwd: {cwd}"
-)
-```
+## 삭제된 단계의 처리
 
-**모델은 각 에이전트의 frontmatter(`model:`)에 고정한다.** 생략하면 공식 기본값 `inherit`가 적용되어 부모 세션의 모델(예: Opus)을 그대로 쓰므로 비용 예측이 불가능하다. 품질 크리티컬 단계(researcher/planner/executor/reviewer/verifier)는 Sonnet, 기계적 검사(plan-checker/diff-summary/learning)는 Haiku로 고정한다. Haiku 단계는 `effort: low`로 확장 사고(extended thinking)를 꺼서 추가 비용을 배제한다.
+v7.3-M3 이전에 존재했던 단계들의 현재 위치:
 
-## 스케일별 단계 구성 (v6.1/v7.0)
+| 구 단계 | v8.0 위치 |
+|--------|-----------|
+| research | plan 내부에서 planner가 직접 수행 |
+| plan-check | plan.md의 `## Self-Check` 섹션 |
+| checkpoint | 삭제 (auto 모드 기본) |
+| branch | init 단계에서 자동 생성 |
+| diff-summary | verify 단계의 reviewer Phase 4 |
+| learning | 삭제 (post-tool-learning 훅 40줄만 잔존) |
+| finalize | commit 단계에서 git diff --stat 요약 |
 
-모든 scale에 `init → locate` 공통 프리픽스 (v6.1).
+## 파이프라인 변종 (3종)
 
-| scale 명령 | pipeline_type | 실행되는 단계 |
-|---|---|---|
-| `/vela:hotfix` | hotfix | locate, execute, commit |
-| `/vela:small` | trivial | locate, execute, commit, finalize |
-| `/vela:medium` | quick | locate, plan, execute, verify, commit, finalize |
-| `/vela:ralph` | ralph | locate, execute ↔ verify 루프, commit, finalize |
-| **`/vela:fix` (v7.0)** | surgical | **locate, research(targeted), spec, patch, verify, commit, finalize** |
-| `/vela:large` | standard | 전체 13단계 (locate, research, plan, plan-check, checkpoint, branch, execute, verify, diff-summary, learning, commit, finalize) |
+| 명령 | pipeline_type | 단계 수 | 특징 |
+|------|---------------|---------|------|
+| `/vela:ship` | ship | 6 | 기본 — small/medium/large/ralph 통합 |
+| `/vela:fix` | fix | 6 | surgical — planner mode=spec |
+| `/vela:hotfix` | hotfix | 4 | 문서/config — plan/verify 생략 |
 
-스케일 선택 가이드:
-- **일상 작업의 기본은 `/vela:fix`** — targets가 명확하면 가장 비용 효율적 (`~50-110k` 추정 토큰)
-- 단일 파일 typo/오타 → `/vela:small`
-- 범위는 명확하나 spec 단계가 과한 경우 → `/vela:medium`
-- 신규 모듈/광범위 refactor/bootstrap/exploratory bug → `/vela:large`
-- 테스트 통과까지 반복 → `/vela:ralph`
-- 문서/설정 → `/vela:hotfix`
-
-복잡한 작업일수록 높은 scale을 사용하여 충분한 분석과 검증을 보장한다.
+Deprecated: `/vela:small`, `/vela:medium`, `/vela:large`, `/vela:ralph` — 모두 `/vela:ship`으로 자동 리다이렉트 (v8.1에서 완전 제거).

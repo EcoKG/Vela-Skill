@@ -105,15 +105,12 @@ const FILE_MANIFEST = [
   { src: "scripts/statusline.sh", dst: "statusline.sh" },
   // PM agent file
   { src: "scripts/agents/vela.md", dst: "agents/vela.md" },
-  // V6 role agents (deployed to .vela/agents/ AND .claude/agents/)
+  // v8.0 role agents (deployed to .vela/agents/ AND .claude/agents/)
+  // v7.3-M3: 4 agents — researcher(analyze/merge 모드 전용, /vela:analyze 스킬용), planner(research+plan+self-check 통합), executor, reviewer(verify+diff-summary 통합)
   { src: "scripts/agents/vela-researcher.md", dst: "agents/vela-researcher.md" },
   { src: "scripts/agents/vela-planner.md", dst: "agents/vela-planner.md" },
   { src: "scripts/agents/vela-executor.md", dst: "agents/vela-executor.md" },
   { src: "scripts/agents/vela-reviewer.md", dst: "agents/vela-reviewer.md" },
-  { src: "scripts/agents/vela-plan-checker.md", dst: "agents/vela-plan-checker.md" },
-  { src: "scripts/agents/vela-verifier.md", dst: "agents/vela-verifier.md" },
-  { src: "scripts/agents/vela-diff-summary.md", dst: "agents/vela-diff-summary.md" },
-  { src: "scripts/agents/vela-learning.md", dst: "agents/vela-learning.md" },
   // Templates
   { src: "templates/pipeline.json", dst: "templates/pipeline.json" },
   {
@@ -665,10 +662,6 @@ function install() {
     "vela-planner.md",
     "vela-executor.md",
     "vela-reviewer.md",
-    "vela-plan-checker.md",
-    "vela-verifier.md",
-    "vela-diff-summary.md",
-    "vela-learning.md",
   ];
   for (const agentFile of CLAUDE_AGENTS) {
     const src = path.join(PROJECT_ROOT, ".vela", "agents", agentFile);
@@ -1072,10 +1065,6 @@ function upgrade() {
       "vela-planner.md",
       "vela-executor.md",
       "vela-reviewer.md",
-      "vela-plan-checker.md",
-      "vela-verifier.md",
-      "vela-diff-summary.md",
-      "vela-learning.md",
       ];
     for (const agentFile of CLAUDE_AGENTS) {
       const src = path.join(velaDir, "agents", agentFile);

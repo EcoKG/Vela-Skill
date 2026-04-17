@@ -917,22 +917,14 @@ function nextActionHint(state, stepId, justAdvanced) {
   // justAdvanced === true → we're saying "you just moved INTO stepId, here's
   // what to run". false → "you're still ON stepId, here's the retry path".
   const pipelineType = state && state.pipeline_type;
+  // v8.0 (v7.3-M3): ship 파이프라인 6단계 고정 매핑. plan이 research+plan-check 흡수, reviewer가 verify+diff-summary 흡수, commit이 branch+finalize 흡수.
   const table = {
-    init: "run `node .vela/cli/vela-engine.js advance` to move into locate",
+    init: "run `node .vela/cli/vela-engine.js advance` to move into locate (init도 vela/{slug} 브랜치 자동 생성)",
     locate: "run `node .vela/cli/vela-engine.js locate` (generates targets.json)",
-    research: "spawn vela-researcher then vela-reviewer; call `advance pass` on approve",
-    plan: "spawn vela-planner then vela-reviewer; call `advance pass` on approve",
-    "plan-check": "spawn vela-plan-checker; call `advance pass` if PASS, else re-spawn planner",
-    checkpoint: "AskUserQuestion for plan approval; call `advance pass` on approve",
-    spec: "spawn vela-planner (mode:spec) then vela-reviewer",
-    branch: "run `node .vela/cli/vela-engine.js branch` then `advance`",
-    execute: "spawn vela-executor then vela-reviewer",
-    patch: "spawn vela-executor with specPath then vela-reviewer",
-    verify: "spawn vela-verifier; call `advance pass` if PASS, else re-spawn executor",
-    "diff-summary": "spawn vela-diff-summary (non-fatal); always `advance pass`",
-    learning: "spawn vela-learning (non-fatal); always `advance pass`",
-    commit: "run `node .vela/cli/vela-engine.js commit` then `advance`",
-    finalize: "write report.md then `advance pass` to close the pipeline",
+    plan: "spawn vela-planner (research+plan+self-check 통합) then vela-reviewer; call `advance pass` on approve. fix 파이프라인에선 mode=spec로 patch-spec.md 생성.",
+    execute: "spawn vela-executor then vela-reviewer; call `advance pass` on approve",
+    verify: "spawn vela-reviewer (테스트+린트+타입체크+diff 요약 통합); >500 LOC diff이면 /ultrareview 번들 스킬 에스컬레이션",
+    commit: "run `node .vela/cli/vela-engine.js commit` — Conventional Commits + git diff --stat 요약으로 파이프라인 종료",
   };
   const hint = table[stepId];
   if (!hint) return `see agents/vela.md for step ${stepId} (${pipelineType || "unknown pipeline"})`;
@@ -997,10 +989,6 @@ function cmdDoctor() {
     "vela-planner.md",
     "vela-executor.md",
     "vela-reviewer.md",
-    "vela-verifier.md",
-    "vela-plan-checker.md",
-    "vela-diff-summary.md",
-    "vela-learning.md",
   ];
   for (const a of agents) {
     const abs = path.join(CWD, ".vela", "agents", a);
@@ -1922,34 +1910,8 @@ function checkExitGate(stepDef, state) {
         if (!artifactDir || !fs.existsSync(path.join(artifactDir, "plan.md")))
           missing.push(gate);
         break;
-      case "plan_check_pass":
-        if (
-          !artifactDir ||
-          !fs.existsSync(path.join(artifactDir, "plan-check.md"))
-        )
-          missing.push(gate);
-        break;
-      case "user_approved":
-        // Checkpoint is acknowledged when a record has been made for this step.
-        // We check revisions instead of completed_steps because transition()
-        // adds to completed_steps AFTER the exit gate check.
-        if (
-          state.current_step === "checkpoint" &&
-          (!state.revisions.checkpoint || state.revisions.checkpoint < 1)
-        ) {
-          // Auto mode: if plan-check.md exists, auto-pass the checkpoint
-          if (
-            state.auto === true &&
-            state.current_step === "checkpoint" &&
-            artifactDir &&
-            fs.existsSync(path.join(artifactDir, "plan-check.md"))
-          ) {
-            // plan-check gate passed — auto-approve checkpoint
-            break;
-          }
-          missing.push(gate);
-        }
-        break;
+      // v8.0 (v7.3-M3): plan_check_pass + user_approved gates 제거 —
+      // plan 단계의 ## Self-Check 섹션이 plan-checker 역할 흡수, checkpoint 단계 삭제.
       case "patch_spec_complete":
         // v7.0 skeleton exit gate — patch-spec.md must exist with required
         // sections. Mirrors plan_architecture_complete but for spec stage.
@@ -2076,17 +2038,7 @@ function checkExitGate(stepDef, state) {
       case "git_clean":
         // Init gate: working tree must be clean (checked during init, always passes after)
         break;
-      case "branch_created":
-        // Branch gate: pipeline branch recorded in state
-        if (state.git && state.git.is_repo) {
-          if (!state.git.pipeline_branch && state.current_step === "branch") {
-            // Check if branch step was recorded (revisions > 0)
-            if (!state.revisions.branch || state.revisions.branch < 1) {
-              missing.push(gate);
-            }
-          }
-        }
-        break;
+      // v8.0 (v7.3-M3): branch_created gate 제거 — branch 단계 삭제 후 init이 브랜치 생성 흡수.
       case "changes_committed":
         // Commit gate: commit hash recorded in state
         if (state.git && state.git.is_repo) {
@@ -2105,9 +2057,7 @@ function checkExitGate(stepDef, state) {
         )
           missing.push(gate);
         break;
-      case "report_md_exists":
-        // Finalize gate - report is the output of this step
-        break;
+      // v8.0 (v7.3-M3): report_md_exists gate 제거 — finalize 단계 삭제 후 commit이 git diff --stat으로 요약 생성.
       case "ref_integrity": {
         // Change Surface Analysis — verify no broken cross-file references
         const baselineSha =
