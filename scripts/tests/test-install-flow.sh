@@ -23,7 +23,7 @@
 #      expect. The test runs sync_local_project end-to-end and
 #      asserts the resulting .vela/hooks/ matches expectations.
 #
-# Coverage (validation-plan.md V5 + V6):
+# Coverage (legacy validation-plan V5 + V6 — doc removed in v7.3-M5):
 #   V5-1 기본 설치 검증
 #   V5-2 registerGlobalHooks 멱등성
 #   V5-4 settings.local.json hooks 마이그레이션

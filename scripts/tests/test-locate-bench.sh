@@ -64,10 +64,7 @@ bench_run() {
         // self-match on the scenario text embedded in this file.
         'scripts/tests/test-locate-bench.sh',
         'scripts/tests/test-locate.sh',
-        // Exclude the RFC docs — they enumerate all the test scenarios
-        // in free-form prose, creating artificial matches.
-        'docs/v6.1-rfc-precision-locate.md',
-        'docs/v7.0-rfc-surgical-pipeline.md',
+        // (v7.3-M5: archival RFCs removed; no doc exclusions needed)
       ],
     });
     const first = r.primary[0] ? r.primary[0].file : '';

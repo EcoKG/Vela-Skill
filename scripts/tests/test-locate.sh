@@ -180,10 +180,10 @@ RESULT=$(run_locate "scripts/shared/locate.js:42 수정")
 assert_eq "T4 untracked file confidence=high" "high" "$(echo "$RESULT" | cut -d'|' -f1)"
 assert_eq "T4 first file=locate.js" "scripts/shared/locate.js" "$(echo "$RESULT" | cut -d'|' -f3)"
 
-# Document file with line hint
-RESULT=$(run_locate "docs/v6.1-rfc-precision-locate.md 의 Q1 결정")
+# Document file with line hint — use an active doc (RFCs removed in v7.3-M5)
+RESULT=$(run_locate "docs/managed-agents.md 의 트리거 섹션")
 assert_eq "T12 doc file confidence=high" "high" "$(echo "$RESULT" | cut -d'|' -f1)"
-assert_eq "T12 first file=v6.1 rfc" "docs/v6.1-rfc-precision-locate.md" "$(echo "$RESULT" | cut -d'|' -f3)"
+assert_eq "T12 first file=managed-agents" "docs/managed-agents.md" "$(echo "$RESULT" | cut -d'|' -f3)"
 
 # ─── Phase 4: Edge cases ─────────────────────────────────────
 

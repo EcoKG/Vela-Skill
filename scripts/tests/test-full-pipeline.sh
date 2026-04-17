@@ -9,7 +9,7 @@
 # ref_integrity gate via change-surface.js. Ends with a real git
 # commit and finalize.
 #
-# Covers (validation-plan.md V8-1 + V8-3):
+# Covers (legacy validation-plan V8-1 + V8-3 — doc removed in v7.3-M5):
 #   - init → research → plan → plan-check → checkpoint → branch →
 #     execute → verify → diff-summary → learning → commit → finalize
 #   - review-gate 3-round enforcement at research / plan / execute

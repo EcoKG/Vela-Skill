@@ -23,7 +23,8 @@
  * No LLM calls. ripgrep + git only. Average runtime: 0.2-2 seconds.
  *
  * @module locate
- * @see docs/v6.1-rfc-precision-locate.md
+ *
+ * v6.1 Universal Locate — see git history (docs/v6.1-rfc removed in v7.3-M5).
  */
 
 "use strict";

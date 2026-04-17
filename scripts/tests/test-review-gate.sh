@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────
 # test-review-gate.sh — vela-review-gate.js 단위 테스트
 #
-# Covers (validation-plan.md V2-4):
+# Covers (legacy validation-plan V2-4 — doc removed in v7.3-M5):
 #   V2-4-1:  활성 파이프라인 없을 때 통과
 #   V2-4-2:  현재 단계가 DEFAULT_STEPS 외 → 통과
 #   V2-4-3:  APPROVE + gate 없음 → 차단 (1/3) + 상태 파일 생성

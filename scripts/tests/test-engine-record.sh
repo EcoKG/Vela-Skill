@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────
 # test-engine-record.sh — vela-engine.js record 명령어 검증
 #
-# Covers (validation-plan.md V3-3):
+# Covers (legacy validation-plan V3-3 — doc removed in v7.3-M5):
 #   1.  pass 기록 → ok:true, verdict:"pass", revision 증가
 #   2.  reject 기록 → ok:true, revision 증가
 #   3.  fail 4회 → circuit-open.json 아직 없음 (임계값 미달)

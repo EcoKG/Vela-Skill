@@ -675,12 +675,6 @@ v7.2에서 `.vela/config.json`에 4개 신규 섹션이 추가됐다. **모든 �
 
 ---
 
-## 확장 읽을거리
-
-- **[나만의 Claude Code 만들기 — 탐구 가이드](docs/custom-claude-code-guide.md)** — Claude Agent SDK로 자체 CLI/TUI 에이전트를 만드는 방법, 3가지 구현 옵션, Ink/Textual/MCP 활용법 정리
-
----
-
 ## 라이선스
 
 MIT License — Copyright (c) 2026 EcoKG
