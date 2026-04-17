@@ -172,6 +172,49 @@ const {
 const args = process.argv.slice(2);
 const command = args[0];
 
+// ─── Command context (v7.3-M4e-p3) ───
+// Shared dependency bundle passed to extracted command modules under
+// scripts/commands/. Function references (getArg/getFlag/hasFlag) rely
+// on JS function hoisting — their declarations at the bottom of the
+// file are hoisted above this object literal at load time. All paths +
+// core helpers are already resolved by the factory calls above.
+const ctx = {
+  // paths + constants
+  CWD,
+  VELA_DIR,
+  ARTIFACTS_DIR,
+  TEMPLATES_DIR,
+  PROTECTED_BRANCHES,
+  // core/cli-utils (pure)
+  slugifyEx,
+  slugify,
+  cleanState,
+  writeJSON,
+  output,
+  autoDetectScale,
+  // core/git-utils (factory-bound)
+  gitExec,
+  gitExecShell,
+  snapshotGitState,
+  ensureGitignore,
+  // core/state (factory-bound)
+  findActiveState,
+  cleanupCancelledArtifacts,
+  // core/pipeline (factory-bound)
+  loadPipelineDefinition,
+  resolveSteps,
+  checkExitGate,
+  // engine-local arg parsers (hoisted from EOF)
+  getArg,
+  getFlag,
+  hasFlag,
+};
+
+// Extracted commands (v7.3-M4e-p3)
+const cmdInit = require("../commands/init")(ctx);
+const cmdBranch = require("../commands/branch")(ctx);
+const cmdCommit = require("../commands/commit")(ctx);
+
 const commands = {
   init: cmdInit,
   state: cmdState,
@@ -209,207 +252,7 @@ if (require.main === module) {
 
 // ─── Commands ───
 
-function cmdInit() {
-  const request = getArg(0) || getFlag("--request");
-  if (!request) {
-    return output({
-      ok: false,
-      error:
-        'Request description required. Usage: vela-engine init "task description"',
-    });
-  }
-
-  // Block if there's already an active pipeline
-  const existing = findActiveState();
-  if (existing && !hasFlag("--force")) {
-    return output({
-      ok: false,
-      error: "Active pipeline already exists.",
-      current_step: existing.current_step,
-      request: existing.request,
-      hint: "Complete or cancel the current pipeline first: vela-engine cancel",
-    });
-  }
-
-  // Clean up cancelled artifacts older than 24 hours
-  const cleaned = cleanupCancelledArtifacts(24);
-
-  const type = getFlag("--type") || "code";
-
-  // Load pipeline definition (before creating any directories)
-  const pipelineDef = loadPipelineDefinition();
-  if (!pipelineDef) {
-    return output({
-      ok: false,
-      error: "Pipeline definition not found. Run /vela:start to initialize the environment.",
-    });
-  }
-
-  // Scale resolution (v6.1): --scale flag required.
-  // If omitted → fall back to "medium" with a deprecation warning.
-  // autoDetectScale() is deprecated — word-count heuristics don't reflect
-  // actual work weight (e.g. "OAuth 추가" is small but <10 words, "single-
-  // line typo fix in auth.ts" is >10 words). Use explicit scale.
-  let scaleWarning = null;
-  const scaleFlag = getFlag("--scale");
-  let scaleName;
-  if (scaleFlag) {
-    scaleName = scaleFlag;
-  } else {
-    scaleWarning =
-      "⚠️ --scale not specified. Defaulting to 'medium'. " +
-      "Use /vela:small | /vela:medium | /vela:large | /vela:ralph | /vela:hotfix " +
-      "to be explicit (autoDetectScale was deprecated in v6.1).";
-    scaleName = "medium";
-  }
-  const scalesMap = pipelineDef.scales || {};
-  // scalesMap lookup: known scale names (small/medium/large/ralph/hotfix) → pipeline type.
-  // If scaleName is already a pipeline type (e.g. "standard"), fall through directly.
-  const pipelineType = scalesMap[scaleName] || scaleName || "standard";
-
-  const steps = resolveSteps(pipelineDef, pipelineType);
-  if (!steps || steps.length === 0) {
-    return output({
-      ok: false,
-      error: `Pipeline type "${pipelineType}" is not defined in pipeline.json (or has no steps).`,
-      pipeline_type: pipelineType,
-      scale: scaleName,
-      hint: "Add a scales map to pipeline.json that routes this scale to an existing pipeline, or pass --scale <known-pipeline> explicitly.",
-    });
-  }
-  const firstStep = steps[0];
-
-  // Git state snapshot
-  const gitState = snapshotGitState();
-
-  // Block if dirty tree (unless --force)
-  if (gitState.is_repo && !gitState.is_clean && !hasFlag("--force")) {
-    return output({
-      ok: false,
-      error:
-        "Working tree is dirty. Commit or stash changes before starting a pipeline.",
-      git: gitState,
-      hint: "Use --force to skip this check, or run: git stash",
-    });
-  }
-
-  // Ensure Vela files are hidden from git
-  ensureGitignore();
-
-  // Create artifact directory AFTER validation passes: {YYYYMMDD}T{HHmmss}-{slug}
-  const now = new Date();
-  const ts = now.toISOString().replace(/[-:]/g, "").slice(0, 15);
-  // v7.1 M5: use slugifyEx so we can detect truncation and drop a
-  // request.txt side-car with the full original text. Without this,
-  // hicoco-style long Korean requests had artifact dirs like
-  // "20260101T000000-별도-downloa" with no way to recover the prompt
-  // that started the pipeline.
-  const slugInfo = slugifyEx(request);
-  const slug = slugInfo.slug;
-  const artifactDir = path.join(ARTIFACTS_DIR, `${ts}-${slug}`);
-
-  fs.mkdirSync(artifactDir, { recursive: true });
-
-  // v7.1 M5: when the slug had to be truncated, write the full request
-  // to a side-car file so downstream agents (and humans) can still see
-  // what was asked.
-  if (slugInfo.truncated) {
-    try {
-      fs.writeFileSync(
-        path.join(artifactDir, "request.txt"),
-        String(request) + "\n",
-      );
-    } catch { /* best effort */ }
-  }
-
-  // Auto mode flag
-  const autoMode = hasFlag("--auto");
-
-  // Create pipeline state
-  const state = {
-    version: "1.2",
-    status: "active",
-    pipeline_type: pipelineType,
-    request: request,
-    type: type,
-    scale: scaleName,
-    current_step: firstStep.id,
-    current_step_index: 0,
-    steps: steps.map((s) => s.id),
-    completed_steps: [],
-    revisions: {},
-    ...(autoMode ? { auto: true, auto_reject_count: 0 } : {}),
-    git: gitState.is_repo
-      ? {
-          is_repo: true,
-          base_branch: gitState.current_branch,
-          current_branch: gitState.current_branch,
-          pipeline_branch: null,
-          checkpoint_hash: gitState.head_hash,
-          commit_hash: null,
-          stash_ref: gitState.stash_ref || null,
-          remote: gitState.remote,
-        }
-      : null,
-    baseline_sha: gitState.is_repo ? gitState.head_hash : null,
-    created_at: now.toISOString(),
-    updated_at: now.toISOString(),
-  };
-
-  // Create meta.json
-  const meta = {
-    request,
-    type,
-    scale: scaleName,
-    pipeline_type: pipelineType,
-    created_at: now.toISOString(),
-  };
-
-  writeJSON(path.join(artifactDir, "pipeline-state.json"), state);
-  writeJSON(path.join(artifactDir, "meta.json"), meta);
-
-  // v7.1 M1: surface non-git projects at init time so the user finds out
-  // immediately instead of at commit 10 steps later. pipelineWarnings is
-  // an array because future modules may add more init-time warnings.
-  const pipelineWarnings = [];
-  if (!gitState.is_repo) {
-    pipelineWarnings.push({
-      code: "not_a_git_repo",
-      severity: "high",
-      message:
-        "This directory is not a git repository. Commit and branch steps will BLOCK until you run `git init -b main` and make an initial commit. Do this now — you do not want to discover it after execute.",
-    });
-    process.stderr.write([
-      "",
-      "⚠️  Vela v7.1 init — non-git project detected.",
-      "    commit/branch steps will block until you run:",
-      "      git init -b main && git add -A && git commit -m \"chore: initial\"",
-      "",
-    ].join("\n"));
-  }
-
-  output({
-    ok: true,
-    command: "init",
-    pipeline_type: pipelineType,
-    scale: scaleName,
-    current_step: firstStep.id,
-    current_mode: firstStep.mode,
-    artifact_dir: artifactDir,
-    steps: steps.map((s) => ({ id: s.id, name: s.name, mode: s.mode })),
-    cleaned_cancelled: cleaned,
-    git: {
-      repo: gitState.is_repo,
-      branch: gitState.current_branch || null,
-      dirty: gitState.is_repo ? !gitState.is_clean : false,
-    },
-    ...(scaleWarning ? { warning: scaleWarning } : {}),
-    ...(pipelineWarnings.length > 0 ? { pipelineWarnings } : {}),
-    message:
-      `Pipeline initialized. Scale: ${scaleName} → ${pipelineType}. Current step: ${firstStep.name} (${firstStep.mode} mode)` +
-      (cleaned > 0 ? ` (cleaned ${cleaned} cancelled artifact(s))` : ""),
-  });
-}
+// cmdInit moved to scripts/commands/init.js (v7.3-M4e-p3)
 
 function cmdState() {
   const state = findActiveState();
@@ -1079,256 +922,9 @@ function cmdDoctor() {
   });
 }
 
-function cmdBranch() {
-  const state = findActiveState();
-  if (!state) {
-    return output({ ok: false, error: "No active pipeline." });
-  }
+// cmdBranch moved to scripts/commands/branch.js (v7.3-M4e-p3)
 
-  if (!state.git || !state.git.is_repo) {
-    // v7.1 M1: non-git project → loud warning. Same reasoning as cmdCommit.
-    // Standard pipeline reaches branch early, so the warning fires once per
-    // pipeline instead of only at commit time.
-    state.git = state.git || {};
-    state.git.pipeline_branch = null;
-    state.updated_at = new Date().toISOString();
-    writeJSON(state._path, cleanState(state));
-    process.stderr.write([
-      "",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "⛔  Vela branch BLOCKED — this directory is not a git repository",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "The pipeline cannot create a feature branch without git. All work",
-      "produced by this pipeline will eventually fail to commit unless a",
-      "repo is initialised now:",
-      "",
-      "  git init -b main",
-      "  git add -A",
-      "  git commit -m \"chore: initial commit\"",
-      "  node .vela/cli/vela-engine.js transition",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "",
-    ].join("\n"));
-    return output({
-      ok: true,
-      command: "branch",
-      status: "blocked",
-      reason: "not a git repo",
-      recovery: [
-        "git init -b main",
-        "git add -A && git commit -m \"chore: initial commit\"",
-        "node .vela/cli/vela-engine.js transition",
-      ],
-      message: "Branch blocked — not a git repository. See stderr for recovery steps.",
-    });
-  }
-
-  const mode = getFlag("--mode") || "auto";
-  const currentBranch = gitExec("rev-parse", "--abbrev-ref", "HEAD").trim();
-  const isProtected = PROTECTED_BRANCHES.includes(currentBranch);
-
-  // If already on a non-protected branch, use it
-  if (!isProtected) {
-    state.git.pipeline_branch = currentBranch;
-    state.git.current_branch = currentBranch;
-    state.updated_at = new Date().toISOString();
-    writeJSON(state._path, cleanState(state));
-    return output({
-      ok: true,
-      command: "branch",
-      action: "existing",
-      branch: currentBranch,
-      message: `Already on non-protected branch "${currentBranch}". Using it as pipeline branch.`,
-    });
-  }
-
-  // Generate branch name
-  const slug = slugify(state.request);
-  const timeStr = new Date().toTimeString().substring(0, 5).replace(":", "");
-  const branchName = `vela/${slug}-${timeStr}`;
-
-  if (mode === "none") {
-    state.git.pipeline_branch = currentBranch;
-    state.updated_at = new Date().toISOString();
-    writeJSON(state._path, cleanState(state));
-    return output({
-      ok: true,
-      command: "branch",
-      action: "none",
-      branch: currentBranch,
-      message: "Branch creation skipped (mode: none).",
-    });
-  }
-
-  if (mode === "prompt") {
-    return output({
-      ok: true,
-      command: "branch",
-      action: "prompt",
-      suggested_command: `git checkout -b ${branchName}`,
-      message: `Run this command to create the pipeline branch: git checkout -b ${branchName}`,
-    });
-  }
-
-  // Auto mode: create branch
-  try {
-    gitExec("checkout", "-b", branchName);
-  } catch (e) {
-    // Branch might exist, try checkout
-    try {
-      gitExec("checkout", branchName);
-    } catch (e2) {
-      return output({
-        ok: false,
-        error: `Failed to create branch: ${e2.message}`,
-      });
-    }
-  }
-
-  state.git.pipeline_branch = branchName;
-  state.git.current_branch = branchName;
-  state.git.checkpoint_hash = gitExec("rev-parse", "HEAD").trim();
-  state.updated_at = new Date().toISOString();
-  writeJSON(state._path, cleanState(state));
-
-  output({
-    ok: true,
-    command: "branch",
-    action: "created",
-    branch: branchName,
-    base_branch: state.git.base_branch,
-    checkpoint_hash: state.git.checkpoint_hash,
-    message: `Branch "${branchName}" created from "${state.git.base_branch}".`,
-  });
-}
-
-function cmdCommit() {
-  const state = findActiveState();
-  if (!state) {
-    return output({ ok: false, error: "No active pipeline." });
-  }
-
-  if (!state.git || !state.git.is_repo) {
-    // v7.1 M1: non-git project → loud warning.
-    //
-    // Pre-v7.1 this path emitted a quiet skipped:true status. Analysis of the
-    // hicoco session showed 4 pipelines in a row completing commit with
-    // skipped:true, never persisting work. The user only realised when
-    // reading the final report. Fail-loud semantics: status:"blocked" in
-    // the JSON, multi-line stderr banner, exit code still 0 so the
-    // pipeline can advance (commit exit_gate already tolerates !is_repo).
-    process.stderr.write([
-      "",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "⛔  Vela commit BLOCKED — this directory is not a git repository",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "Your pipeline work will NOT be persisted. To save it now:",
-      "",
-      "  git init -b main",
-      "  git add -A",
-      "  git commit -m \"chore: initial commit (Vela pipeline output)\"",
-      "  node .vela/cli/vela-engine.js transition",
-      "",
-      "The pipeline will advance past this step so you can finish the",
-      "remaining stages, but every subsequent run will keep blocking",
-      "here until a .git/ exists.",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "",
-    ].join("\n"));
-    return output({
-      ok: true,
-      command: "commit",
-      status: "blocked",
-      reason: "not a git repo",
-      recovery: [
-        "git init -b main",
-        "git add -A && git commit -m \"chore: initial commit\"",
-        "node .vela/cli/vela-engine.js transition",
-      ],
-      message: "Commit blocked — not a git repository. See stderr for recovery steps.",
-    });
-  }
-
-  // Check for uncommitted changes
-  const status = gitExec("status", "--porcelain").trim();
-  if (!status) {
-    state.git.commit_hash = gitExec("rev-parse", "HEAD").trim();
-    state.updated_at = new Date().toISOString();
-    writeJSON(state._path, cleanState(state));
-    return output({
-      ok: true,
-      command: "commit",
-      action: "no_changes",
-      message: "No changes to commit.",
-    });
-  }
-
-  // Generate conventional commit message
-  const pipelineDef = loadPipelineDefinition();
-  const typeMap = pipelineDef?.git?.commit?.type_map || {
-    code: "feat",
-    "code-bug": "fix",
-    "code-refactor": "refactor",
-    docs: "docs",
-    infra: "chore",
-  };
-  const commitType = typeMap[state.type] || "feat";
-  const shortDesc = state.request.substring(0, 70);
-
-  const messageFlag = getFlag("--message");
-  const commitMessage = messageFlag || `${commitType}: ${shortDesc}`;
-
-  // Capture diff as artifact
-  try {
-    const diff = gitExec("diff", "HEAD");
-    if (diff && state._artifactDir) {
-      fs.writeFileSync(path.join(state._artifactDir, "diff.patch"), diff);
-    }
-  } catch (e) {}
-
-  // Stage all changes (excluding .vela/ internals)
-  try {
-    gitExec("add", "-A");
-    // Unstage .vela/ internal files
-    const velaFiles = [
-      ".vela/cache/",
-      ".vela/state/",
-      ".vela/artifacts/",
-      ".vela/tracker-signals.json",
-      ".vela/write-log.jsonl",
-    ];
-    for (const vf of velaFiles) {
-      try {
-        gitExec("reset", "HEAD", "--", vf);
-      } catch (e) {}
-    }
-  } catch (e) {
-    return output({ ok: false, error: `Failed to stage files: ${e.message}` });
-  }
-
-  // Commit
-  try {
-    gitExec("commit", "-m", commitMessage);
-  } catch (e) {
-    return output({ ok: false, error: `Commit failed: ${e.message}` });
-  }
-
-  const commitHash = gitExec("rev-parse", "HEAD").trim();
-  state.git.commit_hash = commitHash;
-  state.updated_at = new Date().toISOString();
-  writeJSON(state._path, cleanState(state));
-
-  output({
-    ok: true,
-    command: "commit",
-    action: "committed",
-    hash: commitHash,
-    commit_message: commitMessage,
-    branch: state.git.current_branch || state.git.pipeline_branch,
-    files_in_diff: status.split("\n").length,
-    message: `Committed: ${commitMessage} (${commitHash.substring(0, 7)})`,
-  });
-}
+// cmdCommit moved to scripts/commands/commit.js (v7.3-M4e-p3)
 
 /**
  * cmdLocate — Mechanical Locate (v6.1)
