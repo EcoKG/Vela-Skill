@@ -14,7 +14,7 @@ description: "🧹 Git 정리 — 프로젝트의 불필요한 추적 파일, �
 ### Step 1: 스캔
 
 ```bash
-node .vela/cli/vela-engine.js clean-scan
+vela-engine clean-scan
 ```
 
 이 명령은 6가지 항목을 스캔하고 JSON으로 결과를 반환한다:
@@ -70,7 +70,7 @@ AskUserQuestion으로 **복수 선택(allowMultiple: true)**을 사용한다.
 사용자가 선택한 카테고리를 쉼표로 연결하여 실행:
 
 ```bash
-node .vela/cli/vela-engine.js clean-exec --categories tracked,branches,ignored
+vela-engine clean-exec --categories tracked,branches,ignored
 ```
 
 카테고리 값:
@@ -88,5 +88,5 @@ node .vela/cli/vela-engine.js clean-exec --categories tracked,branches,ignored
 ## 왜 엔진 CLI를 사용하는가
 
 Vela의 Gate Keeper와 Gate Guard는 **파이프라인 외부에서의 bash/git 명령을 차단**한다.
-`node .vela/cli/vela-engine.js`는 Gate Keeper의 허용 목록에 있으므로 차단되지 않는다.
+`vela-engine`는 Gate Keeper의 허용 목록에 있으므로 차단되지 않는다.
 따라서 git-clean의 모든 git 조작은 엔진 CLI를 통해 수행한다.

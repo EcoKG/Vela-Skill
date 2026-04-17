@@ -14,7 +14,7 @@ description: "⛵ Vela 기본 파이프라인 — init → locate → plan → e
 3. **프롬프트 최적화** — `.vela/agents/pm/prompt-optimizer.md` 1~5단계
 4. **파이프라인 초기화**:
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale ship
+   vela-engine init "작업 설명" --scale ship
    ```
    init이 vela/{slug} 브랜치도 자동 생성
 5. **6단계 진행**:

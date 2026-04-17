@@ -55,7 +55,7 @@ module.exports = function createCmdBranch(ctx) {
         "  git init -b main",
         "  git add -A",
         "  git commit -m \"chore: initial commit\"",
-        "  node .vela/cli/vela-engine.js transition",
+        "  vela-engine transition",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
       ].join("\n"));
@@ -67,7 +67,7 @@ module.exports = function createCmdBranch(ctx) {
         recovery: [
           "git init -b main",
           "git add -A && git commit -m \"chore: initial commit\"",
-          "node .vela/cli/vela-engine.js transition",
+          "vela-engine transition",
         ],
         message: "Branch blocked — not a git repository. See stderr for recovery steps.",
       });

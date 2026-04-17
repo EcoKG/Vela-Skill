@@ -45,11 +45,11 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
 
 2. **기존 파이프라인 확인**
    ```bash
-   node .vela/cli/vela-engine.js state
+   vela-engine state
    ```
    활성 파이프라인이 있으면 사용자에게 "기존 파이프라인을 이어서 진행할까요?" 확인:
    - 재개 → 현재 단계부터 파이프라인 계속 진행
-   - 취소 후 새로 시작 → `node .vela/cli/vela-engine.js cancel` 후 3단계로
+   - 취소 후 새로 시작 → `vela-engine cancel` 후 3단계로
 
 3. **작업 내용 수집**
    `$ARGUMENTS`가 있으면 그것을 원본 요청으로 사용한다.
@@ -63,11 +63,11 @@ init이 안 되어 있으면 자동으로 init을 먼저 수행한다.
 
 5. **파이프라인 초기화**
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale medium
+   vela-engine init "작업 설명" --scale medium
    ```
 
 6. **파이프라인 진행**
    PM이 `vela-engine.js`로 상태를 추적하며, Agent 도구로 역할별 에이전트를 순서대로 소환한다.
-   각 단계 완료 후 `node .vela/cli/vela-engine.js transition`으로 전이한다.
+   각 단계 완료 후 `vela-engine transition`으로 전이한다.
    
    상세 진행 방법은 `.vela/agents/pm/pipeline-flow.md`를 참조한다.

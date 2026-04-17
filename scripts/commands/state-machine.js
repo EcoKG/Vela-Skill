@@ -73,12 +73,12 @@ module.exports = function createStateMachine(ctx) {
     //   verify  가  diff-summary 흡수 (reviewer 모드)
     //   commit  이  branch + finalize 흡수
     const table = {
-      init: "run `node .vela/cli/vela-engine.js advance` to move into locate (init도 vela/{slug} 브랜치 자동 생성)",
-      locate: "run `node .vela/cli/vela-engine.js locate` (generates targets.json)",
+      init: "run `vela-engine advance` to move into locate (init도 vela/{slug} 브랜치 자동 생성)",
+      locate: "run `vela-engine locate` (generates targets.json)",
       plan: "spawn vela-planner (research+plan+self-check 통합) then vela-reviewer; call `advance pass` on approve. fix 파이프라인에선 mode=spec로 patch-spec.md 생성.",
       execute: "spawn vela-executor then vela-reviewer; call `advance pass` on approve",
       verify: "spawn vela-reviewer (테스트+린트+타입체크+diff 요약 통합); >500 LOC diff이면 /ultrareview 번들 스킬 에스컬레이션",
-      commit: "run `node .vela/cli/vela-engine.js commit` — Conventional Commits + git diff --stat 요약으로 파이프라인 종료",
+      commit: "run `vela-engine commit` — Conventional Commits + git diff --stat 요약으로 파이프라인 종료",
     };
     const hint = table[stepId];
     if (!hint) return `see agents/vela.md for step ${stepId} (${pipelineType || "unknown pipeline"})`;
@@ -394,7 +394,7 @@ module.exports = function createStateMachine(ctx) {
    *
    * Output JSON includes: previousStep, currentStep, nextStep, active,
    * circuitOpen, and nextAction (a one-line hint like "spawn vela-executor"
-   * or "commit via `node .vela/cli/vela-engine.js commit`").
+   * or "commit via `vela-engine commit`").
    */
   function cmdAdvance() {
     const rawVerdict = getArg(0) || "pass";

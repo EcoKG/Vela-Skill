@@ -3,19 +3,19 @@
 ## vela-engine (파이프라인 엔진)
 
 ```bash
-node .vela/cli/vela-engine.js init "설명" [--type TYPE] [--scale SIZE] [--auto]
-node .vela/cli/vela-engine.js state
-node .vela/cli/vela-engine.js transition
-node .vela/cli/vela-engine.js record pass|fail|reject
-node .vela/cli/vela-engine.js advance [pass|fail|reject]            # v7.1 M8 — record+transition
-node .vela/cli/vela-engine.js doctor                                # v7.1 M6 — health check
-node .vela/cli/vela-engine.js branch [--mode auto|prompt|none]
-node .vela/cli/vela-engine.js commit [--message TEXT]
-node .vela/cli/vela-engine.js cancel
-node .vela/cli/vela-engine.js history
-node .vela/cli/vela-engine.js locate [--request "..."] [--json]    # v6.1
-node .vela/cli/vela-engine.js clean-scan
-node .vela/cli/vela-engine.js clean-exec
+vela-engine init "설명" [--type TYPE] [--scale SIZE] [--auto]
+vela-engine state
+vela-engine transition
+vela-engine record pass|fail|reject
+vela-engine advance [pass|fail|reject]            # v7.1 M8 — record+transition
+vela-engine doctor                                # v7.1 M6 — health check
+vela-engine branch [--mode auto|prompt|none]
+vela-engine commit [--message TEXT]
+vela-engine cancel
+vela-engine history
+vela-engine locate [--request "..."] [--json]    # v6.1
+vela-engine clean-scan
+vela-engine clean-exec
 ```
 
 ### `advance` 명령 (v7.1 M8)
@@ -25,10 +25,10 @@ top-level Bash 호출을 절반으로 줄이고, 응답에 `nextAction` 힌트�
 `state` 재조회 없이 다음 단계의 Agent 소환으로 직행할 수 있다.
 
 ```bash
-node .vela/cli/vela-engine.js advance            # 기본값 pass
-node .vela/cli/vela-engine.js advance pass       # 동일
-node .vela/cli/vela-engine.js advance reject     # revisions++ + 같은 단계 유지
-node .vela/cli/vela-engine.js advance fail       # reject 와 동일한 retry 시멘틱
+vela-engine advance            # 기본값 pass
+vela-engine advance pass       # 동일
+vela-engine advance reject     # revisions++ + 같은 단계 유지
+vela-engine advance fail       # reject 와 동일한 retry 시멘틱
 ```
 
 응답 JSON: `{previousStep, currentStep, nextStep, revision, circuitOpen, nextAction, message}`.
@@ -42,7 +42,7 @@ node .vela/cli/vela-engine.js advance fail       # reject 와 동일한 retry �
 나열되고 `recovery: "node .vela/install.js validate"` 를 제안한다.
 
 ```bash
-node .vela/cli/vela-engine.js doctor
+vela-engine doctor
 ```
 
 검사 항목: core dirs, `cli/vela-engine.js`, `templates/pipeline.json` parse,
@@ -56,13 +56,13 @@ Universal Locate — 결정론적 file/symbol 식별자 탐지. ripgrep (없으�
 
 ```bash
 # 현재 활성 파이프라인의 request를 읽어 targets.json 생성 (PM이 locate 단계에서 호출)
-node .vela/cli/vela-engine.js locate
+vela-engine locate
 
 # 파이프라인 없이 미리보기
-node .vela/cli/vela-engine.js locate --request "auth.ts의 login 함수 검증 추가"
+vela-engine locate --request "auth.ts의 login 함수 검증 추가"
 
 # 전체 targets.json 구조 출력
-node .vela/cli/vela-engine.js locate --json
+vela-engine locate --json
 ```
 
 출력: `{artifactDir}/targets.json` (또는 `.vela/locate-preview/targets.json` for --request)

@@ -300,7 +300,7 @@ if (require.main === module) {
  *
  * Output JSON includes: previousStep, currentStep, nextStep, active,
  * circuitOpen, and nextAction (a one-line hint like "spawn vela-executor"
- * or "commit via `node .vela/cli/vela-engine.js commit`").
+ * or "commit via `vela-engine commit`").
  *
  * Backward compat: cmdRecord and cmdTransition remain untouched so any
  * existing automation still works.

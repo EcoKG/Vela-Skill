@@ -18,7 +18,7 @@ thin so it can track upstream changes with minimal diff.
                               scripts/managed/vela-managed-entry.js
                                          │
                                          ▼
-                              node .vela/cli/vela-engine.js init "{request}"
+                              vela-engine init "{request}"
                                          │
                                          ▼
                                Standard Vela pipeline
@@ -81,7 +81,7 @@ jobs:
 | `VELA_SCALE`     | no       | small/medium/large/fix/ralph/hotfix (medium) |
 | `VELA_AUTO_PR`   | no       | if `"1"`, open PR after commit (default off) |
 
-It shells out to `node .vela/cli/vela-engine.js init "<VELA_REQUEST>" --scale <VELA_SCALE>`
+It shells out to `vela-engine init "<VELA_REQUEST>" --scale <VELA_SCALE>`
 then hands control back to Claude Code — the rest of the pipeline is
 orchestrated the same way a local session would run it.
 

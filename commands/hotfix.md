@@ -15,7 +15,7 @@ description: "🔧 Vela hotfix 파이프라인 — 문서/설정/README 수정 �
    - **Scale Guard는 hotfix를 점검 대상에서 제외** (의도가 specific함)
 4. **파이프라인 초기화**:
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale hotfix
+   vela-engine init "작업 설명" --scale hotfix
    ```
 5. **파이프라인 진행** — 4단계:
    - `init → locate → execute → commit`

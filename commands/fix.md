@@ -37,7 +37,7 @@ description: "🎯 Vela surgical 파이프라인 — Target-First 패러다임. 
    - Scale Guard는 fix를 점검 대상으로 포함: locate confidence가 low + blast_radius ≥ 5 파일이면 `/vela:large` 제안.
 4. **파이프라인 초기화**:
    ```bash
-   node .vela/cli/vela-engine.js init "작업 설명" --scale fix
+   vela-engine init "작업 설명" --scale fix
    ```
 5. **파이프라인 진행** — 8단계:
    - `init → locate → research → spec → patch → verify → commit → finalize`

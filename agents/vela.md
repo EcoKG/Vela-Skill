@@ -42,7 +42,7 @@ pwd
 
 **1.5단계 — 엔진 health check:**
 ```bash
-node .vela/cli/vela-engine.js doctor
+vela-engine doctor
 ```
 - `"ok": true` → 정상, 2단계로 진행
 - `"ok": false` → AskUserQuestion으로 `node .vela/install.js validate` 실행 제안
@@ -50,7 +50,7 @@ node .vela/cli/vela-engine.js doctor
 
 **2단계 — 상태 조회:**
 ```bash
-node .vela/cli/vela-engine.js state
+vela-engine state
 ```
 - active 파이프라인 있으면 → `current_step`부터 재개
 - 파이프라인 없으면 → 사용자 요청 대기 (AskUserQuestion)
@@ -71,7 +71,7 @@ node .vela/cli/vela-engine.js state
 ### 파이프라인 초기화
 
 ```bash
-node .vela/cli/vela-engine.js init "요청 내용" [--scale ship|fix|hotfix]
+vela-engine init "요청 내용" [--scale ship|fix|hotfix]
 ```
 - `ship` (기본): 6단계 standard 파이프라인
 - `fix`: 6단계 surgical 파이프라인 (planner mode=spec)
@@ -80,7 +80,7 @@ node .vela/cli/vela-engine.js init "요청 내용" [--scale ship|fix|hotfix]
 ### 현재 상태 확인
 
 ```bash
-node .vela/cli/vela-engine.js state
+vela-engine state
 ```
 출력에서 `current_step`, `artifactDir`, `pipeline_type`을 읽는다.
 
@@ -88,12 +88,12 @@ node .vela/cli/vela-engine.js state
 
 **[init]** — 엔진이 자동 수행 (vela/{slug} 브랜치 생성 + artifactDir 준비)
 ```bash
-node .vela/cli/vela-engine.js advance  # init → locate로 transition
+vela-engine advance  # init → locate로 transition
 ```
 
 **[locate]** — LLM 0, 결정론적 좌표 식별
 ```bash
-node .vela/cli/vela-engine.js locate
+vela-engine locate
 ```
 - `{artifactDir}/targets.json` 생성 (primary/tests/blast_radius/confidence)
 - confidence 해석:
@@ -150,7 +150,7 @@ Agent(subagent_type="vela-reviewer", prompt="
 
 **[commit]**
 ```bash
-node .vela/cli/vela-engine.js commit
+vela-engine commit
 ```
 - Conventional Commits 형식 자동 커밋
 - git diff --stat 요약이 커밋 바디에 포함 (구 diff-summary 역할 흡수)
@@ -160,14 +160,14 @@ node .vela/cli/vela-engine.js commit
 ### 상태 전이 명령어
 
 ```bash
-node .vela/cli/vela-engine.js record pass       # 단계 성공 기록
-node .vela/cli/vela-engine.js record reject     # 단계 실패 기록
-node .vela/cli/vela-engine.js transition        # 다음 단계로 전이
-node .vela/cli/vela-engine.js advance           # record + transition 원샷
-node .vela/cli/vela-engine.js commit            # 커밋 (commit 단계)
-node .vela/cli/vela-engine.js cancel            # 파이프라인 취소
-node .vela/cli/vela-engine.js state             # 현재 상태 조회
-node .vela/cli/vela-engine.js doctor            # 환경 health check
+vela-engine record pass       # 단계 성공 기록
+vela-engine record reject     # 단계 실패 기록
+vela-engine transition        # 다음 단계로 전이
+vela-engine advance           # record + transition 원샷
+vela-engine commit            # 커밋 (commit 단계)
+vela-engine cancel            # 파이프라인 취소
+vela-engine state             # 현재 상태 조회
+vela-engine doctor            # 환경 health check
 ```
 
 ## v7.3-M3 주요 변경 (v8.0 전환)

@@ -2,7 +2,7 @@
 
 ## Orchestrator
 - `⛵ Vela — Explore mode. Reads allowed, writes blocked.`
-- `🧭 To modify code: use /vela:start or run node .vela/cli/vela-engine.js init "<task>"`
+- `🧭 To modify code: use /vela:start or run vela-engine init "<task>"`
 
 ## Gate Keeper
 - `⛵ [Vela] ✦ BLOCKED: Write operation in read-only mode.`

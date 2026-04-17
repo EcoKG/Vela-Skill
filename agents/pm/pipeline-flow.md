@@ -15,7 +15,7 @@ init → locate → plan → execute → verify → commit
 - exit_gate: `artifact_dir_created`, `mode_detected`, `git_clean`
 
 ### locate (LLM 0)
-- `node .vela/cli/vela-engine.js locate`
+- `vela-engine locate`
 - ripgrep + git grep + git ls-files 결정론적 좌표 식별
 - `targets.json` 생성: `primary[]`, `tests[]`, `blast_radius[]`, `confidence`, `tokens_extracted[]`
 - confidence 해석:
@@ -78,7 +78,7 @@ exit_gate: `verification_md_exists`, `ref_integrity`
 
 ### commit (구 branch + finalize 흡수)
 ```bash
-node .vela/cli/vela-engine.js commit
+vela-engine commit
 ```
 - Conventional Commits 자동 생성
 - `git diff --stat` 요약을 커밋 바디에 포함 (구 diff-summary 역할)

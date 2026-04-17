@@ -55,7 +55,7 @@ module.exports = function createCmdCommit(ctx) {
         "  git init -b main",
         "  git add -A",
         "  git commit -m \"chore: initial commit (Vela pipeline output)\"",
-        "  node .vela/cli/vela-engine.js transition",
+        "  vela-engine transition",
         "",
         "The pipeline will advance past this step so you can finish the",
         "remaining stages, but every subsequent run will keep blocking",
@@ -71,7 +71,7 @@ module.exports = function createCmdCommit(ctx) {
         recovery: [
           "git init -b main",
           "git add -A && git commit -m \"chore: initial commit\"",
-          "node .vela/cli/vela-engine.js transition",
+          "vela-engine transition",
         ],
         message: "Commit blocked — not a git repository. See stderr for recovery steps.",
       });
