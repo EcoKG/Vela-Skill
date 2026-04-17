@@ -137,18 +137,34 @@ jobs:
           # Malformed JSON here would make the plugin fail to load entirely.
           jq . .claude-plugin/plugin.json >/dev/null
           echo "✅ .claude-plugin/plugin.json valid JSON"
+          jq . .claude-plugin/marketplace.json >/dev/null
+          echo "✅ .claude-plugin/marketplace.json valid JSON"
           jq . hooks/hooks.json >/dev/null
           echo "✅ hooks/hooks.json valid JSON"
           jq . package.json >/dev/null
           echo "✅ package.json valid JSON"
 
-          # Required manifest fields
+          # Required plugin manifest fields
           NAME=$(jq -r .name .claude-plugin/plugin.json)
           VERSION=$(jq -r .version .claude-plugin/plugin.json)
           [ "$NAME" = "vela" ] || { echo "❌ plugin.json name must be 'vela' (got $NAME)"; exit 1; }
           [ -n "$VERSION" ] && [ "$VERSION" != "null" ] \
             || { echo "❌ plugin.json version is empty"; exit 1; }
           echo "✅ plugin name=$NAME version=$VERSION"
+
+          # marketplace.json consistency — plugins[0].name must equal
+          # plugin.json name; plugins[0].version must match plugin.json
+          # version so users get the same bytes they expect.
+          MKT_NAME=$(jq -r .name .claude-plugin/marketplace.json)
+          MKT_PLUGIN_NAME=$(jq -r '.plugins[0].name' .claude-plugin/marketplace.json)
+          MKT_PLUGIN_VERSION=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
+          [ "$MKT_PLUGIN_NAME" = "$NAME" ] \
+            || { echo "❌ marketplace.json plugins[0].name ($MKT_PLUGIN_NAME) != plugin.json name ($NAME)"; exit 1; }
+          [ "$MKT_PLUGIN_VERSION" = "$VERSION" ] \
+            || { echo "❌ marketplace.json plugins[0].version ($MKT_PLUGIN_VERSION) != plugin.json version ($VERSION)"; exit 1; }
+          [ -n "$MKT_NAME" ] && [ "$MKT_NAME" != "null" ] \
+            || { echo "❌ marketplace.json name is empty"; exit 1; }
+          echo "✅ marketplace name=$MKT_NAME, plugin/version aligned with plugin.json"
 
           # bin wrapper must be executable
           [ -x bin/vela-engine ] \

@@ -17,11 +17,14 @@
 
 ### 설치
 
-Claude Code 2.1.107+ 에서 한 줄로 설치:
+Claude Code 2.1.107+ 에서 2단계:
 
 ```
-/plugin install vela@EcoKG/Vela-Skill
+/plugin marketplace add EcoKG/Vela-Skill
+/plugin install vela@vela
 ```
+
+첫 번째 명령은 이 저장소를 로컬 Claude Code의 marketplace 목록에 등록한다 (`.claude-plugin/marketplace.json`을 읽어 "vela"라는 marketplace 이름으로 추가). 두 번째 명령은 그 marketplace에 있는 `vela` 플러그인을 설치한다. (`/plugin install` 은 GitHub 저장소를 직접 받지 못하고 사전 등록된 marketplace만 지원하기 때문에 두 단계로 나뉜다.)
 
 프로젝트 최초 사용 시 한 번만 초기화:
 
@@ -34,8 +37,9 @@ Claude Code 2.1.107+ 에서 한 줄로 설치:
 업데이트:
 
 ```
-/plugin update vela          # 플러그인 재빌드
-/vela:install --resync       # 프로젝트 템플릿 재동기화
+/plugin marketplace update vela   # marketplace.json + 플러그인 재빌드
+/plugin install vela@vela         # 새 버전 재설치 (필요 시)
+/vela:install --resync            # 프로젝트 템플릿 재동기화
 ```
 
 ### 3개 슬래시 명령 (v8.0)
