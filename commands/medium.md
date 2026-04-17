@@ -15,4 +15,4 @@ v7.3-M3에서 small/medium/large/ralph는 모두 `/vela:ship`으로 통합되었
    → /vela:ship을 사용하세요. v8.1에서 이 명령은 제거됩니다.
    자동으로 /vela:ship으로 리다이렉트합니다.
    ```
-2. `skills/ship/SKILL.md` 절차를 실행 (동일한 $ARGUMENTS 전달)
+2. `commands/ship.md` 절차를 실행 (동일한 $ARGUMENTS 전달)

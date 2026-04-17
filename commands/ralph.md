@@ -16,4 +16,4 @@ v7.3-M3에서 ralph의 TDD 반복 루프는 Claude Code 번들 `/loop` 스킬에
       예: /loop /vela:ship "null 참조 버그 수정"
    v8.1에서 이 명령은 제거됩니다.
    ```
-2. 사용자가 계속하길 원하면 `skills/ship/SKILL.md` 절차를 1회 실행. 반복이 필요한 경우 `/loop /vela:ship`으로 교체 안내.
+2. 사용자가 계속하길 원하면 `commands/ship.md` 절차를 1회 실행. 반복이 필요한 경우 `/loop /vela:ship`으로 교체 안내.
