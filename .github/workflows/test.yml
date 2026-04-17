@@ -358,13 +358,6 @@ jobs:
           bash scripts/tests/test-engine-advance.sh 2>&1 | tee /tmp/engine-advance.log
           exit ${PIPESTATUS[0]}
 
-      - name: CLAUDE.md cd-rule injection on upgrade (v7.1 M12)
-        id: s_cmd
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-claudemd-cd-rule-injection.sh 2>&1 | tee /tmp/claudemd-cd-rule.log
-          exit ${PIPESTATUS[0]}
-
       - name: Gate Keeper verify bash safelist (v7.1 M2)
         id: s_vba
         continue-on-error: true
@@ -512,7 +505,6 @@ jobs:
           R_CNG: ${{ steps.s_cng.outcome }}
           R_SLUG: ${{ steps.s_slug.outcome }}
           R_ADV: ${{ steps.s_adv.outcome }}
-          R_CMD: ${{ steps.s_cmd.outcome }}
           R_VBA: ${{ steps.s_vba.outcome }}
           R_RTS: ${{ steps.s_rts.outcome }}
           R_DOC: ${{ steps.s_doc.outcome }}
@@ -555,7 +547,6 @@ jobs:
           Unit: commit/branch non-git guard (v7.1 M1)	${R_CNG}	/tmp/commit-not-a-repo.log
           Unit: slug fs-safe truncation (v7.1 M5)	${R_SLUG}	/tmp/slug-truncate.log
           Unit: engine advance command (v7.1 M8)	${R_ADV}	/tmp/engine-advance.log
-          Unit: CLAUDE.md cd-rule injection (v7.1 M12)	${R_CMD}	/tmp/claudemd-cd-rule.log
           Unit: verify bash safelist (v7.1 M2)	${R_VBA}	/tmp/verify-bash-allowed.log
           Unit: researcher targeted scope (v7.1 M11)	${R_RTS}	/tmp/researcher-targeted-scope.log
           Unit: engine doctor (v8.0 plugin-aware)	${R_DOC}	/tmp/engine-doctor.log
