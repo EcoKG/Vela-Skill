@@ -219,13 +219,6 @@ jobs:
           bash scripts/tests/test-engine-record.sh 2>&1 | tee /tmp/engine-record.log
           exit ${PIPESTATUS[0]}
 
-      - name: Sprint manager
-        id: s_sm
-        continue-on-error: true
-        run: |
-          bash scripts/tests/test-sprint-manager.sh 2>&1 | tee /tmp/sprint-manager.log
-          exit ${PIPESTATUS[0]}
-
       - name: Full pipeline scenario (E2E)
         id: s_fp
         continue-on-error: true
@@ -493,7 +486,6 @@ jobs:
           R_S03: ${{ steps.s_s03.outcome }}
           R_RG: ${{ steps.s_rg.outcome }}
           R_ER: ${{ steps.s_er.outcome }}
-          R_SM: ${{ steps.s_sm.outcome }}
           R_FP: ${{ steps.s_fp.outcome }}
           R_IF: ${{ steps.s_if.outcome }}
           R_AM: ${{ steps.s_am.outcome }}
@@ -548,7 +540,6 @@ jobs:
           Unit: s03-relaxation	${R_S03}	/tmp/s03-relaxation.log
           Unit: review-gate	${R_RG}	/tmp/review-gate.log
           Unit: engine-record	${R_ER}	/tmp/engine-record.log
-          Unit: sprint-manager	${R_SM}	/tmp/sprint-manager.log
           E2E: full-pipeline	${R_FP}	/tmp/full-pipeline.log
           E2E: install-flow	${R_IF}	/tmp/install-flow.log
           E2E: auto-mode	${R_AM}	/tmp/auto-mode.log

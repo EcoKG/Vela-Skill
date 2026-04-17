@@ -87,7 +87,6 @@ const FILE_MANIFEST = [
   // Shared modules (used by CLI tools)
   { src: "scripts/shared/constants.js", dst: "shared/constants.js" },
   { src: "scripts/shared/global-require.js", dst: "shared/global-require.js" },
-  { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
   { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
   { src: "scripts/shared/change-surface.js", dst: "shared/change-surface.js" },
   // v6.1 Universal Locate (used by vela-engine locate command)
@@ -116,7 +115,6 @@ const FILE_MANIFEST = [
   { src: "scripts/agents/vela-verifier.md", dst: "agents/vela-verifier.md" },
   { src: "scripts/agents/vela-diff-summary.md", dst: "agents/vela-diff-summary.md" },
   { src: "scripts/agents/vela-learning.md", dst: "agents/vela-learning.md" },
-  { src: "scripts/agents/vela-sprint-planner.md", dst: "agents/vela-sprint-planner.md" },
   { src: "scripts/agents/vela-analyzer.md", dst: "agents/vela-analyzer.md" },
   // Templates
   { src: "templates/pipeline.json", dst: "templates/pipeline.json" },
@@ -673,7 +671,6 @@ function install() {
     "vela-verifier.md",
     "vela-diff-summary.md",
     "vela-learning.md",
-    "vela-sprint-planner.md",
     "vela-analyzer.md",
   ];
   for (const agentFile of CLAUDE_AGENTS) {
@@ -1082,7 +1079,6 @@ function upgrade() {
       "vela-verifier.md",
       "vela-diff-summary.md",
       "vela-learning.md",
-      "vela-sprint-planner.md",
       "vela-analyzer.md",
     ];
     for (const agentFile of CLAUDE_AGENTS) {

@@ -100,16 +100,9 @@ PM → vela-engine.js init "요청" --scale {scale}
 
 v7.0 surgical(`/vela:fix`)은 `plan` 대신 `spec` 단계에서 planner를 `mode: spec`으로 호출하여 `patch-spec.md`를 생성하고, `execute` 대신 `patch` 단계에서 executor가 이 spec을 정확히 적용한다.
 
-## vela-sprint (스프린트 — V6)
+## ~~vela-sprint~~ (v7.3-M1c 제거됨)
 
-V6에서는 PM이 직접 스프린트를 처리한다:
-
-```
-PM → Agent(vela-sprint-planner) → sprint-{timestamp}.json
-   → 슬라이스별 파이프라인 순차 실행 (Agent 도구 체인)
-```
-
-- `sprint-manager.js`가 스프린트 상태를 `.vela/sprints/sprint-*.json`에 기록한다.
+스프린트 오케스트레이션은 V8에서 제거되었다. 대규모 요청은 사용자가 작업을 작은 단위로 쪼개 단일 파이프라인을 여러 번 실행한다. Opus 4.7의 adaptive thinking + 1M context로 단일 파이프라인의 커버 범위가 넓어졌기 때문. `sprint-manager.js`, `vela-sprint-planner.md`, `test-sprint-manager.sh` 모두 제거.
 
 ## /vela:analyze (분석 — v7.3-M1b부터 스킬 내부 실행)
 

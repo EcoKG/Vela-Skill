@@ -15,7 +15,6 @@ V6에서 PM은 `TeamCreate`/`Teammate`를 사용하지 않는다.
 | 검증자 | `vela-verifier` | Read/Bash/Write | verification.md |
 | diff 분석 | `vela-diff-summary` | Read/Bash/Write | diff-summary.md |
 | 학습 | `vela-learning` | Read/Write | learning.md |
-| 스프린트 | `vela-sprint-planner` | Read/Write | sprint-{ts}.json |
 
 ## 소환 프롬프트 형식
 

@@ -1001,7 +1001,6 @@ function cmdDoctor() {
     "vela-plan-checker.md",
     "vela-diff-summary.md",
     "vela-learning.md",
-    "vela-sprint-planner.md",
   ];
   for (const a of agents) {
     const abs = path.join(CWD, ".vela", "agents", a);

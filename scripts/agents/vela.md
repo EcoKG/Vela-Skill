@@ -299,18 +299,9 @@ node .vela/cli/vela-engine.js cancel            # 파이프라인 취소
 node .vela/cli/vela-engine.js state             # 현재 상태 조회
 ```
 
-## 실행 방식 결정 — 파이프라인 vs 스프린트
+## 실행 방식
 
-- **단일 파이프라인** — 한 번의 research→plan→execute→review 사이클로 완료 가능한 요청
-- **스프린트** — 여러 슬라이스로 분해가 필요한 대규모 요청
-
-스프린트 실행:
-```
-Agent(subagent_type="vela-sprint-planner", prompt="request: {request}, sprintDir: .vela/sprints/")
-→ sprint-plan.json 생성
-→ node .vela/cli/sprint-manager.js getNext → 다음 슬라이스 파악
-→ 각 슬라이스를 독립 파이프라인으로 순차 실행 (위 절차 반복)
-```
+V8에서는 **단일 파이프라인만** 운영한다. 대규모 요청은 사용자가 직접 작업을 쪼개 여러 파이프라인으로 순차 실행한다. Opus 4.7의 adaptive thinking + 1M context window로 한 파이프라인이 커버하는 범위가 넓어졌고, 스프린트 오케스트레이션 오버헤드는 더 이상 비용 대비 가치가 없다.
 
 ## 절대 하지 않을 것
 

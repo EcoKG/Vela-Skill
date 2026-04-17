@@ -220,7 +220,6 @@ PM (vela.md agent)
   ├── Agent(vela-verifier)         → verification.md
   ├── Agent(vela-diff-summary)     → diff-summary.md (v7.2 M7 background opt-in)
   ├── Agent(vela-learning)         → learning.md    (v7.2 M7 background opt-in)
-  ├── Agent(vela-sprint-planner)   → sprint-plan.json (다중 슬라이스 분해)
   └── Agent(vela-analyzer)         → analysis.md (`/vela:analyze`)
 
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
@@ -256,8 +255,8 @@ node .vela/cli/vela-friction.js --limit 100 --json               # 기계 판독
 ```
 scripts/shared/
 ├── change-surface.js    ← 참조 무결성 검증 (diff 기반 cross-file reference 분석)
-├── sprint-manager.js    ← 스프린트 FSM 상태 관리
 ├── project-env.js       ← 프로젝트 환경 정보 수집
+├── worktree-manager.js  ← M4-M6 격리 실행용
 └── constants.js         ← 가드 패턴 (SAFE_BASH_READ, SECRET_PATTERNS 등)
 ```
 
@@ -325,7 +324,6 @@ V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 | 테스트 검증 | `vela-verifier` | sonnet |
 | diff 분석 | `vela-diff-summary` | haiku |
 | 학습 추출 | `vela-learning` | haiku |
-| 스프린트 분해 | `vela-sprint-planner` | sonnet |
 
 ### 승인 메커니즘 — 파일 기반
 
@@ -453,8 +451,8 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   ├── scripts/
   │   ├── shared/                ← 공유 유틸리티 (SDK 없음)
   │   │   ├── change-surface.js    ← 참조 무결성 검증 (diff 기반)
-  │   │   ├── sprint-manager.js    ← 스프린트 FSM 상태 관리
   │   │   ├── project-env.js       ← 프로젝트 환경 정보 수집
+  │   │   ├── worktree-manager.js  ← 격리 실행용
   │   │   └── constants.js         ← 가드 패턴 상수
   │   ├── cli/                   ← vela-engine, vela-cost, vela-report, vela-friction
   │   ├── agents/                ← vela.md (PM) + 10개 역할 에이전트 (vela-researcher.md 등)

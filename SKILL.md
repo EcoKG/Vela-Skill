@@ -27,7 +27,6 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
   파이프라인이 없으면: `⛵ Vela — Explore 모드. 활성 파이프라인 없음.`
 - `$ARGUMENTS`가 `git-clean` → `/vela:git-clean` 절차 실행
 - `$ARGUMENTS`가 `analyze` → `/vela:analyze` 절차 실행
-- `$ARGUMENTS`가 `sprint` 또는 `sprint <args>` → `/vela:sprint` 절차 실행
 - `$ARGUMENTS`가 비어있음 → AskUserQuestion으로 scale 선택:
 
 ```json
@@ -112,28 +111,6 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
    - execute 단계: `Agent(subagent_type="vela-executor")` → 리뷰
    - verify 단계: `Agent(subagent_type="vela-verifier")`
    - 각 단계 완료 후 `node .vela/cli/vela-engine.js transition`으로 전이
-
----
-
-## /vela:sprint — 멀티 슬라이스 스프린트
-
-`/vela sprint` (또는 `/vela:sprint`)은 대규모 작업을 여러 슬라이스로 분해하여 순차 실행하는 스프린트 오케스트레이션이다.
-
-### 절차 (V6)
-
-1. **스프린트 계획**: PM이 `Agent(subagent_type="vela-sprint-planner")`를 호출하여 요청을 의존성 그래프 기반 슬라이스로 분해한다 → `sprint-{timestamp}.json` 생성.
-2. **순차 실행**: 각 슬라이스를 독립 파이프라인으로 PM이 직접 실행한다 (Agent 도구 체인).
-3. **컨텍스트 전달**: 완료된 의존 슬라이스의 결과(artifacts)를 후속 슬라이스 프롬프트에 포함한다.
-4. **상태 추적**: `sprint-manager.js`가 스프린트 FSM 상태와 슬라이스별 진행률을 `.vela/sprints/sprint-*.json`에 기록한다.
-
-### 실행 모드 결정 — 파이프라인 vs 스프린트
-
-| 조건 | 실행 방식 |
-|------|----------|
-| 단일 작업, 명확한 범위 | `/vela:start` — 단일 파이프라인 |
-| 여러 독립 기능, 복합 요청 | `/vela:sprint` — 멀티 슬라이스 스프린트 |
-
-PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 제안한다.
 
 ---
 
@@ -283,13 +260,6 @@ node .vela/cli/vela-engine.js cancel                # 파이프라인 취소
 | `--scale <scale>` | 파이프라인 규모 (small/medium/large/ralph/hotfix) |
 | `--auto` | auto 모드 활성화 |
 | `--force` | dirty tree 체크 스킵 |
-
-### 스프린트 (V6)
-
-스프린트는 PM이 직접 처리한다:
-1. `Agent(subagent_type="vela-sprint-planner")` → sprint-plan.json 생성
-2. sprint-manager.js CLI로 슬라이스 상태 관리
-3. PM이 각 슬라이스를 독립 파이프라인으로 순차 실행
 
 ---
 
@@ -488,7 +458,6 @@ V6에서 Teammate/TeamCreate/SendMessage는 사용하지 않는다.
 | 테스트 검증 | `vela-verifier` | `sonnet` |
 | diff 요약 | `vela-diff-summary` | `haiku` |
 | 학습 추출 | `vela-learning` | `haiku` |
-| 스프린트 분해 | `vela-sprint-planner` | `sonnet` |
 
 ### 에이전트 소환 예시
 

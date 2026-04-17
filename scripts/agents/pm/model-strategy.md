@@ -16,7 +16,6 @@ V6에서는 PM이 각 단계를 Agent 도구로 직접 실행한다. 모델 선�
 | review | `vela-reviewer` | Sonnet | 5차원 채점 (점수 ≥ 20/25 → 승인) |
 | diff-summary | `vela-diff-summary` | Haiku (`effort: low`) | 전체 diff 통합 검토 (non-fatal) |
 | learning | `vela-learning` | Haiku (`effort: low`) | 파이프라인 학습 축적 (non-fatal) |
-| sprint-plan | `vela-sprint-planner` | Sonnet | 대규모 요청 슬라이스 분해 |
 
 **v7.0 note**: spec과 patch는 각각 `vela-planner` / `vela-executor` 에이전트의 **새 mode**로 구현된다 — 새 에이전트 파일은 없다. PM이 프롬프트에 `mode: spec`을 주입하면 planner가 분기한다.
 
