@@ -214,6 +214,10 @@ const ctx = {
 const cmdInit = require("../commands/init")(ctx);
 const cmdBranch = require("../commands/branch")(ctx);
 const cmdCommit = require("../commands/commit")(ctx);
+// Extracted commands (v7.3-M4e-p4)
+const cmdLocate = require("../commands/locate")(ctx);
+const cmdCancel = require("../commands/cancel")(ctx);
+const cmdHistory = require("../commands/history")(ctx);
 
 const commands = {
   init: cmdInit,
@@ -941,138 +945,9 @@ function cmdDoctor() {
  * Exit gates that depend on this:
  *   - targets_json_exists  (added in checkExitGate)
  */
-function cmdLocate() {
-  // Resolve target dir + request
-  const requestOverride = getFlag("--request");
-  const state = findActiveState();
-  let artifactDir;
-  let request;
+// cmdLocate moved to scripts/commands/locate.js (v7.3-M4e-p4)
 
-  if (requestOverride) {
-    request = requestOverride;
-    // When called outside an active pipeline, write to a temp inspection dir
-    artifactDir =
-      (state && state._artifactDir) || path.join(VELA_DIR, "locate-preview");
-    if (!fs.existsSync(artifactDir)) {
-      fs.mkdirSync(artifactDir, { recursive: true });
-    }
-  } else {
-    if (!state) {
-      return output({
-        ok: false,
-        error:
-          "No active pipeline. Pass --request \"...\" to locate without a pipeline.",
-      });
-    }
-    request = state.request;
-    artifactDir = state._artifactDir;
-  }
-
-  // Lazy-load locate module — keeps engine startup fast for other commands
-  let locateMod;
-  try {
-    // Project-local copy first (post-install layout: .vela/shared/locate.js),
-    // fall back to source layout for tests and dev runs.
-    const candidates = [
-      path.join(CWD, ".vela", "shared", "locate.js"),
-      path.join(__dirname, "..", "shared", "locate.js"),
-    ];
-    let resolved = null;
-    for (const c of candidates) {
-      if (fs.existsSync(c)) {
-        resolved = c;
-        break;
-      }
-    }
-    if (!resolved) {
-      return output({
-        ok: false,
-        error:
-          "locate.js not found. Run `node scripts/install.js` to deploy shared modules.",
-      });
-    }
-    locateMod = require(resolved);
-  } catch (e) {
-    return output({ ok: false, error: `Failed to load locate.js: ${e.message}` });
-  }
-
-  // Run locate
-  let result;
-  try {
-    result = locateMod.locate(request, { cwd: CWD });
-  } catch (e) {
-    return output({ ok: false, error: `locate() failed: ${e.message}` });
-  }
-
-  // Write targets.json
-  const targetsPath = path.join(artifactDir, "targets.json");
-  try {
-    writeJSON(targetsPath, result);
-  } catch (e) {
-    return output({
-      ok: false,
-      error: `Failed to write targets.json: ${e.message}`,
-      targets_path: targetsPath,
-    });
-  }
-
-  // Output summary (or full JSON if --json)
-  if (hasFlag("--json")) {
-    return output({
-      ok: true,
-      command: "locate",
-      targets_path: targetsPath,
-      ...result,
-    });
-  }
-
-  output({
-    ok: true,
-    command: "locate",
-    targets_path: targetsPath,
-    confidence: result.confidence,
-    primary_count: result.primary.length,
-    primary: result.primary.slice(0, 10).map((p) => ({
-      file: p.file,
-      symbol: p.symbol,
-      lines: p.lines,
-      match_source: p.match_source,
-    })),
-    tests_count: result.tests.length,
-    blast_radius_count: result.blast_radius.length,
-    warnings: result.warnings,
-    backend: locateMod.searchBackend(),
-  });
-}
-
-function cmdCancel() {
-  const state = findActiveState();
-  if (!state) {
-    return output({ ok: false, error: "No active pipeline to cancel." });
-  }
-
-  state.status = "cancelled";
-  state.updated_at = new Date().toISOString();
-
-  const recovery = {};
-  if (state.git && state.git.is_repo) {
-    recovery.checkpoint_hash = state.git.checkpoint_hash;
-    recovery.pipeline_branch = state.git.pipeline_branch;
-    recovery.base_branch = state.git.base_branch;
-    recovery.hint = state.git.pipeline_branch
-      ? `To discard pipeline branch: git checkout ${state.git.base_branch} && git branch -d ${state.git.pipeline_branch}`
-      : `To see pipeline changes: git diff ${state.git.checkpoint_hash}..HEAD`;
-  }
-
-  writeJSON(state._path, cleanState(state));
-
-  output({
-    ok: true,
-    command: "cancel",
-    recovery: recovery,
-    message: "Pipeline cancelled.",
-  });
-}
+// cmdCancel moved to scripts/commands/cancel.js (v7.3-M4e-p4)
 
 // ─── Git Clean: Scan (read-only, report findings) ───
 function cmdCleanScan() {
@@ -1364,56 +1239,7 @@ function detectMainBranch() {
   return null;
 }
 
-function cmdHistory() {
-  if (!fs.existsSync(ARTIFACTS_DIR)) {
-    return output({
-      ok: true,
-      command: "history",
-      pipelines: [],
-      message: "No pipeline history.",
-    });
-  }
-
-  const pipelines = [];
-  try {
-    const allDirs = fs.readdirSync(ARTIFACTS_DIR).sort().reverse();
-
-    // Flat: {YYYYMMDD}T{HHmmss}-{slug}/
-    for (const dir of allDirs.filter((d) => /^\d{8}T\d{6}-/.test(d))) {
-      const dirPath = path.join(ARTIFACTS_DIR, dir);
-      try {
-        if (!fs.statSync(dirPath).isDirectory()) continue;
-      } catch {
-        continue;
-      }
-      const statePath = path.join(dirPath, "pipeline-state.json");
-      if (!fs.existsSync(statePath)) continue;
-      try {
-        const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-        pipelines.push({
-          date: dir.slice(0, 8),
-          slug: dir,
-          status: state.status,
-          type: state.pipeline_type,
-          request: (state.request || "").substring(0, 60),
-          step: state.current_step,
-          steps_completed: (state.completed_steps || []).length,
-          steps_total: (state.steps || []).length,
-          created: state.created_at,
-          updated: state.updated_at,
-        });
-      } catch (e) {}
-    }
-
-  } catch (e) {}
-
-  output({
-    ok: true,
-    command: "history",
-    count: pipelines.length,
-    pipelines: pipelines,
-  });
-}
+// cmdHistory moved to scripts/commands/history.js (v7.3-M4e-p4)
 
 // ─── Helpers ───
 
