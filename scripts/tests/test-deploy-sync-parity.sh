@@ -69,8 +69,7 @@ note() {
 # Add a new entry only with a comment explaining why. Any other
 # FILE_MANIFEST entry MUST be reachable from sync_local_project.
 GLOBAL_ONLY_DSTS=(
-  "hooks/session-start-version-check.js"
-  "hooks/vela-session-start.js"
+  "hooks/vela-session.js"
 )
 
 # ─── Setup a sandbox project with minimal skeleton ────────────

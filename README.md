@@ -70,9 +70,9 @@ Vela는 `SessionStart` 훅으로 24h 캐시 버전 체크를 수행한다. 새 �
 │  vela-executor   — TDD 구현 (test→implement→refactor)    │
 │  vela-reviewer   — review + verify + diff-summary 통합   │
 │                                                           │
-│  🛡️ HOOKS (7) ────────────────────────────────────       │
+│  🛡️ HOOKS (6) ────────────────────────────────────       │
 │  gate-keeper · gate-guard · stop · review-gate           │
-│  subagent-stop · session-start · version-check           │
+│  subagent-stop · session (v7.3-M4b 통합)                 │
 ✦──────────────────────────────────────────────────────────✦
 ```
 

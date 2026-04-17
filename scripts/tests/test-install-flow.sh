@@ -69,15 +69,13 @@ setup_home_and_project() {
   mkdir -p "$FAKE_HOME/.claude/skills/vela/scripts/hooks"
   mkdir -p "$PROJECT/.vela"
 
-  # register_session_start_hook in deploy-common.sh requires this file
-  # to exist in $HOME/.claude/skills/vela/scripts/hooks/ before it will
-  # do anything. Create a minimal stub so that path succeeds.
-  cp "$REPO_ROOT/scripts/hooks/session-start-version-check.js" \
-    "$FAKE_HOME/.claude/skills/vela/scripts/hooks/session-start-version-check.js"
-  if [ -f "$REPO_ROOT/scripts/hooks/vela-session-start.js" ]; then
-    cp "$REPO_ROOT/scripts/hooks/vela-session-start.js" \
-      "$FAKE_HOME/.claude/skills/vela/scripts/hooks/vela-session-start.js"
-  fi
+  # register_session_start_hook in deploy-common.sh requires the
+  # unified session hook to exist in $HOME/.claude/skills/vela/scripts/
+  # hooks/ before it will do anything. Create it so that path succeeds.
+  # (v7.3-M4b: session-start-version-check.js + vela-session-start.js
+  # merged into vela-session.js.)
+  cp "$REPO_ROOT/scripts/hooks/vela-session.js" \
+    "$FAKE_HOME/.claude/skills/vela/scripts/hooks/vela-session.js"
 
   # Initialise a git repo inside the project so install.js doesn't
   # bail on ensureGitignore / git operations.

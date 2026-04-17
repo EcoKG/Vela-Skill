@@ -44,17 +44,19 @@ sync_local_project() {
 
   # Hooks — v7.1.1: glob over scripts/hooks/*.js so any hook added to the
   # repo (v7.3-M4: vela-file-read-cache/post-tool-learning 제거됨) is
-  # automatically deployed. session-start-version-check.js and vela-session-start.js
-  # live under hooks/ too and are meant for the global install path, not
-  # the project — filter them out explicitly so the project .vela/hooks/
-  # stays clean.
+  # automatically deployed. vela-session.js lives under hooks/ too and
+  # is meant for the global install path, not the project — filter it
+  # out explicitly so the project .vela/hooks/ stays clean.
+  #
+  # v7.3-M4b: session-start-version-check.js + vela-session-start.js
+  # merged into vela-session.js (single unified SessionStart hook).
   mkdir -p .vela/hooks
   mkdir -p .vela/hooks/shared
   for hook_src in "$SRC/scripts/hooks/"*.js; do
     [ -f "$hook_src" ] || continue
     hook_name=$(basename "$hook_src")
     case "$hook_name" in
-      session-start-version-check.js|vela-session-start.js) continue ;;
+      vela-session.js) continue ;;
     esac
     cp "$hook_src" .vela/hooks/ 2>/dev/null
   done
@@ -137,27 +139,26 @@ sync_local_project() {
   fi
 }
 
-# ─── Shared function: register SessionStart hooks ────────────────
-# Registers both the version-check hook and the rich session-start context hook
-# into ~/.claude/settings.json (global).
-# Used by install.sh and update.sh. Idempotent — safe to call multiple times.
+# ─── Shared function: register SessionStart hook ────────────────
+# Registers the unified Vela SessionStart hook (vela-session.js) into
+# ~/.claude/settings.json (global). Used by install.sh and update.sh.
+# Idempotent — safe to call multiple times. Also removes legacy entries
+# (pre-M4b session-start-version-check.js and vela-session-start.js)
+# so upgrades cleanly migrate to the unified hook.
 register_session_start_hook() {
-  local VERSION_CHECK_SCRIPT="$HOME/.claude/skills/vela/scripts/hooks/session-start-version-check.js"
-  local SESSION_START_SCRIPT="$HOME/.claude/skills/vela/scripts/hooks/vela-session-start.js"
+  local SESSION_SCRIPT="$HOME/.claude/skills/vela/scripts/hooks/vela-session.js"
   local SETTINGS_FILE="$HOME/.claude/settings.json"
 
-  # Verify version-check script exists (required)
-  if [ ! -f "$VERSION_CHECK_SCRIPT" ]; then
+  # Verify unified session script exists
+  if [ ! -f "$SESSION_SCRIPT" ]; then
     return 1
   fi
 
-  # Use node to safely merge both hooks into settings.json
+  # Use node to safely merge the hook into settings.json
   node -e "
 const fs = require('fs');
 const settingsPath = '$SETTINGS_FILE';
-const versionCheckCmd = 'node $VERSION_CHECK_SCRIPT';
-const sessionStartCmd = 'node $SESSION_START_SCRIPT';
-const hasSessionStart = fs.existsSync('$SESSION_START_SCRIPT');
+const sessionCmd = 'node $SESSION_SCRIPT';
 
 let settings = {};
 try {
@@ -172,15 +173,21 @@ try {
 settings.hooks = settings.hooks || {};
 settings.hooks.SessionStart = settings.hooks.SessionStart || [];
 
-// Remove any existing Vela SessionStart hook entries (idempotent cleanup)
+// Remove any existing Vela SessionStart hook entries (idempotent cleanup).
+// Covers current _velaId ('vela-session') and legacy pre-M4b IDs
+// ('vela-version-check', 'vela-session-start').
 settings.hooks.SessionStart = settings.hooks.SessionStart.filter(entry => {
   if (!entry) return false;
-  // Remove by _velaId
-  if (entry._velaId && (entry._velaId === 'vela-version-check' || entry._velaId === 'vela-session-start')) return false;
-  // Remove legacy flat format
+  if (entry._velaId && (
+    entry._velaId === 'vela-session' ||
+    entry._velaId === 'vela-version-check' ||
+    entry._velaId === 'vela-session-start'
+  )) return false;
+  // Remove legacy flat format (pre-_velaId) by command inspection
   if (entry.hooks && Array.isArray(entry.hooks)) {
     const hasVelaHook = entry.hooks.some(h =>
       h && h.command && (
+        h.command.includes('vela-session.js') ||
         h.command.includes('session-start-version-check.js') ||
         h.command.includes('vela-session-start.js')
       )
@@ -190,26 +197,14 @@ settings.hooks.SessionStart = settings.hooks.SessionStart.filter(entry => {
   return true;
 });
 
-// Register version-check hook (network check, 5s timeout)
+// Register unified session hook (8s timeout — covers network + git + fs).
 settings.hooks.SessionStart.push({
-  _velaId: 'vela-version-check',
-  hooks: [{ type: 'command', command: versionCheckCmd, timeout: 5 }]
+  _velaId: 'vela-session',
+  hooks: [{ type: 'command', command: sessionCmd, timeout: 8 }]
 });
-
-// Register rich session-start context injection hook (8s timeout — git + fs reads)
-if (hasSessionStart) {
-  settings.hooks.SessionStart.push({
-    _velaId: 'vela-session-start',
-    hooks: [{ type: 'command', command: sessionStartCmd, timeout: 8 }]
-  });
-}
 
 fs.mkdirSync(require('path').dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
-if (hasSessionStart) {
-  console.log('  ⛵ SessionStart hooks registered (version-check + rich context)');
-} else {
-  console.log('  ⛵ SessionStart version-check hook registered');
-}
+console.log('  ⛵ SessionStart hook registered (version-check + rich context unified)');
 " 2>&1
 }

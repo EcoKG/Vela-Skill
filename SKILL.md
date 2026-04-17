@@ -147,8 +147,7 @@ node .vela/cli/vela-friction.js                  # gate-events.jsonl 집계 (VK/
 | `vela-stop.js` | Stop | auto 모드 중 중단 방지 |
 | `vela-review-gate.js` | Stop | APPROVE 후 N회 재검증 강제 |
 | `vela-subagent-stop.js` | SubagentStop | 에이전트별 텔레메트리 (v7.2 M8) |
-| `session-start-version-check.js` | SessionStart | 버전 체크 |
-| `vela-session-start.js` | SessionStart | rich context 주입 (persona.md, pipeline state) |
+| `vela-session.js` | SessionStart | 버전 체크 + rich context 주입 (persona.md, pipeline state, git, env) |
 
 **Fail-closed**: 모든 훅의 오류 경로는 `exit 2`(차단)로 폴백.
 
