@@ -20,8 +20,5 @@
     "subagents",
     "code-review",
     "conventional-commits"
-  ],
-  "commands": "./commands",
-  "agents": "./agents",
-  "hooks": "./hooks/hooks.json"
+  ]
 }
