@@ -98,13 +98,15 @@ const FILE_MANIFEST = [
   { src: "scripts/core/git-utils.js", dst: "core/git-utils.js" },
   { src: "scripts/core/state.js",     dst: "core/state.js"     },
   { src: "scripts/core/pipeline.js",  dst: "core/pipeline.js"  },
-  // v7.3-M4e-p3/p4 extracted commands (each takes ctx from vela-engine.js)
+  // v7.3-M4e-p3/p4/p5 extracted commands (each takes ctx from vela-engine.js)
   { src: "scripts/commands/init.js",    dst: "commands/init.js"    },
   { src: "scripts/commands/branch.js",  dst: "commands/branch.js"  },
   { src: "scripts/commands/commit.js",  dst: "commands/commit.js"  },
   { src: "scripts/commands/locate.js",  dst: "commands/locate.js"  },
   { src: "scripts/commands/cancel.js",  dst: "commands/cancel.js"  },
   { src: "scripts/commands/history.js", dst: "commands/history.js" },
+  { src: "scripts/commands/doctor.js",  dst: "commands/doctor.js"  },
+  { src: "scripts/commands/clean.js",   dst: "commands/clean.js"   },
   // CLI tools (V6 — no SDK orchestrators)
   { src: "scripts/cli/vela-engine.js", dst: "cli/vela-engine.js" },
   { src: "scripts/cli/vela-friction.js", dst: "cli/vela-friction.js" },
