@@ -42,6 +42,12 @@ sync_local_project() {
   mkdir -p .vela/shared
   cp "$SRC/scripts/shared/"*.js .vela/shared/ 2>/dev/null
 
+  # v7.3-M4e Core primitives (cli-utils + git-utils — extracted from
+  # vela-engine.js during the v8.0 engine decomposition). Required by
+  # .vela/cli/vela-engine.js at runtime via require("../core/...").
+  mkdir -p .vela/core
+  cp "$SRC/scripts/core/"*.js .vela/core/ 2>/dev/null
+
   # Hooks — v7.1.1: glob over scripts/hooks/*.js so any hook added to the
   # repo (v7.3-M4: vela-file-read-cache/post-tool-learning 제거됨) is
   # automatically deployed. vela-session.js lives under hooks/ too and

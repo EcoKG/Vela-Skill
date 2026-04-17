@@ -93,6 +93,9 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/locate.js", dst: "shared/locate.js" },
   // Environment detection (used by session-start hook)
   { src: "scripts/shared/project-env.js", dst: "shared/project-env.js" },
+  // v7.3-M4e core primitives (engine decomposition)
+  { src: "scripts/core/cli-utils.js", dst: "core/cli-utils.js" },
+  { src: "scripts/core/git-utils.js", dst: "core/git-utils.js" },
   // CLI tools (V6 — no SDK orchestrators)
   { src: "scripts/cli/vela-engine.js", dst: "cli/vela-engine.js" },
   { src: "scripts/cli/vela-friction.js", dst: "cli/vela-friction.js" },
@@ -256,6 +259,7 @@ const FILE_MANIFEST = [
 // state/, artifacts/, templates/, test-fixtures/, statusline.sh (root)
 const MANAGED_DIRS = [
   "shared",
+  "core",        // v7.3-M4e engine split (cli-utils, git-utils)
   "cli",
   "cache",
   "agents",

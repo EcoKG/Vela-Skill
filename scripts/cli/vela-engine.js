@@ -132,6 +132,26 @@ const TEMPLATES_DIR = path.join(VELA_DIR, "templates");
 const PROTECTED_BRANCHES = ["main", "master", "develop"];
 const CIRCUIT_BREAKER_THRESHOLD = 5;
 
+// ─── Core helpers (v7.3-M4e engine split) ───
+// Pure utilities (slugify/writeJSON/output/autoDetectScale/cleanState)
+// live in ../core/cli-utils.js and have no dependency on engine state.
+// Git helpers bind to CWD + PROTECTED_BRANCHES via factory so the 43
+// call sites below don't have to thread cwd through every invocation.
+const {
+  slugifyEx,
+  slugify,
+  cleanState,
+  writeJSON,
+  output,
+  autoDetectScale,
+} = require("../core/cli-utils");
+const {
+  gitExec,
+  gitExecShell,
+  snapshotGitState,
+  ensureGitignore,
+} = require("../core/git-utils")(CWD, PROTECTED_BRANCHES);
+
 // ─── Command Router ───
 const args = process.argv.slice(2);
 const command = args[0];
@@ -2099,117 +2119,9 @@ function checkExitGate(stepDef, state) {
   return { passed: missing.length === 0, missing };
 }
 
-/**
- * @deprecated since v6.1 — scheduled for removal in v7.0.
- *
- * Word-count heuristic doesn't reflect actual work weight.
- * Users should pick scale explicitly via /vela:small, /vela:medium,
- * /vela:large, /vela:ralph, or /vela:hotfix. When --scale is omitted,
- * cmdInit() now falls back to "medium" with a deprecation warning
- * instead of calling this function.
- *
- * Left in place only to avoid breaking any external callers that
- * require('./vela-engine') this module. Will be deleted in v7.0
- * along with the /vela:start slash command removal.
- */
-function autoDetectScale(request) {
-  const words = request.split(/\s+/).length;
-  if (words <= 10) return "small";
-  if (words <= 30) return "medium";
-  return "large";
-}
-
-/**
- * v7.1 M5: fs-safe slugify.
- *
- * Pre-v7.1 this used `.substring(0, 30)`, a JS char count. In the hicoco
- * session Korean requests produced artifact directories named
- * "별도-downloa", "대상-사이", "baseurl" — the 30-char limit truncated
- * mid-word because a Korean syllable is 1 JS char but 3 UTF-8 bytes, and
- * nothing enforced cutting on a word boundary.
- *
- * v7.1 behaviour:
- *   1. normalise (lowercase, strip non-[a-z0-9가-힣] except `-` and space)
- *   2. collapse whitespace to `-`
- *   3. cap at 64 UTF-8 bytes, not chars
- *   4. if we had to truncate, walk back to the nearest `-` boundary so we
- *      never cut through a word or a multi-byte codepoint
- *   5. if truncated, append `-trunc` so the caller can tell at a glance
- *
- * Returns an object so callers can decide whether to write a side-car
- * request.txt with the full original request (cmdInit does this when
- * truncated).
- */
-function slugifyEx(text) {
-  const normalized = String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9가-힣\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  const MAX_BYTES = 64;
-  // v7.1 M5: always leave headroom for the "-trunc" suffix. Pre-v7.1 the
-  // cap was applied first and the suffix was appended afterwards, which
-  // meant a request that landed at exactly MAX_BYTES would overflow once
-  // "-trunc" got tacked on. Budget the suffix in from the start so the
-  // post-truncate directory name is guaranteed ≤ MAX_BYTES.
-  const TRUNC_SUFFIX = "-trunc";
-  const BUDGET = MAX_BYTES - Buffer.byteLength(TRUNC_SUFFIX, "utf8");
-
-  const bytes = Buffer.byteLength(normalized, "utf8");
-  if (bytes <= MAX_BYTES) {
-    return { slug: normalized || "task", truncated: false };
-  }
-
-  // Walk down codepoint by codepoint until we are within the byte budget.
-  // Buffer.byteLength is the authoritative check — substring() would
-  // happily split a multi-byte char.
-  let cut = normalized;
-  while (Buffer.byteLength(cut, "utf8") > BUDGET) {
-    cut = cut.slice(0, -1);
-  }
-  // Prefer a `-` boundary so we never cut mid-word.
-  const lastDash = cut.lastIndexOf("-");
-  if (lastDash > 8) {
-    // Only snap back if we keep at least 8 chars — don't collapse a long
-    // request into "a-trunc" because the first word happened to be "a-".
-    cut = cut.slice(0, lastDash);
-  }
-  cut = cut.replace(/-+$/g, "");
-  if (!cut) cut = "task";
-  return { slug: cut + TRUNC_SUFFIX, truncated: true, originalBytes: bytes };
-}
-
-/**
- * Back-compat wrapper. Existing callers (cmdBranch, cmdInit) used to get a
- * plain string, so slugify() still does. Use slugifyEx() when you need the
- * truncation flag — cmdInit does, because it writes a request.txt side-car
- * when the slug had to be shortened.
- */
-function slugify(text) {
-  return slugifyEx(text).slug;
-}
-
-function cleanState(state) {
-  const clean = { ...state };
-  delete clean._path;
-  delete clean._artifactDir;
-  delete clean._stale;
-  return clean;
-}
-
-function writeJSON(filePath, data) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const tmpPath = filePath + ".tmp";
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
-  fs.renameSync(tmpPath, filePath);
-}
-
-function output(data) {
-  process.stdout.write(JSON.stringify(data, null, 2));
-}
+// slugify/slugifyEx/cleanState/writeJSON/output/autoDetectScale moved
+// to scripts/core/cli-utils.js (v7.3-M4e engine split). See top-of-file
+// `require("../core/cli-utils")` for the import.
 
 // Return the Nth positional argument after the command, skipping flags.
 // Previously this was `args[index + 1]` which returned "--scale" for
@@ -2300,113 +2212,7 @@ function cleanupCancelledArtifacts(hoursOld) {
   return cleaned;
 }
 
-// ─── Git Helpers ───
-
-function gitExec(...args) {
-  return execFileSync("git", args, {
-    cwd: CWD,
-    stdio: ["pipe", "pipe", "pipe"],
-    timeout: 15000,
-  }).toString();
-}
-
-function gitExecShell(cmd) {
-  return execSync(cmd, {
-    cwd: CWD,
-    stdio: ["pipe", "pipe", "pipe"],
-    timeout: 15000,
-  }).toString();
-}
-
-function snapshotGitState() {
-  try {
-    gitExec("rev-parse", "--git-dir");
-  } catch (e) {
-    return { is_repo: false };
-  }
-
-  try {
-    const currentBranch = gitExec("rev-parse", "--abbrev-ref", "HEAD").trim();
-    // -uno: exclude untracked files from dirty check — untracked files
-    // (e.g. .bg-shell/, src/test/) should not block pipeline init
-    const status = gitExec("status", "--porcelain", "-uno").trim();
-    const headHash = gitExec("rev-parse", "HEAD").trim();
-
-    let remote = null;
-    try {
-      remote = gitExec("remote").trim().split("\n")[0] || null;
-    } catch (e) {}
-
-    return {
-      is_repo: true,
-      current_branch: currentBranch,
-      is_clean: status === "",
-      dirty_files: status ? status.split("\n").length : 0,
-      head_hash: headHash,
-      remote: remote,
-      is_protected: PROTECTED_BRANCHES.includes(currentBranch),
-    };
-  } catch (e) {
-    return { is_repo: true, error: e.message };
-  }
-}
-
-function ensureGitignore() {
-  const gitignorePath = path.join(CWD, ".gitignore");
-  const velaEntries = [
-    "# Vela Engine (auto-managed)",
-    ".vela/",
-    ".claude/",
-    "CLAUDE.md",
-  ];
-
-  // Step 1: Remove already-tracked Vela files BEFORE updating .gitignore
-  // (if .gitignore lists them first, git silently drops the staged deletions)
-  try {
-    const tracked = execSync("git ls-files .vela/ .claude/ CLAUDE.md", {
-      cwd: CWD,
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 5000,
-    })
-      .toString()
-      .trim();
-    if (tracked) {
-      execSync(
-        "git rm -r --cached --ignore-unmatch .vela/ .claude/ CLAUDE.md",
-        {
-          cwd: CWD,
-          stdio: "pipe",
-          timeout: 10000,
-        },
-      );
-      execSync(
-        'git commit -m "chore: untrack Vela files from git" --no-verify',
-        {
-          cwd: CWD,
-          stdio: "pipe",
-          timeout: 10000,
-        },
-      );
-    }
-  } catch (e) {
-    // Not a git repo, git not available, or nothing to commit — skip
-  }
-
-  // Step 2: Update .gitignore (after deletions are committed)
-  let content = "";
-  if (fs.existsSync(gitignorePath)) {
-    content = fs.readFileSync(gitignorePath, "utf-8");
-  }
-
-  const missingEntries = velaEntries.filter(
-    (entry) => !entry.startsWith("#") && !content.includes(entry),
-  );
-
-  if (missingEntries.length > 0) {
-    if (!content.includes("# Vela Engine")) {
-      fs.appendFileSync(gitignorePath, "\n" + velaEntries.join("\n") + "\n");
-    } else {
-      fs.appendFileSync(gitignorePath, missingEntries.join("\n") + "\n");
-    }
-  }
-}
+// Git helpers (gitExec/gitExecShell/snapshotGitState/ensureGitignore)
+// moved to scripts/core/git-utils.js (v7.3-M4e engine split). See
+// top-of-file `require("../core/git-utils")(CWD, PROTECTED_BRANCHES)`
+// for the factory-bound import.
