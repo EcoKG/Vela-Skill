@@ -224,9 +224,12 @@ const cmdDoctor = require("../commands/doctor")(ctx);
 const { cmdCleanScan, cmdCleanExec } = require("../commands/clean")(ctx);
 // Extracted state-machine cluster (v7.3-M4e-p6)
 const { cmdState, cmdTransition, cmdRecord, cmdAdvance } = require("../commands/state-machine")(ctx);
+// Plugin bootstrap (v8.0-M3) — seeds {project}/.vela/ from the plugin install root
+const cmdInitProject = require("../commands/init-project")(ctx);
 
 const commands = {
   init: cmdInit,
+  "init-project": cmdInitProject, // v8.0 — /vela:install backend
   state: cmdState,
   transition: cmdTransition,
   record: cmdRecord,

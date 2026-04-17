@@ -31,7 +31,7 @@ description: "🎯 Vela surgical 파이프라인 — Target-First 패러다임. 
 
 ## 절차
 
-1. **Vela 환경 확인** — `.vela/config.json`이 없으면 자동 구성.
+1. **Vela 환경 확인** — `.vela/config.json`이 없으면 AskUserQuestion으로 "이 프로젝트에 Vela가 초기화되지 않았습니다. `/vela:install`을 먼저 실행할까요? (Recommended)"를 묻고, 사용자가 승인하면 Skill 도구로 `/vela:install`을 호출한 뒤 원 명령을 재개.
 2. **작업 내용 수집** — `$ARGUMENTS`가 있으면 원본 요청. 없으면 질문.
 3. **프롬프트 최적화** — `.vela/agents/pm/prompt-optimizer.md` 1~5단계 (Scale Mismatch Guard 포함).
    - Scale Guard는 fix를 점검 대상으로 포함: locate confidence가 low + blast_radius ≥ 5 파일이면 `/vela:large` 제안.
