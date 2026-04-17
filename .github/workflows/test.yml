@@ -111,7 +111,7 @@ jobs:
           set -e
           node --check scripts/install.js
           node --check scripts/cli/vela-engine.js
-          node --check scripts/cli/vela-analyze.js
+          node --check scripts/cli/vela-friction.js
           for f in scripts/hooks/*.js scripts/shared/*.js scripts/cache/*.js; do
             [ -f "$f" ] || continue
             echo "  checking $f"

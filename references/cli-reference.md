@@ -111,15 +111,18 @@ PM → Agent(vela-sprint-planner) → sprint-{timestamp}.json
 
 - `sprint-manager.js`가 스프린트 상태를 `.vela/sprints/sprint-*.json`에 기록한다.
 
-## vela-analyze (분석 보고서)
+## /vela:analyze (분석 — v7.3-M1b부터 스킬 내부 실행)
+
+전용 CLI 없이 `skills/analyze/SKILL.md` 스킬이 직접 운영한다:
+- **deps**: 스킬 내부에서 `npm audit --json` + `npm outdated --json` 실행, Claude가 markdown 요약 작성
+- **perspectives** (security/bugs/performance/code-quality/architecture): `Agent(subagent_type="vela-analyzer")` 호출
+
+출력: `.vela/artifacts/<ts>/analysis.md` (PDF 필요 시 Claude Code의 브라우저 출력 사용)
+
+## vela-friction (훅 마찰 집계)
 
 ```bash
-node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (npm audit/outdated, 무료)
-node .vela/cli/vela-analyze.js report --input <file> [--output <file>]  # JSON → PDF 변환
-node .vela/cli/vela-analyze.js full --items <list> [--output <file>]  # 통합 분석 → PDF (deps는 CLI, 나머지는 Agent)
-
-# perspectives: security, bugs, performance, code-quality, architecture
-# items: deps, security, bugs, performance, code-quality, architecture
+node .vela/cli/vela-friction.js [--limit 500] [--json]
 ```
 
 ## TreeNode 캐시

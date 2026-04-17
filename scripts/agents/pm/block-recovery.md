@@ -45,4 +45,4 @@ Vela가 도구 호출을 차단하면, **stderr 마지막 줄에 `[VK-XX]` 또�
 }
 ```
 
-`node .vela/cli/vela-analyze.js friction` 으로 집계 후 자주 발생하는 코드를 식별해 선택적으로 완화한다. 완전차단을 피하면서 하네스 강제는 유지하는 방법이다.
+`node .vela/cli/vela-friction.js` 으로 집계 후 자주 발생하는 코드를 식별해 선택적으로 완화한다. 완전차단을 피하면서 하네스 강제는 유지하는 방법이다.

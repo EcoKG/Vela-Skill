@@ -86,7 +86,6 @@ const VELA_PERMISSIONS = {
 const FILE_MANIFEST = [
   // Shared modules (used by CLI tools)
   { src: "scripts/shared/constants.js", dst: "shared/constants.js" },
-  { src: "scripts/shared/dep-analyzer.js", dst: "shared/dep-analyzer.js" },
   { src: "scripts/shared/global-require.js", dst: "shared/global-require.js" },
   { src: "scripts/shared/sprint-manager.js", dst: "shared/sprint-manager.js" },
   { src: "scripts/shared/worktree-manager.js", dst: "shared/worktree-manager.js" },
@@ -97,7 +96,7 @@ const FILE_MANIFEST = [
   { src: "scripts/shared/project-env.js", dst: "shared/project-env.js" },
   // CLI tools (V6 — no SDK orchestrators)
   { src: "scripts/cli/vela-engine.js", dst: "cli/vela-engine.js" },
-  { src: "scripts/cli/vela-analyze.js", dst: "cli/vela-analyze.js" },
+  { src: "scripts/cli/vela-friction.js", dst: "cli/vela-friction.js" },
   { src: "scripts/cli/vela-cost.js", dst: "cli/vela-cost.js" },
   { src: "scripts/cli/vela-report.js", dst: "cli/vela-report.js" },
   { src: "scripts/cli/vela-nightly.js", dst: "cli/vela-nightly.js" },  // v7.2 M14

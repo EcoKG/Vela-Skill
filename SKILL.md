@@ -209,18 +209,22 @@ PM이 사용자 요청의 복잡도를 분석하여 적절한 실행 방식을 �
 
 4. **분석 실행**
 
-   `deps` 항목: `vela-analyze.js`로 npm 의존성 분석
+   `deps` 항목 (v7.3-M1b부터 스킬 내부 인라인 실행):
    ```bash
-   node .vela/cli/vela-analyze.js deps --output ./vela-analysis-report.pdf
+   npm audit --json 2>/dev/null || echo '{}'
+   npm outdated --json 2>/dev/null || echo '{}'
    ```
+   Claude가 두 JSON 출력을 severity/version-gap 기준으로 요약해 `.vela/artifacts/<ts>/deps.md`에 저장.
 
    코드 분석 항목(security/bugs/performance/code-quality/architecture): `vela-analyzer` Agent로 실행
    ```
    Agent(subagent_type="vela-analyzer", prompt="
      items: {comma-separated-items}
-     프로젝트를 분석하고 결과를 반환하라.
+     프로젝트를 분석하고 결과를 .vela/artifacts/{ts}/analysis.md에 반환하라.
    ")
    ```
+
+   v8.0 M2에서 vela-analyzer는 Claude Code 번들 `/simplify`로 위임 예정.
 
    둘 다 선택된 경우: deps CLI 먼저 실행 후 analyzer Agent 실행, 결과 통합
 

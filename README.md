@@ -245,17 +245,16 @@ Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
 # 파이프라인 초기화 (PM이 호출)
 node .vela/cli/vela-engine.js init "OAuth 인증 추가" --scale large
 
-# 분석 보고서
-node .vela/cli/vela-analyze.js deps                              # 의존성 분석 (무료)
-node .vela/cli/vela-analyze.js full --items deps,security        # 통합 분석 → PDF
-node .vela/cli/vela-analyze.js report --input data.json          # JSON → PDF
+# 분석 / 마찰 리포트 (v7.3-M1b: PDF 파이프라인 제거, markdown 출력)
+# /vela:analyze 스킬이 AskUserQuestion으로 항목 선택 후 직접 npm audit + vela-analyzer agent를 호출한다.
+node .vela/cli/vela-friction.js                                  # gate-events.jsonl 집계 (VK/VG 코드 분포 + 정책 제안)
+node .vela/cli/vela-friction.js --limit 100 --json               # 기계 판독 JSON
 ```
 
 ### 공유 유틸 구조
 
 ```
 scripts/shared/
-├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
 ├── change-surface.js    ← 참조 무결성 검증 (diff 기반 cross-file reference 분석)
 ├── sprint-manager.js    ← 스프린트 FSM 상태 관리
 ├── project-env.js       ← 프로젝트 환경 정보 수집
@@ -269,42 +268,32 @@ REJECT 시 피드백을 executor에게 전달하여 재작업. max_revisions 소
 
 ---
 
-## 분석 보고서 — `/vela analyze`
+## 분석 — `/vela:analyze` (v7.3-M1b: 경량 markdown)
 
-프로젝트의 의존성과 코드를 분석하여 PDF 보고서를 생성한다. 6개 분석 항목을 체크박스로 선택한다.
+프로젝트 의존성과 코드를 선택적으로 분석하고 markdown 요약을 `.vela/artifacts/<ts>/analysis.md`에 저장한다. PDF가 필요하면 Claude Code에서 브라우저 출력으로 해결.
 
 ### 분석 항목
 
 | 항목 | 방식 | 비용 |
 |------|------|------|
-| 📦 의존성 (deps) | npm audit/outdated CLI | **무료** |
-| 🔒 보안 (security) | Agent(vela-analyzer) | 토큰 과금 |
-| 🐛 버그 (bugs) | Agent(vela-analyzer) | 토큰 과금 |
-| ⚡ 성능 (performance) | Agent(vela-analyzer) | 토큰 과금 |
-| 📐 코드 품질 (code-quality) | Agent(vela-analyzer) | 토큰 과금 |
-| 🏗️ 아키텍처 (architecture) | Agent(vela-analyzer) | 토큰 과금 |
+| 📦 의존성 (deps) | skill 내부에서 `npm audit --json` + `npm outdated --json` 직접 실행 후 Claude 요약 | 무료 |
+| 🔒 보안 (security) | `Agent(subagent_type="vela-analyzer")` | 토큰 |
+| 🐛 버그 (bugs) | `Agent(vela-analyzer)` | 토큰 |
+| ⚡ 성능 (performance) | `Agent(vela-analyzer)` | 토큰 |
+| 📐 코드 품질 (code-quality) | `Agent(vela-analyzer)` | 토큰 |
+| 🏗️ 아키텍처 (architecture) | `Agent(vela-analyzer)` | 토큰 |
 
-### CLI 사용법
+v8.0 M2에서 vela-analyzer는 Claude Code 번들 `/simplify`로 위임 예정.
+
+### Friction Report (분석과 분리)
+
+훅 마찰 집계는 독립 CLI로 운영된다:
 
 ```bash
-# 의존성만 분석 (무료)
-node .vela/cli/vela-analyze.js deps
-
-# JSON → PDF 변환
-node .vela/cli/vela-analyze.js report --input results.json --output report.pdf
-
-# 통합 분석 — 의존성 + Agent 분석 → PDF
-node .vela/cli/vela-analyze.js full --items deps,security,performance --output report.pdf
+node .vela/cli/vela-friction.js [--limit 500] [--json]
 ```
 
-### 분석 모듈
-
-- **dep-analyzer.js**: npm audit/outdated를 실행하여 취약점·outdated 패키지를 정규화된 JSON으로 반환.
-- **vela-analyzer** (Agent): 5개 관점으로 코드를 분석. `Agent(subagent_type="vela-analyzer")`로 소환.
-
-### PDF 보고서
-
-Playwright HTML→PDF로 생성. 타이틀 페이지, severity별 색상 코딩(critical=빨강, high=주황, moderate=노랑, low=파랑), outdated 패키지, 코드 분석 관점별 findings 포함. 부분 실패 허용 — 하나의 분석기가 실패해도 나머지 결과로 PDF를 생성한다.
+`.vela/state/gate-events.jsonl`을 읽어 상위 VK/VG 코드, 단계별 분포, 정책 조정 제안을 출력한다.
 
 ---
 
@@ -463,12 +452,11 @@ $HOME/.claude/skills/vela/       ← 글로벌 스킬 (curl 설치 시)
   ├── package.json               ← v6.0.0 (SDK 의존성 없음)
   ├── scripts/
   │   ├── shared/                ← 공유 유틸리티 (SDK 없음)
-  │   │   ├── dep-analyzer.js      ← npm audit/outdated 의존성 분석
   │   │   ├── change-surface.js    ← 참조 무결성 검증 (diff 기반)
   │   │   ├── sprint-manager.js    ← 스프린트 FSM 상태 관리
   │   │   ├── project-env.js       ← 프로젝트 환경 정보 수집
   │   │   └── constants.js         ← 가드 패턴 상수
-  │   ├── cli/                   ← vela-engine, vela-cost, vela-report, vela-analyze
+  │   ├── cli/                   ← vela-engine, vela-cost, vela-report, vela-friction
   │   ├── agents/                ← vela.md (PM) + 10개 역할 에이전트 (vela-researcher.md 등)
   │   │                             pm/ (pipeline-flow.md, model-strategy.md 등 서브트리)
   │   ├── hooks/                 ← 4개 훅 (gate-keeper, gate-guard, stop, review-gate) — ~/.vela/hooks/에 글로벌 배포
@@ -517,9 +505,8 @@ vela-engine history
 # 유틸리티
 vela-cost                                        # 파이프라인 비용/메트릭
 vela-report [--html output.html]                 # 파이프라인 리포트/대시보드
-vela-analyze deps                                # 의존성 분석 (무료, npm audit/outdated)
-vela-analyze full --items <list> [--output]      # 통합 분석 → PDF
-vela-analyze report --input <file> [--output]    # JSON → PDF 변환
+vela-friction [--limit 500] [--json]             # gate-events.jsonl 집계 (v7.3-M1b)
+# /vela:analyze 스킬이 deps(npm audit 인라인) + perspectives(vela-analyzer agent)를 오케스트레이션
 ```
 
 ---

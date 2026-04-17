@@ -29,7 +29,7 @@ Gate Keeper/Guard는 차단 시 다음 3가지 계층 중 하나를 사용한다
 | **Silent hard-block** | stderr 없음 + `exit 2` | VG-13, VG-14, 빈/corrupt stdin | 정보 누설이 위험한 위반 (config 변조, 시크릿 탐지). 이유를 공개하지 않음 |
 | **Ask (opt-in)** | stdout `{decision:"ask", reason:...}` + `exit 0` | `gate_policy`에서 `ask`로 설정된 규칙 | 사용자 확인 UI 노출 — 완전 차단 대신 인터랙티브 검증 |
 
-모든 차단 이벤트는 `.vela/state/gate-events.jsonl`에 한 줄 JSON으로 기록된다 (`code/tool/step/mode/decision/summary/ts`). `node .vela/cli/vela-analyze.js friction` 으로 집계 가능.
+모든 차단 이벤트는 `.vela/state/gate-events.jsonl`에 한 줄 JSON으로 기록된다 (`code/tool/step/mode/decision/summary/ts`). `node .vela/cli/vela-friction.js` 으로 집계 가능 (v7.3-M1b부터 전용 CLI).
 
 ### gate_policy (정책 설정)
 
