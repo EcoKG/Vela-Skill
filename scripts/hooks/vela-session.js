@@ -321,6 +321,72 @@ function readProjectEnv(cwd, skillDir) {
 }
 
 /**
+ * v8.0-M4: detect pre-plugin (v7.x) Vela installation leftovers that
+ * would cause hook-firing duplication (legacy settings.json entry
+ * runs alongside the plugin-registered hook). Returns an array of
+ * findings, empty array if clean.
+ */
+function detectLegacyInstallation() {
+  const findings = [];
+
+  // Only report legacy when plugin is active — otherwise v7.x is the
+  // expected state and we don't want to nag users who haven't
+  // migrated yet.
+  if (!process.env.CLAUDE_PLUGIN_ROOT) return findings;
+
+  // 1. ~/.vela/hooks/ directory exists
+  const legacyHooksDir = path.join(HOME, ".vela", "hooks");
+  if (fs.existsSync(legacyHooksDir)) {
+    try {
+      const files = fs.readdirSync(legacyHooksDir).filter((f) => f.endsWith(".js"));
+      if (files.length > 0) {
+        findings.push(`~/.vela/hooks/ (${files.length} .js files, pre-plugin layout)`);
+      }
+    } catch {
+      /* unreadable — skip */
+    }
+  }
+
+  // 2. ~/.claude/skills/vela*/ directories
+  const skillsRoot = path.join(HOME, ".claude", "skills");
+  if (fs.existsSync(skillsRoot)) {
+    try {
+      for (const name of fs.readdirSync(skillsRoot)) {
+        if (name === "vela" || name.startsWith("vela-")) {
+          findings.push(`~/.claude/skills/${name}/ (pre-plugin skill)`);
+          break; // one is enough to signal
+        }
+      }
+    } catch {
+      /* unreadable — skip */
+    }
+  }
+
+  // 3. ~/.claude/settings.json _velaId entries
+  const settingsPath = path.join(HOME, ".claude", "settings.json");
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const settings = readJsonSafe(settingsPath);
+      if (settings && settings.hooks) {
+        let count = 0;
+        for (const event of Object.keys(settings.hooks)) {
+          for (const entry of settings.hooks[event]) {
+            if (entry && entry._velaId && entry._velaId.startsWith("vela-")) count++;
+          }
+        }
+        if (count > 0) {
+          findings.push(`${count} legacy _velaId entries in ~/.claude/settings.json`);
+        }
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  return findings;
+}
+
+/**
  * Build rich context block. Returns a string or empty string if
  * there's nothing to show.
  */
@@ -453,12 +519,38 @@ function buildContextBlock(cwd) {
 
 // ─── Main ────────────────────────────────────────────────────
 
+/**
+ * v8.0-M4: emit a standalone legacy-installation warning block that
+ * fires even when the current project has no .vela/ (so users see
+ * the nudge as soon as they open Claude Code in any project after
+ * installing the plugin on top of a v7.x curl install).
+ */
+function buildLegacyBlock() {
+  const findings = detectLegacyInstallation();
+  if (findings.length === 0) return "";
+  const SEP = "━".repeat(47);
+  const lines = [
+    "",
+    "⚠️  LEGACY VELA INSTALLATION DETECTED",
+    SEP,
+    "Pre-plugin (v7.x curl-install) leftovers present:",
+    ...findings.map((f) => `  • ${f}`),
+    "",
+    "Each hook event currently fires twice (legacy + plugin).",
+    "Run `/vela:install --cleanup-legacy=auto` to migrate cleanly.",
+    SEP,
+    "",
+  ];
+  return lines.join("\n");
+}
+
 async function main() {
   const input = await readStdin();
   const cwd =
     (input && typeof input.cwd === "string" && input.cwd) || process.cwd();
 
-  // Run version check and context build in parallel to minimize hook time
+  // Run version check and context build in parallel to minimize hook time.
+  // Legacy block is cheap (3 filesystem checks) so it runs inline.
   const [versionBlock, contextBlock] = await Promise.all([
     buildVersionCheckBlock().catch(() => ""),
     Promise.resolve().then(() => {
@@ -470,7 +562,14 @@ async function main() {
     }),
   ]);
 
-  const output = versionBlock + contextBlock;
+  let legacyBlock = "";
+  try {
+    legacyBlock = buildLegacyBlock();
+  } catch {
+    /* non-fatal */
+  }
+
+  const output = versionBlock + legacyBlock + contextBlock;
   if (output) {
     process.stdout.write(output);
   }
