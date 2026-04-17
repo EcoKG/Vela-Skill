@@ -1,32 +1,23 @@
 #!/usr/bin/env bash
-# ──────────────────────────────────────────────────────────────
-# test-engine-doctor.sh — v7.1 M6 engine health check
+# scripts/tests/test-engine-doctor.sh
 #
-# Covers: `vela-engine.js doctor` must validate that every
-# Vela-managed file is present and parseable. Returns
-# { ok, missing[], recovery } JSON. Used by agents/vela.md at
-# session start so the PM can fail loud (and offer `install.js
-# validate`) when .vela/ is incomplete — fixes the hicoco
-# ff03bb16 initial session footgun.
+# v8.0-M6: rewritten for plugin layout.
 #
-# Asserts:
-#   1. doctor on a fully-installed sandbox returns ok:true
-#   2. doctor on a sandbox missing a core file returns ok:false
-#      with the missing file in the list
-#   3. doctor reports recovery: "node .vela/install.js validate"
-#      on failure
-#   4. doctor checks each v7.1 new artifact (role-budgets.json,
-#      plan-templates/quick.md, guidelines/live-processes.json,
-#      guidelines/smoke-test.sh.example) — v7.3-M4에서 vela-file-read-cache 제거
-#   5. vela.md session-start snippet documents the doctor call
-# ──────────────────────────────────────────────────────────────
-set -uo pipefail
+# cmdDoctor (scripts/commands/doctor.js) now validates:
+#   - CLAUDE_PLUGIN_ROOT env + plugin artifacts (.claude-plugin/,
+#     hooks/hooks.json, agents/, scripts/cli/vela-engine.js, hooks)
+#   - project-local .vela/ (templates, state/workspace.json,
+#     config.json, artifacts/)
+#   - pipeline.json has v8.0 pipelines (ship, fix, hotfix)
+#
+# Fixture setup uses `init-project` from the engine (formerly
+# install.js handled bootstrap — deleted in M5).
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ENGINE="$SCRIPT_DIR/../cli/vela-engine.js"
-INSTALL_JS="$REPO_ROOT/scripts/install.js"
-VELA_MD="$REPO_ROOT/scripts/agents/vela.md"
+source "$SCRIPT_DIR/helpers/setup-plugin-env.sh"
+
+ENGINE="$REPO_ROOT/scripts/cli/vela-engine.js"
 
 PASS=0
 FAIL=0
@@ -49,73 +40,62 @@ note() {
   fi
 }
 
-install_sandbox() {
+setup_fixture() {
   cleanup
   TMPDIR_ROOT="$(mktemp -d)"
   PROJECT="$TMPDIR_ROOT/project"
-  FAKE_HOME="$TMPDIR_ROOT/home"
-  mkdir -p "$FAKE_HOME/.claude" "$PROJECT/.vela"
-  (
-    cd "$PROJECT"
-    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false \
-      git init -q -b main
-    git config user.email t@v.local
-    git config user.name t
-    echo "# x" > README.md
-    git add README.md
-    git -c commit.gpgsign=false commit -q -m i
-  )
-  # Run upgrade first (populates .vela/templates/*, hooks/*, etc.),
-  # then install (writes .vela/config.json + .vela/state/workspace.json
-  # + CLAUDE.md). doctor inspects all of them.
-  (
-    cd "$PROJECT"
-    HOME="$FAKE_HOME" node "$INSTALL_JS" upgrade >/dev/null 2>&1 || true
-    HOME="$FAKE_HOME" node "$INSTALL_JS" install >/dev/null 2>&1 || true
-  )
+  mkdir -p "$PROJECT"
+  vela_bootstrap_fixture "$PROJECT" >/dev/null 2>&1
 }
 
 run_doctor() {
   local code=0
   (
     cd "$PROJECT"
-    node "$ENGINE" doctor >/tmp/m6-stdout 2>/tmp/m6-stderr
+    INIT_CWD="$PROJECT" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+      node "$ENGINE" doctor >/tmp/m6-stdout 2>/tmp/m6-stderr
   ) || code=$?
   echo "$code"
 }
 
-# ── Phase 1: healthy install → ok:true ───────────────────────
-echo "📋 Phase 1: healthy install → ok:true"
-install_sandbox
+# ── Phase 1: healthy fixture → ok:true ────────────────────────
+echo "📋 Phase 1: healthy fixture → ok:true"
+setup_fixture
 
 EXIT=$(run_doctor)
 [ "$EXIT" = "0" ]
-note "doctor exit code 0 on healthy install" $?
+note "doctor exit code 0 on healthy fixture" $?
 
 grep -q '"ok": true' /tmp/m6-stdout
-note "doctor reports ok:true on healthy install" $?
+note "doctor reports ok:true on healthy fixture" $?
 
 grep -q '"command": "doctor"' /tmp/m6-stdout
 note "doctor output has command:doctor" $?
 
-# No missing list when healthy — parse JSON to avoid newline formatting
+# No missing list when healthy
 MISSING_LEN=$(node -e "
   const j=JSON.parse(require('fs').readFileSync('/tmp/m6-stdout','utf8'));
   console.log((j.missing || []).length);
 ")
 [ "$MISSING_LEN" = "0" ]
-note "doctor: missing[] is empty on healthy install (got length $MISSING_LEN)" $?
+note "doctor: missing[] is empty on healthy fixture (got length $MISSING_LEN)" $?
 
-# ── Phase 2: v7.1 new files checked ──────────────────────────
-echo "📋 Phase 2: v7.1 new artifacts all present"
+# pluginRoot field is populated
+PLUGIN_ROOT_JSON=$(node -e "
+  const j=JSON.parse(require('fs').readFileSync('/tmp/m6-stdout','utf8'));
+  console.log(j.pluginRoot || '(null)');
+")
+[ "$PLUGIN_ROOT_JSON" = "$REPO_ROOT" ]
+note "doctor reports pluginRoot=$REPO_ROOT" $?
+
+# ── Phase 2: v7.1 template artifacts checked ─────────────────
+echo "📋 Phase 2: v7.1 template artifacts all present"
 
 for required in \
   "file:.vela/templates/role-budgets.json" \
   "file:.vela/templates/plan-templates/quick.md" \
   "file:.vela/templates/guidelines/live-processes.json" \
   "file:.vela/templates/guidelines/smoke-test.sh.example"; do
-  # Use node to query the JSON directly — multi-line structure makes
-  # line-wise grep unreliable (name and ok are on separate lines).
   RESULT=$(node -e "
     const fs=require('fs');
     const j=JSON.parse(fs.readFileSync('/tmp/m6-stdout','utf8'));
@@ -129,11 +109,10 @@ for required in \
   fi
 done
 
-# ── Phase 3: missing file → ok:false ─────────────────────────
+# ── Phase 3: removing a core file → ok:false ────────────────
 echo "📋 Phase 3: removing a core file makes doctor FAIL"
-install_sandbox
+setup_fixture
 
-# Corrupt by removing role-budgets.json
 rm "$PROJECT/.vela/templates/role-budgets.json"
 
 EXIT=$(run_doctor)
@@ -143,12 +122,12 @@ note "doctor reports ok:false after removing role-budgets.json" $?
 grep -q 'role-budgets.json' /tmp/m6-stdout
 note "doctor missing[] includes role-budgets.json" $?
 
-grep -q '"recovery".*install.js validate' /tmp/m6-stdout
-note "doctor recovery message references install.js validate" $?
+grep -q '/vela:install' /tmp/m6-stdout
+note "doctor recovery message references /vela:install" $?
 
-# ── Phase 4: removing multiple → all reported ────────────────
+# ── Phase 4: multiple missing files all reported ────────────
 echo "📋 Phase 4: multiple missing files all reported"
-install_sandbox
+setup_fixture
 
 rm "$PROJECT/.vela/templates/plan-templates/quick.md"
 rm "$PROJECT/.vela/templates/guidelines/smoke-test.sh.example"
@@ -160,20 +139,19 @@ note "doctor reports missing plan-templates/quick.md" $?
 grep -q 'smoke-test.sh.example' /tmp/m6-stdout
 note "doctor reports missing smoke-test.sh.example" $?
 
-# ── Phase 5: vela.md documents the call ──────────────────────
-echo "📋 Phase 5: vela.md session-start snippet"
+# ── Phase 5: plugin-root env missing → actionable message ───
+echo "📋 Phase 5: CLAUDE_PLUGIN_ROOT unset → recovery suggests /plugin install"
+setup_fixture
 
-grep -q 'doctor' "$VELA_MD"
-note "vela.md references doctor command" $?
+(
+  cd "$PROJECT"
+  env -u CLAUDE_PLUGIN_ROOT node "$ENGINE" doctor >/tmp/m6-stdout 2>/tmp/m6-stderr
+) || true
+grep -q 'plugin:CLAUDE_PLUGIN_ROOT' /tmp/m6-stdout
+note "doctor flags plugin:CLAUDE_PLUGIN_ROOT check" $?
 
-grep -q 'install.js validate' "$VELA_MD"
-note "vela.md mentions install.js validate recovery path" $?
-
-grep -q '1.5단계\|v7.1 M6' "$VELA_MD"
-note "vela.md has 1.5 step (or M6 cite) for doctor" $?
-
-grep -q 'ff03bb16\|hicoco' "$VELA_MD"
-note "vela.md cites hicoco initial-session motivation" $?
+grep -q '/plugin install vela' /tmp/m6-stdout
+note "doctor recovery suggests /plugin install vela when env unset" $?
 
 # ── Summary ──────────────────────────────────────────────────
 echo ""
