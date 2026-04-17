@@ -96,6 +96,8 @@ const FILE_MANIFEST = [
   // v7.3-M4e core primitives (engine decomposition)
   { src: "scripts/core/cli-utils.js", dst: "core/cli-utils.js" },
   { src: "scripts/core/git-utils.js", dst: "core/git-utils.js" },
+  { src: "scripts/core/state.js",     dst: "core/state.js"     },
+  { src: "scripts/core/pipeline.js",  dst: "core/pipeline.js"  },
   // CLI tools (V6 — no SDK orchestrators)
   { src: "scripts/cli/vela-engine.js", dst: "cli/vela-engine.js" },
   { src: "scripts/cli/vela-friction.js", dst: "cli/vela-friction.js" },
