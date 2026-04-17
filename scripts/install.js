@@ -238,13 +238,15 @@ const FILE_MANIFEST = [
     dst: "guidelines/testing-strategy.md",
   },
   // Hooks (staging for registerGlobalHooks — copied to ~/.vela/hooks/ at install time)
-  { src: "scripts/hooks/vela-gate-keeper.js", dst: "hooks/vela-gate-keeper.js" },
-  { src: "scripts/hooks/vela-gate-guard.js",  dst: "hooks/vela-gate-guard.js"  },
-  // v7.3-M4d: vela-stop.js는 Stop + SubagentStop + review-gate를 통합한 단일 훅.
-  // 구 vela-review-gate.js / vela-subagent-stop.js는 삭제되었고 settings.json에는
-  // vela-stop.js가 두 이벤트 모두에 등록된다 (registerGlobalHooks 참고).
+  //
+  // v7.3-M4c: vela-gate.js는 PreToolUse 통합 훅 (VK-* keeper + VG-* guard).
+  //   구 vela-gate-keeper.js / vela-gate-guard.js는 삭제되었다.
+  // v7.3-M4d: vela-stop.js는 Stop + SubagentStop + review-gate 통합 훅.
+  //   구 vela-review-gate.js / vela-subagent-stop.js는 삭제되었고
+  //   settings.json에는 vela-stop.js가 두 이벤트 모두에 등록된다.
   // v7.3-M4 (관찰 훅 2개 제거): vela-file-read-cache.js (v7.1 M10) +
-  // vela-post-tool-learning.js (v7.2 M8) 제거됨.
+  //   vela-post-tool-learning.js (v7.2 M8) 제거됨.
+  { src: "scripts/hooks/vela-gate.js",        dst: "hooks/vela-gate.js"        },
   { src: "scripts/hooks/vela-stop.js",        dst: "hooks/vela-stop.js"        },
   { src: "scripts/hooks/shared/constants.js", dst: "hooks/shared/constants.js" },
 ];
@@ -1604,9 +1606,11 @@ function registerGlobalHooks(hooksSourceDir) {
     fs.mkdirSync(GLOBAL_VELA_HOOKS_DIR, { recursive: true });
     fs.mkdirSync(path.join(GLOBAL_VELA_HOOKS_DIR, "shared"), { recursive: true });
 
+    // v7.3-M4c: vela-gate.js가 PreToolUse 통합 (keeper + guard).
     // v7.3-M4d: vela-stop.js가 Stop + SubagentStop + review-gate 통합.
-    // 구 vela-review-gate.js / vela-subagent-stop.js 파일은 삭제됨.
-    const hookFiles = ["vela-gate-keeper.js", "vela-gate-guard.js", "vela-stop.js"];
+    // 구 파일(vela-gate-{keeper,guard}.js, vela-review-gate.js,
+    // vela-subagent-stop.js)은 모두 삭제됨.
+    const hookFiles = ["vela-gate.js", "vela-stop.js"];
     for (const file of hookFiles) {
       const src = path.join(hooksSourceDir, file);
       if (fs.existsSync(src)) {
@@ -1720,13 +1724,15 @@ function registerGlobalHooks(hooksSourceDir) {
   // contains a given vela hook filename.
   //
   // v7.3-M4: file-read-cache + post-tool-learning 제거됨 (2026 Claude Code 내장 대체).
+  // v7.3-M4c: vela-gate-keeper.js + vela-gate-guard.js → vela-gate.js 통합.
   // v7.3-M4d: vela-review-gate.js + vela-subagent-stop.js → vela-stop.js 통합.
-  //   구 파일명도 그대로 포함하여 legacy settings.json 항목(pre-M4d 사용자)이
+  //   구 파일명들도 그대로 포함하여 legacy settings.json 항목(pre-M4c/d 사용자)이
   //   upgrade 시 자동 dedup/정리되도록 유지한다.
   const VELA_HOOK_FILES = [
-    "vela-gate-keeper.js",
-    "vela-gate-guard.js",
+    "vela-gate.js",
     "vela-stop.js",
+    "vela-gate-keeper.js",         // legacy pre-M4c — kept for dedup only
+    "vela-gate-guard.js",          // legacy pre-M4c — kept for dedup only
     "vela-review-gate.js",         // legacy pre-M4d — kept for dedup only
     "vela-subagent-stop.js",       // legacy pre-M4d — kept for dedup only
   ];
@@ -1860,10 +1866,11 @@ function registerGlobalHooks(hooksSourceDir) {
 
   // IDs match the hook filename basename (without .js) so the stringified
   // command always contains the id.
-  addGlobalHook("PreToolUse", "vela-gate-keeper",
-    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-keeper.js")}`, 10);
-  addGlobalHook("PreToolUse", "vela-gate-guard",
-    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate-guard.js")}`, 10);
+  // v7.3-M4c: 단일 vela-gate.js가 PreToolUse에서 VK-* keeper + VG-* guard
+  // 로직을 순차 실행. 구 vela-gate-keeper / vela-gate-guard 엔트리는
+  // pruneDanglingVelaHooks가 삭제된 파일을 가리키는 것을 감지해 자동 제거.
+  addGlobalHook("PreToolUse", "vela-gate",
+    `node ${path.join(GLOBAL_VELA_HOOKS_DIR, "vela-gate.js")}`, 10);
   // v7.3-M4: vela-file-read-cache + vela-post-tool-learning 훅 제거.
   // Claude Code v2026 내장 캐시/텔레메트리가 역할 대체. upgrade 경로에서
   // VELA_HOOK_FILES 축소로 기존 설치분의 dangling 엔트리가 자동 정리됨.

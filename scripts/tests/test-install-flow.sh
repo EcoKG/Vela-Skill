@@ -45,20 +45,23 @@ FAKE_HOME=""
 PROJECT=""
 
 # The active hooks that must always be present after install/upgrade.
-# v7.3-M4: vela-file-read-cache.js + vela-post-tool-learning.js 제거됨.
+# v7.3-M4:  vela-file-read-cache.js + vela-post-tool-learning.js 제거됨.
+# v7.3-M4c: vela-gate-keeper.js + vela-gate-guard.js → vela-gate.js 통합.
 # v7.3-M4d: vela-review-gate.js + vela-subagent-stop.js → vela-stop.js 통합.
 ACTIVE_HOOKS=(
-  vela-gate-keeper.js
-  vela-gate-guard.js
+  vela-gate.js
   vela-stop.js
 )
 
-# Legacy V4.1 hooks that must NOT reappear in .vela/hooks/.
-# v7.3-M4d 이후 vela-review-gate.js + vela-subagent-stop.js도 legacy에 편입.
+# Legacy hooks that must NOT reappear in .vela/hooks/.
+# v7.3-M4c 이후: vela-gate-keeper.js + vela-gate-guard.js 추가.
+# v7.3-M4d 이후: vela-review-gate.js + vela-subagent-stop.js 추가.
 LEGACY_HOOKS=(
   vela-failure.js
   vela-compact.js
   vela-analytics.js
+  vela-gate-keeper.js
+  vela-gate-guard.js
   vela-review-gate.js
   vela-subagent-stop.js
 )
@@ -224,19 +227,18 @@ for hook in "${ACTIVE_HOOKS[@]}"; do
   assert_file "A: ~/.vela/hooks/$hook present (global)" "$FAKE_HOME/.vela/hooks/$hook"
 done
 
-# v7.3-M4: file-read-cache 훅 제거로 PreToolUse 3 → 2 복귀 (gate-keeper, gate-guard).
+# v7.3-M4:  file-read-cache 제거로 PreToolUse 3 → 2.
+# v7.3-M4c: keeper + guard → vela-gate.js 통합으로 PreToolUse 2 → 1.
 # v7.3-M4d: vela-stop.js가 Stop + SubagentStop에 모두 등록됨 (같은 파일, 다른 _velaId).
 #   Stop은 review-gate 흡수로 2 → 1, SubagentStop은 1 유지.
-assert_eq "A: PreToolUse vela hook count"  "2" "$(count_global_hooks PreToolUse)"
+assert_eq "A: PreToolUse vela hook count"  "1" "$(count_global_hooks PreToolUse)"
 assert_eq "A: Stop vela hook count"        "1" "$(count_global_hooks Stop)"
 assert_eq "A: SubagentStop vela hook count" "1" "$(count_global_hooks SubagentStop)"
 
 # Hook commands point at the global hooks dir under the fake HOME
 GLOBAL_SETTINGS_JSON=$(cat_global_settings)
-assert_contains "A: gate-keeper command uses ~/.vela/hooks/" \
-  "$FAKE_HOME/.vela/hooks/vela-gate-keeper.js" "$GLOBAL_SETTINGS_JSON"
-assert_contains "A: gate-guard command uses ~/.vela/hooks/" \
-  "$FAKE_HOME/.vela/hooks/vela-gate-guard.js" "$GLOBAL_SETTINGS_JSON"
+assert_contains "A: gate command uses ~/.vela/hooks/" \
+  "$FAKE_HOME/.vela/hooks/vela-gate.js" "$GLOBAL_SETTINGS_JSON"
 assert_contains "A: stop command uses ~/.vela/hooks/" \
   "$FAKE_HOME/.vela/hooks/vela-stop.js" "$GLOBAL_SETTINGS_JSON"
 
@@ -268,14 +270,14 @@ echo "📋 Scenario B — Upgrade idempotency (active hooks survive cleanup)"
 UPGRADE_OUT_1=$(install_js upgrade 2>&1 || true)
 assert_contains "B: first upgrade reports ok" '"ok": true' "$UPGRADE_OUT_1"
 
-# All 3 active hooks must still be there after upgrade
-for hook in vela-gate-keeper.js vela-gate-guard.js vela-stop.js; do
+# All 2 active hooks must still be there after upgrade (M4c + M4d merged)
+for hook in vela-gate.js vela-stop.js; do
   assert_file "B: $hook survives first upgrade" "$PROJECT/.vela/hooks/$hook"
 done
 
 # orphansRemoved should NOT mention any active hook
 TOTAL=$((TOTAL + 1))
-if echo "$UPGRADE_OUT_1" | grep -q 'hooks/vela-gate-keeper.js"\|hooks/vela-gate-guard.js"\|hooks/vela-stop.js"' && \
+if echo "$UPGRADE_OUT_1" | grep -q 'hooks/vela-gate.js"\|hooks/vela-stop.js"' && \
    echo "$UPGRADE_OUT_1" | grep -q '"orphansRemoved"'; then
   # Only fail if an active hook name shows up inside the orphansRemoved section
   ORPHANS=$(echo "$UPGRADE_OUT_1" | node -e "
@@ -286,7 +288,7 @@ if echo "$UPGRADE_OUT_1" | grep -q 'hooks/vela-gate-keeper.js"\|hooks/vela-gate-
       } catch (_) { process.stdout.write(''); }
     });
   ")
-  if echo "$ORPHANS" | grep -q 'vela-gate-keeper\|vela-gate-guard\|^hooks/vela-stop\.js$'; then
+  if echo "$ORPHANS" | grep -qE 'vela-gate\.js|vela-stop\.js'; then
     echo "  ❌ FAIL: B: active hook appeared in orphansRemoved: $ORPHANS"
     FAIL=$((FAIL + 1))
   else
@@ -432,9 +434,10 @@ for legacy in "${LEGACY_HOOKS[@]}"; do
 done
 
 # sync_local_project internally runs install.js → global hooks registered.
-# v7.3-M4: file-read-cache 제거로 PreToolUse 3 → 2.
+# v7.3-M4:  file-read-cache 제거로 PreToolUse 3 → 2.
+# v7.3-M4c: keeper + guard 통합으로 PreToolUse 2 → 1.
 # v7.3-M4d: Stop 2 → 1 (review-gate 흡수), SubagentStop 1 유지.
-assert_eq "E: global PreToolUse count after sync" "2" "$(count_global_hooks PreToolUse)"
+assert_eq "E: global PreToolUse count after sync" "1" "$(count_global_hooks PreToolUse)"
 assert_eq "E: global Stop count after sync"       "1" "$(count_global_hooks Stop)"
 assert_eq "E: global SubagentStop count after sync" "1" "$(count_global_hooks SubagentStop)"
 
@@ -490,9 +493,10 @@ install_js > /dev/null 2>&1 || true
 PRE_UNINSTALL_PRE=$(count_global_hooks PreToolUse)
 PRE_UNINSTALL_STOP=$(count_global_hooks Stop)
 PRE_UNINSTALL_SUB=$(count_global_hooks SubagentStop)
-# v7.3-M4: file-read-cache 제거로 PreToolUse 다시 2.
+# v7.3-M4:  file-read-cache 제거로 PreToolUse 다시 2.
+# v7.3-M4c: keeper + guard 통합으로 PreToolUse 2 → 1.
 # v7.3-M4d: Stop 1 (review-gate 흡수), SubagentStop 1 (통합된 vela-stop.js 재사용).
-assert_eq "F: baseline PreToolUse count"  "2" "$PRE_UNINSTALL_PRE"
+assert_eq "F: baseline PreToolUse count"  "1" "$PRE_UNINSTALL_PRE"
 assert_eq "F: baseline Stop count"        "1" "$PRE_UNINSTALL_STOP"
 assert_eq "F: baseline SubagentStop count" "1" "$PRE_UNINSTALL_SUB"
 

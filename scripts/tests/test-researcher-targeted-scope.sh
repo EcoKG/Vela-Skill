@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────
 # test-researcher-targeted-scope.sh — v7.1 M11
 #
-# Covers: vela-gate-keeper.js must deny Read tool calls during
+# Covers: vela-gate.js (v7.3-M4c merged, formerly gate-keeper) must deny Read tool calls during
 # the `research` step when the file is outside primary[] ∪
 # blast_radius[] ∪ tests[] (plus a small metadata allowlist),
 # as long as targets.json has confidence high or medium.
@@ -29,7 +29,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate-keeper.js"
+GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate.js"  # v7.3-M4c: keeper + guard merged
 RESEARCHER_MD="$REPO_ROOT/scripts/agents/vela-researcher.md"
 
 PASS=0

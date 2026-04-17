@@ -19,8 +19,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate-keeper.js"
-GATE_GUARD="$SCRIPT_DIR/../hooks/vela-gate-guard.js"
+GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate.js"  # v7.3-M4c: keeper + guard merged
+GATE_GUARD="$SCRIPT_DIR/../hooks/vela-gate.js"   # same unified hook
 
 PASS=0
 FAIL=0

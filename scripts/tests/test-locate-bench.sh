@@ -140,9 +140,9 @@ scenario "B2 kebab hook" \
 scenario "B3 kebab module" \
   "change-surface 모듈의 parseDiff 경로 보정" \
   "scripts/shared/change-surface.js"
-scenario "B4 kebab hook gate-keeper" \
-  "vela-gate-keeper 훅의 VK-08 메시지 수정" \
-  "scripts/hooks/vela-gate-keeper.js"
+scenario "B4 kebab hook gate" \
+  "vela-gate 훅의 VK-08 메시지 수정" \
+  "scripts/hooks/vela-gate.js"
 
 echo ""
 echo "📋 Group C: Symbol-only (PascalCase/camelCase)"

@@ -1,8 +1,10 @@
 # Gate Keeper & Gate Guard 상세
 
-## Gate Keeper (수문장) — Claude Code PreToolUse 훅
+> v7.3-M4c (2026-04-17): Gate Keeper(`vela-gate-keeper.js`) + Gate Guard(`vela-gate-guard.js`)가 **`vela-gate.js` 단일 PreToolUse 훅**으로 통합되었다. 두 "phase"의 논리는 동일하며 문서 구조는 원본 VK/VG 분류를 유지한다. 통합 훅은 Phase 1(Gate Keeper VK-* 체크) → Phase 2(Gate Guard VG-* 체크) 순으로 실행하며, 어느 phase든 차단 조건을 만나면 `exit 2`로 즉시 종료한다.
 
-`vela-gate-keeper.js`가 Claude Code PreToolUse 훅으로 동작. 모든 도구 호출 전에 실행되어 R/W 모드를 강제한다 (VK-01~10).
+## Gate Keeper (수문장) — Phase 1 (vela-gate.js 내부)
+
+`vela-gate.js`의 Phase 1이 Claude Code PreToolUse 훅 진입 직후 실행. 모든 도구 호출 전에 실행되어 R/W 모드를 강제한다 (VK-01~10).
 
 ### 게이트 규칙
 
@@ -60,9 +62,9 @@ Gate Keeper/Guard는 차단 시 다음 3가지 계층 중 하나를 사용한다
 | readwrite | Read, Write, Edit, NotebookEdit, Glob, Grep, Agent | Bash(제한적) |
 | rw-artifact | Read, Glob, Grep, Bash(읽기), Write(artifactDir만) | Edit, NotebookEdit |
 
-## Gate Guard (가이드라인) — Claude Code PreToolUse 훅
+## Gate Guard (가이드라인) — Phase 2 (vela-gate.js 내부)
 
-`vela-gate-guard.js`가 파이프라인 단계별 가드 규칙을 강제한다 (VG-03, VG-13, VG-14, VG-15).
+`vela-gate.js`의 Phase 2가 Phase 1(Gate Keeper)이 차단하지 않은 경우에만 실행되어 파이프라인 단계별 가드 규칙을 강제한다 (VG-03, VG-13, VG-14, VG-15).
 
 > **NOTE (V6)**: SDK 오케스트레이터는 제거되었다. V6에서 PM(vela.md)이 `Agent(subagent_type=...)` 도구로 직접 각 단계를 실행한다.
 

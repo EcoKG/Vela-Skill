@@ -142,8 +142,7 @@ setup_sandbox
 run_install
 
 for hook_name in \
-  vela-gate-keeper.js \
-  vela-gate-guard.js \
+  vela-gate.js \
   vela-stop.js; do
   assert_loadable "$hook_name"
 done
@@ -240,12 +239,12 @@ else
 fi
 
 # gate-keeper must still load cleanly from the global hook dir
-probe_hook "$FAKE_HOME/.vela/hooks/vela-gate-keeper.js" || true
+probe_hook "$FAKE_HOME/.vela/hooks/vela-gate.js" || true
 if grep -q 'MODULE_NOT_FOUND\|loader:1386' /tmp/probe-err; then
-  note "Phase 2.5: gate-keeper loads cleanly after project-local install" 1
+  note "Phase 2.5: vela-gate loads cleanly after project-local install" 1
   echo "     stderr: $(head -1 /tmp/probe-err)"
 else
-  note "Phase 2.5: gate-keeper loads cleanly after project-local install" 0
+  note "Phase 2.5: vela-gate loads cleanly after project-local install" 0
 fi
 
 # ══════════════════════════════════════════════════════════════
@@ -264,7 +263,7 @@ module.exports = require("../../shared/constants");
 WRAPPER
 
 # Now probe gate-keeper — it should FAIL to load
-probe_hook "$FAKE_HOME/.vela/hooks/vela-gate-keeper.js" || true
+probe_hook "$FAKE_HOME/.vela/hooks/vela-gate.js" || true
 
 if grep -q 'MODULE_NOT_FOUND\|Cannot find module' /tmp/probe-err; then
   note "wrapper re-introduces MODULE_NOT_FOUND (as expected)" 0

@@ -2,7 +2,7 @@
 /**
  * ⛵ Vela Friction Report — gate-events.jsonl 집계 전담 CLI
  *
- * 훅(vela-gate-keeper/guard, vela-stop 등)이 차단/질문/경고할 때마다
+ * 훅(vela-gate, vela-stop 등)이 차단/질문/경고할 때마다
  * .vela/state/gate-events.jsonl 에 한 줄 JSON을 남긴다. 이 CLI는 그 로그를
  * 집계해 "어떤 VK/VG 코드가 자주 터지는가, 어느 단계에서 터지는가, 현재
  * 정책이 과한 마찰을 일으키는가"를 한 화면에 보여준다.

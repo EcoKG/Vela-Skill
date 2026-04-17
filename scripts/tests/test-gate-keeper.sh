@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# test-gate-keeper.sh — Comprehensive vela-gate-keeper.js test
+# test-gate-keeper.sh — Comprehensive VK-* keeper test (runs via vela-gate.js, v7.3-M4c merged)
 #
 # Covers:
 #   VK-01: Bash safe commands allowed in read mode
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate-keeper.js"
+GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate.js"  # v7.3-M4c: keeper + guard merged
 
 PASS=0
 FAIL=0

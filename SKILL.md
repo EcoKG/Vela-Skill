@@ -142,10 +142,9 @@ node .vela/cli/vela-friction.js                  # gate-events.jsonl 집계 (VK/
 
 | 훅 | 이벤트 | 규칙 |
 |----|-------|------|
-| `vela-gate-keeper.js` | PreToolUse | VK-01~08: 모드별 Bash/Write/Edit 차단, 시크릿 감지, 체인 연산자 차단 |
-| `vela-gate-guard.js` | PreToolUse | VG-03~15: 단계 순서 강제, pipeline.json 보호, 서킷 브레이커 |
+| `vela-gate.js` | PreToolUse | VK-01~10 (모드별 Bash/Write/Edit 차단, 시크릿 감지, 체인 연산자, researcher 범위) + VG-03/13/14/15 (git commit 안전, pipeline.json 보호, 서킷 브레이커). keeper + guard 통합 (v7.3-M4c) |
 | `vela-stop.js` | Stop + SubagentStop | auto 모드 차단 + review-gate 재검증 + dirty tree 경고 + session-end snapshot + 에이전트 텔레메트리. `hook_event_name`으로 내부 dispatch (v7.3-M4d) |
-| `vela-session.js` | SessionStart | 버전 체크 + rich context 주입 (persona.md, pipeline state, git, env) |
+| `vela-session.js` | SessionStart | 버전 체크 + rich context 주입 (persona.md, pipeline state, git, env, v7.3-M4b 통합) |
 
 **Fail-closed**: 모든 훅의 오류 경로는 `exit 2`(차단)로 폴백.
 

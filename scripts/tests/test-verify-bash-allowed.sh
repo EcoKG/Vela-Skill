@@ -3,7 +3,8 @@
 # test-verify-bash-allowed.sh — v7.1 M2 verify bash safelist
 #
 # Covers: when the active pipeline's current_step is "verify",
-# vela-gate-keeper.js must let known test/lint runners through
+# vela-gate.js (v7.3-M4c merged from gate-keeper) must let known
+# test/lint runners through
 # even if the command contains the `|` chain operator. Pre-v7.1
 # VK-08 blocked any `|`, which caused the hicoco T081421 verifier
 # to fall back to static-only analysis when it tried to pipe
@@ -24,7 +25,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate-keeper.js"
+GATE_KEEPER="$SCRIPT_DIR/../hooks/vela-gate.js"  # v7.3-M4c: keeper + guard merged
 
 PASS=0
 FAIL=0

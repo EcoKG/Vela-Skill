@@ -6,7 +6,7 @@
 # end-to-end locate() against the live Vela-Skill repo. The repo itself
 # is the fixture — so adding/removing tracked files in the project will
 # affect these tests. Keep assertions on stable, well-known files
-# (vela-engine.js, treenode.js, vela-gate-guard.js).
+# (vela-engine.js, treenode.js, vela-session.js).
 
 set -u
 
@@ -115,8 +115,8 @@ TOKENS=$(run_extract "UserRepository 인터페이스 정의")
 assert_contains "PascalCase extracted" "UserRepository/pascal_case" "$TOKENS"
 
 # kebab-case extracted
-TOKENS=$(run_extract "vela-gate-guard hook 수정")
-assert_contains "kebab-case extracted" "vela-gate-guard/kebab_case" "$TOKENS"
+TOKENS=$(run_extract "vela-session hook 수정")
+assert_contains "kebab-case extracted" "vela-session/kebab_case" "$TOKENS"
 
 # UPPER_SNAKE_CASE extracted
 TOKENS=$(run_extract "MAX_BUFFER 상수 변경")
@@ -166,9 +166,9 @@ RESULT=$(run_locate "vela-engine init 명령 개선")
 assert_eq "T6 kebab-case confidence=high" "high" "$(echo "$RESULT" | cut -d'|' -f1)"
 assert_eq "T6 first file=vela-engine.js" "scripts/cli/vela-engine.js" "$(echo "$RESULT" | cut -d'|' -f3)"
 
-RESULT=$(run_locate "vela-gate-guard hook 수정")
+RESULT=$(run_locate "vela-session hook 수정")
 assert_eq "T7 kebab w/o own-name confidence=high" "high" "$(echo "$RESULT" | cut -d'|' -f1)"
-assert_eq "T7 first file=vela-gate-guard.js" "scripts/hooks/vela-gate-guard.js" "$(echo "$RESULT" | cut -d'|' -f3)"
+assert_eq "T7 first file=vela-session.js" "scripts/hooks/vela-session.js" "$(echo "$RESULT" | cut -d'|' -f3)"
 
 # Pure Korean — no extractable tokens, must fall back to low
 RESULT=$(run_locate "로그인 검증 추가")

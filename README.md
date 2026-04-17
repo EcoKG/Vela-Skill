@@ -70,10 +70,10 @@ Vela는 `SessionStart` 훅으로 24h 캐시 버전 체크를 수행한다. 새 �
 │  vela-executor   — TDD 구현 (test→implement→refactor)    │
 │  vela-reviewer   — review + verify + diff-summary 통합   │
 │                                                           │
-│  🛡️ HOOKS (4) ────────────────────────────────────       │
-│  gate-keeper · gate-guard                                │
-│  stop (Stop+SubagentStop+review-gate 통합, M4d)          │
-│  session (version-check+rich context, M4b)               │
+│  🛡️ HOOKS (3) ────────────────────────────────────       │
+│  gate    (PreToolUse; VK + VG 통합, M4c)                 │
+│  stop    (Stop+SubagentStop+review-gate 통합, M4d)       │
+│  session (SessionStart; version+context 통합, M4b)       │
 ✦──────────────────────────────────────────────────────────✦
 ```
 
@@ -164,7 +164,11 @@ node .vela/cli/vela-friction.js [--limit 500] [--json]
 
 ## 보안 시스템
 
-### Gate Keeper — `vela-gate-keeper.js` (PreToolUse)
+### `vela-gate.js` (PreToolUse — v7.3-M4c 통합)
+
+단일 PreToolUse 훅이 VK Keeper(Phase 1) + VG Guard(Phase 2) 로직을 순차 실행한다.
+
+**Phase 1 — VK Keeper**
 
 | 코드 | 규칙 |
 |------|------|
@@ -174,8 +178,10 @@ node .vela/cli/vela-friction.js [--limit 500] [--json]
 | VK-06 | 15개 시크릿 패턴 차단 |
 | VK-07 | PM은 Read/Glob/Grep만 허용, Write/Edit 차단 |
 | VK-08 | SAFE_BASH_READ 명령에서 체인 연산자(`&&`, `;`, `\|`) 차단 |
+| VK-10 | write 모드에서 WebFetch/WebSearch 차단 (policy-driven) |
+| M11 | research 단계에서 targets.json 범위 밖 Read 차단 (policy-driven) |
 
-### Gate Guard — `vela-gate-guard.js` (PreToolUse)
+**Phase 2 — VG Guard**
 
 | 코드 | 규칙 |
 |------|------|
