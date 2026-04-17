@@ -1,10 +1,27 @@
 {
   "name": "vela",
-  "description": "⛵ Vela Engine — Pipeline-driven sandbox development system for Claude Code. Enforces structured development through 16 hooks, gates, guards, team verification, auto mode, and git integration.",
-  "version": "7.2.0-dev",
+  "version": "8.0.0",
+  "description": "⛵ Vela Engine — 6-step sandbox development pipeline for Claude Code. Enforces structured development through fail-closed PreToolUse hooks (VK/VG gates), role agents (researcher/planner/executor/reviewer), TDD execution, and Conventional Commits git integration.",
   "author": {
     "name": "EcoKG",
     "email": "EcoKG@users.noreply.github.com",
     "url": "https://github.com/EcoKG/Vela-Skill"
-  }
+  },
+  "homepage": "https://github.com/EcoKG/Vela-Skill",
+  "repository": "https://github.com/EcoKG/Vela-Skill",
+  "license": "MIT",
+  "keywords": [
+    "vela",
+    "pipeline",
+    "sandbox",
+    "tdd",
+    "governance",
+    "hooks",
+    "subagents",
+    "code-review",
+    "conventional-commits"
+  ],
+  "commands": "./commands",
+  "agents": "./agents",
+  "hooks": "./hooks/hooks.json"
 }

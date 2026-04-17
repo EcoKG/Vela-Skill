@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# ⛵ Vela Engine — Plugin PATH wrapper (v8.0)
+#
+# Invokes the Node.js engine CLI at the plugin's install root. Claude
+# Code injects CLAUDE_PLUGIN_ROOT into the environment whenever a
+# plugin command or hook fires, so this wrapper works from any
+# directory without path gymnastics.
+#
+# Usage:
+#   vela-engine init "add feature X" --scale ship
+#   vela-engine state
+#   vela-engine advance pass
+#
+# If CLAUDE_PLUGIN_ROOT is not set (e.g. the wrapper is invoked from a
+# raw shell outside Claude Code), the `:?` expansion prints a helpful
+# error and exits non-zero rather than silently failing.
+set -euo pipefail
+exec node "${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT not set — this wrapper must run inside a Claude Code plugin context. Install Vela via: /plugin install vela@EcoKG/Vela-Skill}/scripts/cli/vela-engine.js" "$@"
