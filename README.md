@@ -212,7 +212,6 @@ V6에서 PM은 Claude Code 네이티브 Agent 도구로 각 역할 에이전트�
 PM (vela.md agent)
   ├── vela-engine.js (상태 머신: init/transition/record)  ← CLI 호출
   ├── Agent(vela-researcher)       → research.md (단일 또는 v7.2 병렬 3관점)
-  ├── Agent(vela-researcher-merge) → research.md 통합 (v7.2 M5, 병렬 모드)
   ├── Agent(vela-planner)          → plan.md (또는 mode:spec → patch-spec.md)
   ├── Agent(vela-plan-checker)     → plan-check.md
   ├── Agent(vela-executor)         → 코드 구현 (TDD; v7.2 M6 worktree opt-in)
@@ -220,7 +219,7 @@ PM (vela.md agent)
   ├── Agent(vela-verifier)         → verification.md
   ├── Agent(vela-diff-summary)     → diff-summary.md (v7.2 M7 background opt-in)
   ├── Agent(vela-learning)         → learning.md    (v7.2 M7 background opt-in)
-  └── Agent(vela-analyzer)         → analysis.md (`/vela:analyze`)
+  └── Agent(vela-researcher mode=analyze) → analysis.md (`/vela:analyze`)
 
 Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
   ├── vela-gate-keeper.js        (VK-01~08: 모드별 도구 제한)      [PreToolUse]
@@ -245,7 +244,7 @@ Hooks (글로벌 등록 — ~/.vela/hooks/ → ~/.claude/settings.json):
 node .vela/cli/vela-engine.js init "OAuth 인증 추가" --scale large
 
 # 분석 / 마찰 리포트 (v7.3-M1b: PDF 파이프라인 제거, markdown 출력)
-# /vela:analyze 스킬이 AskUserQuestion으로 항목 선택 후 직접 npm audit + vela-analyzer agent를 호출한다.
+# /vela:analyze 스킬이 AskUserQuestion으로 항목 선택 후 npm audit + vela-researcher(mode=analyze) 호출.
 node .vela/cli/vela-friction.js                                  # gate-events.jsonl 집계 (VK/VG 코드 분포 + 정책 제안)
 node .vela/cli/vela-friction.js --limit 100 --json               # 기계 판독 JSON
 ```
@@ -276,13 +275,13 @@ REJECT 시 피드백을 executor에게 전달하여 재작업. max_revisions 소
 | 항목 | 방식 | 비용 |
 |------|------|------|
 | 📦 의존성 (deps) | skill 내부에서 `npm audit --json` + `npm outdated --json` 직접 실행 후 Claude 요약 | 무료 |
-| 🔒 보안 (security) | `Agent(subagent_type="vela-analyzer")` | 토큰 |
-| 🐛 버그 (bugs) | `Agent(vela-analyzer)` | 토큰 |
-| ⚡ 성능 (performance) | `Agent(vela-analyzer)` | 토큰 |
-| 📐 코드 품질 (code-quality) | `Agent(vela-analyzer)` | 토큰 |
-| 🏗️ 아키텍처 (architecture) | `Agent(vela-analyzer)` | 토큰 |
+| 🔒 보안 (security) | `Agent(vela-researcher, mode=analyze)` | 토큰 |
+| 🐛 버그 (bugs) | `Agent(vela-researcher, mode=analyze)` | 토큰 |
+| ⚡ 성능 (performance) | `Agent(vela-researcher, mode=analyze)` | 토큰 |
+| 📐 코드 품질 (code-quality) | `Agent(vela-researcher, mode=analyze)` | 토큰 |
+| 🏗️ 아키텍처 (architecture) | `Agent(vela-researcher, mode=analyze)` | 토큰 |
 
-v8.0 M2에서 vela-analyzer는 Claude Code 번들 `/simplify`로 위임 예정.
+v7.3-M2a: vela-analyzer가 vela-researcher(multi-mode)로 흡수됨. v8.0 후속에서 `/simplify` 위임 검토.
 
 ### Friction Report (분석과 분리)
 
@@ -504,7 +503,7 @@ vela-engine history
 vela-cost                                        # 파이프라인 비용/메트릭
 vela-report [--html output.html]                 # 파이프라인 리포트/대시보드
 vela-friction [--limit 500] [--json]             # gate-events.jsonl 집계 (v7.3-M1b)
-# /vela:analyze 스킬이 deps(npm audit 인라인) + perspectives(vela-analyzer agent)를 오케스트레이션
+# /vela:analyze 스킬이 deps(npm audit 인라인) + perspectives(vela-researcher mode=analyze)를 오케스트레이션
 ```
 
 ---
@@ -635,7 +634,7 @@ v7.2에서 `.vela/config.json`에 4개 신규 섹션이 추가됐다. **모든 �
 }
 ```
 
-- `parallelism: true` — execute 후 reviewer+verifier 병렬 호출, research 단계에서 architecture/security/quality 3관점 병렬 spawn 후 `vela-researcher-merge`로 통합.
+- `parallelism: true` — execute 후 reviewer+verifier 병렬 호출, research 단계에서 architecture/security/quality 3관점 병렬 spawn 후 `vela-researcher`(mode=merge)로 통합.
 - `isolation: "worktree"` — executor를 `.vela/worktrees/{slug}/` git worktree에서 실행. 실패해도 main working tree 무변경.
 - `background_post_steps: true` — learning/diff-summary를 `run_in_background`로 호출, 즉시 commit으로 진행.
 - `ralph_sentinel: true` — ralph 루프를 `ScheduleWakeup` sentinel prompt (`<<autonomous-loop-dynamic>>`)로 자율화.

@@ -108,7 +108,7 @@ v7.0 surgical(`/vela:fix`)은 `plan` 대신 `spec` 단계에서 planner를 `mode
 
 전용 CLI 없이 `skills/analyze/SKILL.md` 스킬이 직접 운영한다:
 - **deps**: 스킬 내부에서 `npm audit --json` + `npm outdated --json` 실행, Claude가 markdown 요약 작성
-- **perspectives** (security/bugs/performance/code-quality/architecture): `Agent(subagent_type="vela-analyzer")` 호출
+- **perspectives** (security/bugs/performance/code-quality/architecture): `Agent(subagent_type="vela-researcher", mode=analyze)` 호출 (v7.3-M2a 흡수)
 
 출력: `.vela/artifacts/<ts>/analysis.md` (PDF 필요 시 Claude Code의 브라우저 출력 사용)
 

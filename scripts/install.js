@@ -107,7 +107,6 @@ const FILE_MANIFEST = [
   { src: "scripts/agents/vela.md", dst: "agents/vela.md" },
   // V6 role agents (deployed to .vela/agents/ AND .claude/agents/)
   { src: "scripts/agents/vela-researcher.md", dst: "agents/vela-researcher.md" },
-  { src: "scripts/agents/vela-researcher-merge.md", dst: "agents/vela-researcher-merge.md" },
   { src: "scripts/agents/vela-planner.md", dst: "agents/vela-planner.md" },
   { src: "scripts/agents/vela-executor.md", dst: "agents/vela-executor.md" },
   { src: "scripts/agents/vela-reviewer.md", dst: "agents/vela-reviewer.md" },
@@ -115,7 +114,6 @@ const FILE_MANIFEST = [
   { src: "scripts/agents/vela-verifier.md", dst: "agents/vela-verifier.md" },
   { src: "scripts/agents/vela-diff-summary.md", dst: "agents/vela-diff-summary.md" },
   { src: "scripts/agents/vela-learning.md", dst: "agents/vela-learning.md" },
-  { src: "scripts/agents/vela-analyzer.md", dst: "agents/vela-analyzer.md" },
   // Templates
   { src: "templates/pipeline.json", dst: "templates/pipeline.json" },
   {
@@ -671,7 +669,6 @@ function install() {
     "vela-verifier.md",
     "vela-diff-summary.md",
     "vela-learning.md",
-    "vela-analyzer.md",
   ];
   for (const agentFile of CLAUDE_AGENTS) {
     const src = path.join(PROJECT_ROOT, ".vela", "agents", agentFile);
@@ -1079,8 +1076,7 @@ function upgrade() {
       "vela-verifier.md",
       "vela-diff-summary.md",
       "vela-learning.md",
-      "vela-analyzer.md",
-    ];
+      ];
     for (const agentFile of CLAUDE_AGENTS) {
       const src = path.join(velaDir, "agents", agentFile);
       const dst = path.join(agentsDir, agentFile);

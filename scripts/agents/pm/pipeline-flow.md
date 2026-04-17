@@ -58,7 +58,7 @@ node .vela/cli/vela-engine.js state
 **단일 메시지에 여러 Agent() 호출**을 담으면 Claude Code는 병렬로 실행한다. 아래 네 패턴은 config에 따라 켜지며, 기본값(`config.execution.parallelism: false`)은 V7 직렬 동작과 동일하다.
 
 ### 1. Research 3관점 병렬 spawn (M5)
-`research` 단계에서 PM은 architecture/security/quality 관점을 **병렬 3개 Agent()** 로 소환한 후 `vela-researcher-merge` 에이전트(Haiku 권장)가 결과를 `research.md` 하나로 통합한다.
+`research` 단계에서 PM은 architecture/security/quality 관점을 **병렬 3개 Agent()** 로 소환한 후 `vela-researcher`를 `mode=merge`로 호출(Haiku 권장)하여 결과를 `research.md` 하나로 통합한다. v7.3-M2a에서 `vela-researcher-merge` 에이전트가 `vela-researcher`(multi-mode)로 흡수됨.
 - 각 관점 에이전트 출력: `research-{perspective}.md`
 - 머지 결과: `research.md` (exit_gate가 검증하는 정식 산출물)
 
@@ -122,7 +122,8 @@ Agent(subagent_type="vela-researcher", prompt={..., perspective:"architecture"})
 Agent(subagent_type="vela-researcher", prompt={..., perspective:"security"})
 Agent(subagent_type="vela-researcher", prompt={..., perspective:"quality"})
 → 각각 research-{perspective}.md 생성
-→ Agent(subagent_type="vela-researcher-merge", prompt={
+→ Agent(subagent_type="vela-researcher", prompt={
+    mode: "merge",
     artifactDir,
     inputs:["research-architecture.md","research-security.md","research-quality.md"]
   })
@@ -332,7 +333,7 @@ Claude Code 2.1.108+ 의 `/recap`은 세션 복귀 시 컨텍스트 요약을 �
 
 ### M10 — Skill 도구 빌트인 커맨드 호출
 
-- `vela-analyzer` security 분석: `/security-review` 우선 호출 후 보완
+- `vela-researcher`(mode=analyze) security 분석: `/security-review` 우선 호출 후 보완
 - `vela-reviewer` execute step + PR 존재 시: `/review` 보조 호출
 
 세부 절차는 각 에이전트 파일 참조. PM은 개입하지 않는다.

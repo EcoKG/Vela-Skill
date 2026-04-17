@@ -44,12 +44,12 @@ v7.3-M1b에서 PDF 리포트 파이프라인이 제거됐다. 결과는 markdown
 
    ```
    Agent(
-     subagent_type="vela-analyzer",
-     prompt="관점: {selected_perspectives}\n프로젝트 경로: {cwd}\n출력: .vela/artifacts/{ts}/analysis.md"
+     subagent_type="vela-researcher",
+     prompt="mode: analyze\nitems: {selected_perspectives}\n프로젝트 경로: {cwd}\noutputPath: .vela/artifacts/{ts}/analysis.md"
    )
    ```
 
-   v8.0 M2(에이전트 통합)에서는 vela-analyzer를 Claude Code의 번들 `/simplify` 스킬로 위임 예정이다.
+   v7.3-M2a: vela-analyzer가 vela-researcher(mode=analyze)로 흡수됨. v8.0 후속에서 번들 `/simplify` 위임 검토.
 
 4. **결과 표시**
 

@@ -193,15 +193,16 @@ Vela는 Claude Code를 완전히 감싸는 샌드박스 엔진이다.
    ```
    Claude가 두 JSON 출력을 severity/version-gap 기준으로 요약해 `.vela/artifacts/<ts>/deps.md`에 저장.
 
-   코드 분석 항목(security/bugs/performance/code-quality/architecture): `vela-analyzer` Agent로 실행
+   코드 분석 항목(security/bugs/performance/code-quality/architecture): `vela-researcher` Agent를 `mode=analyze`로 호출
    ```
-   Agent(subagent_type="vela-analyzer", prompt="
+   Agent(subagent_type="vela-researcher", prompt="
+     mode: analyze
      items: {comma-separated-items}
-     프로젝트를 분석하고 결과를 .vela/artifacts/{ts}/analysis.md에 반환하라.
+     outputPath: .vela/artifacts/{ts}/analysis.md
    ")
    ```
 
-   v8.0 M2에서 vela-analyzer는 Claude Code 번들 `/simplify`로 위임 예정.
+   v7.3-M2a: vela-analyzer가 vela-researcher(multi-mode)로 흡수됨.
 
    둘 다 선택된 경우: deps CLI 먼저 실행 후 analyzer Agent 실행, 결과 통합
 
